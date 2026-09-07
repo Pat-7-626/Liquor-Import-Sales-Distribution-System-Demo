@@ -1,0 +1,60 @@
+import type { Customer } from "./types";
+
+export const customers: Customer[] = [
+  {
+    customerId: "CUS-0001",
+    name: { th: "ตัวแทนจำหน่าย กรุงเทพ ทีเอ็ม", en: "Bangkok TM Distributor" },
+    channelType: "distributor",
+    licenseNo: "LIC-SELL-2201", licenseExpiry: "2026-09-20",
+    creditLimit: 2000000, outstandingBalance: 1450000, creditRemaining: 550000,
+    standardDiscount: 8, creditStatus: "normal",
+  },
+  {
+    customerId: "CUS-0002",
+    name: { th: "ร้านสุขใจซุปเปอร์มาร์เก็ต", en: "Sukjai Supermarket" },
+    channelType: "retailWholesale",
+    licenseNo: "LIC-SELL-2202", licenseExpiry: "2026-09-15",
+    creditLimit: 500000, outstandingBalance: 480000, creditRemaining: 20000,
+    standardDiscount: 5, creditStatus: "nearLimit",
+  },
+  {
+    customerId: "CUS-0003",
+    name: { th: "บาร์ริมเจ้าพระยา", en: "Riverside Chao Phraya Bar" },
+    channelType: "restaurantBar",
+    licenseNo: "LIC-SELL-2203", licenseExpiry: "2026-11-30",
+    creditLimit: 300000, outstandingBalance: 90000, creditRemaining: 210000,
+    standardDiscount: 10, creditStatus: "normal",
+  },
+  {
+    customerId: "CUS-0004",
+    name: { th: "มินิมาร์ท 24 ชม. สาขาลาดพร้าว", en: "24hr Minimart - Lat Phrao Branch" },
+    channelType: "retailWholesale",
+    licenseNo: "LIC-SELL-2204", licenseExpiry: "2025-07-31",
+    creditLimit: 150000, outstandingBalance: 40000, creditRemaining: 110000,
+    standardDiscount: 5, creditStatus: "normal",
+  },
+  {
+    customerId: "CUS-0005",
+    name: { th: "ตัวแทนจำหน่าย ภาคเหนือ เชียงใหม่", en: "Northern Distributor - Chiang Mai" },
+    channelType: "distributor",
+    licenseNo: "LIC-SELL-2205", licenseExpiry: "2027-05-31",
+    creditLimit: 1800000, outstandingBalance: 320000, creditRemaining: 1480000,
+    standardDiscount: 8, creditStatus: "normal",
+  },
+  {
+    customerId: "CUS-0006",
+    name: { th: "ครัวคุณยาย เรสเทอรองต์", en: "Khrua Khun Yai Restaurant" },
+    channelType: "restaurantBar",
+    licenseNo: "LIC-SELL-2206", licenseExpiry: "2026-09-05",
+    creditLimit: 250000, outstandingBalance: 260000, creditRemaining: -10000,
+    standardDiscount: 10, creditStatus: "overLimit",
+  },
+  {
+    customerId: "CUS-0007",
+    name: { th: "ร้านค้าออนไลน์ DrinkHub", en: "DrinkHub Online Store" },
+    channelType: "online",
+    licenseNo: null, licenseExpiry: null,
+    creditLimit: 400000, outstandingBalance: 55000, creditRemaining: 345000,
+    standardDiscount: 6, creditStatus: "noLicense",
+  },
+];
