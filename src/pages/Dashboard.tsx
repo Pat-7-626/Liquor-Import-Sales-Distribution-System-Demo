@@ -46,10 +46,20 @@ const KPI_ICONS: Record<string, LucideIcon> = {
 const IMPORT_ATTENTION_STATUSES = new Set(["issueDetected", "pendingApproval", "staging", "rejected"]);
 const SALES_ATTENTION_STATUSES = new Set(["returned", "damaged", "pendingShipment"]);
 
-function AttentionCard({ title, to, children }: { title: string; to: string; children: React.ReactNode }) {
+function AttentionCard({
+  title,
+  to,
+  children,
+  className = "",
+}: {
+  title: string;
+  to: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   const { t } = useLanguage();
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm ${className}`}>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         <Link to={to} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
@@ -135,7 +145,8 @@ export default function Dashboard() {
     <div>
       <PageHeader title={t("dashboard.title")} subtitle={t("dashboard.subtitle")} />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      {/* 10 cards: 2 and 5 both divide evenly, so skip a 3-column tier that would strand one card alone. */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {liveKpis.map((kpi) => (
           <StatCard key={kpi.key} kpi={kpi} icon={KPI_ICONS[kpi.key]} />
         ))}
@@ -260,7 +271,8 @@ export default function Dashboard() {
           ))}
         </AttentionCard>
 
-        <AttentionCard title={t("dashboard.readyForPickingTitle")} to="/sales-orders">
+        {/* 5th card in a 2-column grid — span both columns instead of leaving a gap next to it. */}
+        <AttentionCard title={t("dashboard.readyForPickingTitle")} to="/sales-orders" className="lg:col-span-2">
           {readyForPicking.length === 0 && <p className="py-2.5 text-sm text-gray-400">{t("dashboard.readyForPickingEmpty")}</p>}
           {readyForPicking.map((o) => (
             <Link

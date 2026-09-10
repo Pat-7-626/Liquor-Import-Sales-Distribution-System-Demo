@@ -56,7 +56,7 @@ export function Layout() {
   return (
     <div id="app-shell" className="flex min-h-screen bg-[#f4f5f7] print:bg-white">
       <aside className="fixed inset-y-0 left-0 flex w-64 flex-col border-r border-gray-200 bg-white print:hidden">
-        <div className="flex items-center gap-2 px-5 py-5">
+        <div className="flex shrink-0 items-center gap-2 px-5 py-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white">
             <Wine size={18} />
           </span>
@@ -66,7 +66,7 @@ export function Layout() {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-2">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
           {NAV_ITEMS.map(({ to, key, icon: Icon, end }) => (
             <NavLink
               key={to}
@@ -91,7 +91,7 @@ export function Layout() {
           ))}
         </nav>
 
-        <div className="space-y-2 border-t border-gray-100 px-4 py-4">
+        <div className="shrink-0 space-y-2 border-t border-gray-100 px-4 py-4">
           <p className="text-xs text-gray-400">{t("common.demoNotice")}</p>
           <button
             onClick={handleReset}
