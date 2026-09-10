@@ -20,3 +20,10 @@ export function formatDate(iso: string, lang: Lang): string {
     day: "numeric",
   }).format(d);
 }
+
+/** NFR-03: same placeholder shown on-screen by <Masked> — exports must respect masking too, not just the table. */
+export const MASKED_EXPORT_VALUE = "••••••";
+
+export function maskIfRestricted(value: string | number, canViewSensitive: boolean): string | number {
+  return canViewSensitive ? value : MASKED_EXPORT_VALUE;
+}

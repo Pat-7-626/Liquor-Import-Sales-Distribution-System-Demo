@@ -45,8 +45,6 @@ of reach here, not faked:
 - Data lives in `localStorage`, not a real retention/backup pipeline.
 - The tax formula is illustrative, not the real Excise/Customs tariff schedule.
 - Document attachments are in-memory only — they don't survive a reload.
-- Layout isn't responsive below tablet width; the sidebar doesn't collapse, so phone-width screens are
-  cramped. Tablet and up works fine.
 
 ## Data fidelity notes
 

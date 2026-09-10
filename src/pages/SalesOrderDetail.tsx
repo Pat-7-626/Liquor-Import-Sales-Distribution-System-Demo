@@ -13,14 +13,8 @@ import { EditDrawer, type FieldConfig, type FieldValue } from "../components/Edi
 import { SalesOrderDocumentsModal } from "../components/SalesOrderDocumentsModal";
 import { formatCurrency } from "../lib/format";
 import { selectClass } from "../components/FormKit";
-import { salesOrderDisplayStatus } from "../lib/business";
+import { salesOrderDisplayStatus, computeSalesNetValue, DELIVERY_STATUS_OPTIONS } from "../lib/business";
 import type { SalesOrder } from "../data/types";
-
-const STATUS_OPTIONS = ["delivered", "inDelivery", "pendingShipment", "returned", "damaged"];
-
-function computeNet(quantity: number, unitPrice: number, discountPercent: number) {
-  return Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100;
-}
 
 export default function SalesOrderDetail() {
   const { orderNo } = useParams<{ orderNo: string }>();
@@ -68,7 +62,7 @@ export default function SalesOrderDetail() {
       quantity,
       unitPrice,
       discountPercent,
-      netValue: computeNet(quantity, unitPrice, discountPercent),
+      netValue: computeSalesNetValue(quantity, unitPrice, discountPercent),
     });
     setEditing(false);
     showToast(`${t("common.save")}: ${order.orderNo}`);
@@ -100,7 +94,7 @@ export default function SalesOrderDetail() {
               className={`${selectClass} w-auto py-1 text-xs`}
               title={t("salesOrderDetail.updateDeliveryStatus")}
             >
-              {STATUS_OPTIONS.map((s) => (
+              {DELIVERY_STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
                   {t(`status.${s}`)}
                 </option>

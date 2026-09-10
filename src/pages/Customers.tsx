@@ -13,12 +13,11 @@ import { TableContainer, EmptyRow, EditedPill, th, td } from "../components/Tabl
 import { StatusBadge } from "../components/StatusBadge";
 import { Masked } from "../components/Masked";
 import { EditDrawer, type FieldConfig, type FieldValue } from "../components/EditDrawer";
-import { formatCurrency, formatDate } from "../lib/format";
-import { computeCreditStatus } from "../lib/business";
+import { formatCurrency, formatDate, maskIfRestricted } from "../lib/format";
+import { computeCreditStatus, SALES_CHANNEL_OPTIONS } from "../lib/business";
 import { exportToExcel } from "../lib/export";
 
 const STATUS_OPTIONS = ["normal", "nearLimit", "overLimit", "noLicense"];
-const CHANNEL_OPTIONS = ["distributor", "retailWholesale", "restaurantBar", "online"];
 
 export default function Customers() {
   const { t, lang } = useLanguage();
@@ -61,7 +60,7 @@ export default function Customers() {
           key: "channelType",
           label: t("customers.col.channelType"),
           type: "select",
-          options: CHANNEL_OPTIONS.map((c) => ({ value: c, label: t(`lookup.channel.${c}`) })),
+          options: SALES_CHANNEL_OPTIONS.map((c) => ({ value: c, label: t(`lookup.channel.${c}`) })),
         },
       ]
     : [];
@@ -83,7 +82,17 @@ export default function Customers() {
     exportToExcel(
       "customers",
       [t("customers.col.customerId"), t("customers.col.name"), t("customers.col.channelType"), t("customers.col.licenseNo"), t("customers.col.creditLimit"), t("customers.col.outstandingBalance"), t("customers.col.creditRemaining"), t("customers.col.standardDiscount"), t("customers.col.creditStatus")],
-      filtered.map((c) => [c.customerId, bi(c.name), t(`lookup.channel.${c.channelType}`), c.licenseNo ?? "", c.creditLimit, c.outstandingBalance, c.creditRemaining, c.standardDiscount, t(`status.${c.creditStatus}`)]),
+      filtered.map((c) => [
+        c.customerId,
+        bi(c.name),
+        t(`lookup.channel.${c.channelType}`),
+        c.licenseNo ?? "",
+        maskIfRestricted(c.creditLimit, canViewSensitive),
+        maskIfRestricted(c.outstandingBalance, canViewSensitive),
+        maskIfRestricted(c.creditRemaining, canViewSensitive),
+        maskIfRestricted(c.standardDiscount, canViewSensitive),
+        t(`status.${c.creditStatus}`),
+      ]),
     );
   };
 
@@ -104,7 +113,7 @@ export default function Customers() {
       />
 
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("customers.col.customerId")}</th>
             <th className={th}>{t("customers.col.name")}</th>

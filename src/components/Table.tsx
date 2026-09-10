@@ -6,7 +6,7 @@ export const td = "px-4 py-3 text-sm text-gray-700 whitespace-nowrap";
 
 export function TableContainer({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="max-h-[65vh] overflow-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-gray-100">{children}</table>
     </div>
   );

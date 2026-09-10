@@ -10,7 +10,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { CheckItem, FieldLabel, selectClass, inputClass } from "../components/FormKit";
 import { formatCurrency } from "../lib/format";
 import { exportToExcel } from "../lib/export";
-import { computeLicenseStatus, getImportLicenseKind, TYPE5_VOLUME_CAP, validateImportLine, describeLineIssues } from "../lib/business";
+import { computeLicenseStatus, getImportLicenseKind, TYPE5_VOLUME_CAP, validateImportLine, describeLineIssues, todayIso, addDays } from "../lib/business";
 import type { CountryCode, ImportLogistics } from "../data/types";
 
 interface DraftLine {
@@ -38,15 +38,6 @@ let lineIdCounter = 0;
 function newLine(sku = "", abv = 0, qty = 0, unitPrice = 0): DraftLine {
   lineIdCounter += 1;
   return { id: `line-${lineIdCounter}`, sku, abv, qty, unitPrice };
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-function daysFromNow(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 
 const TEMPLATES: Record<Exclude<IntakeMethod, "manual">, {
@@ -90,8 +81,8 @@ export default function NewImportOrder() {
   const [supplier, setSupplier] = useState("");
   const [country, setCountry] = useState<CountryCode>("scotland");
   const [incoterms, setIncoterms] = useState("CIF");
-  const [orderDate] = useState(today());
-  const [etaDate, setEtaDate] = useState(daysFromNow(35));
+  const [orderDate] = useState(todayIso());
+  const [etaDate, setEtaDate] = useState(addDays(todayIso(), 35));
   const [lines, setLines] = useState<DraftLine[]>([newLine()]);
   const [logistics, setLogistics] = useState<ImportLogistics>(DEFAULT_LOGISTICS);
   const [importLicenseNo, setImportLicenseNo] = useState("");

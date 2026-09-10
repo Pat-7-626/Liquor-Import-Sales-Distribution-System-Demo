@@ -8,11 +8,6 @@ html {
   font-family: var(--font-sans);
 }
 
-html,
-body {
-  overflow-x: hidden;
-}
-
 body {
   margin: 0;
   background-color: #f4f5f7;

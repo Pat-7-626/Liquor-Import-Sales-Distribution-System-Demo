@@ -14,16 +14,10 @@ import { StatusBadge } from "../components/StatusBadge";
 import { Masked } from "../components/Masked";
 import { EditDrawer, type FieldConfig, type FieldValue } from "../components/EditDrawer";
 import { SalesOrderDocumentsModal } from "../components/SalesOrderDocumentsModal";
-import { formatCurrency } from "../lib/format";
+import { formatCurrency, maskIfRestricted } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { selectClass } from "../components/FormKit";
-import { salesOrderDisplayStatus } from "../lib/business";
-
-const STATUS_OPTIONS = ["delivered", "inDelivery", "pendingShipment", "returned", "damaged"];
-
-function computeNet(quantity: number, unitPrice: number, discountPercent: number) {
-  return Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100;
-}
+import { salesOrderDisplayStatus, computeSalesNetValue, DELIVERY_STATUS_OPTIONS } from "../lib/business";
 
 export default function SalesOrders() {
   const { t, lang } = useLanguage();
@@ -73,7 +67,7 @@ export default function SalesOrders() {
       quantity,
       unitPrice,
       discountPercent,
-      netValue: computeNet(quantity, unitPrice, discountPercent),
+      netValue: computeSalesNetValue(quantity, unitPrice, discountPercent),
     });
     setEditedNos((prev) => new Set(prev).add(editingRow.orderNo));
     setEditingNo(null);
@@ -92,7 +86,21 @@ export default function SalesOrders() {
     exportToExcel(
       "sales-orders",
       [t("salesOrders.col.orderNo"), t("salesOrders.col.customerName"), t("salesOrders.col.sku"), t("products.col.name"), t("salesOrders.col.quantity"), t("salesOrders.col.unitPrice"), t("salesOrders.col.discountPercent"), t("salesOrders.col.netValue"), t("salesOrders.col.lotBatch"), t("salesOrders.col.deliveryStatus"), t("salesOrders.col.taxInvoiceNo"), t("salesOrders.col.deliveryNoteNo"), t("salesOrders.col.approver")],
-      filtered.map((o) => [o.orderNo, bi(o.customerName), o.sku, products.find((p) => p.sku === o.sku)?.name ?? "", o.quantity, o.unitPrice, o.discountPercent, o.netValue, o.lotBatch, t(`status.${salesOrderDisplayStatus(o)}`), o.taxInvoiceNo, o.deliveryNoteNo, o.approver ? bi(o.approver) : ""]),
+      filtered.map((o) => [
+        o.orderNo,
+        bi(o.customerName),
+        o.sku,
+        products.find((p) => p.sku === o.sku)?.name ?? "",
+        o.quantity,
+        maskIfRestricted(o.unitPrice, canViewSensitive),
+        maskIfRestricted(o.discountPercent, canViewSensitive),
+        maskIfRestricted(o.netValue, canViewSensitive),
+        o.lotBatch,
+        t(`status.${salesOrderDisplayStatus(o)}`),
+        o.taxInvoiceNo,
+        o.deliveryNoteNo,
+        o.approver ? bi(o.approver) : "",
+      ]),
     );
   };
 
@@ -115,14 +123,14 @@ export default function SalesOrders() {
         searchPlaceholder={t("salesOrders.searchPlaceholder")}
         statusValue={statusFilter}
         onStatusChange={setStatusFilter}
-        statusOptions={STATUS_OPTIONS.map((s) => ({ value: s, label: t(`status.${s}`) }))}
+        statusOptions={DELIVERY_STATUS_OPTIONS.map((s) => ({ value: s, label: t(`status.${s}`) }))}
         resultCount={filtered.length}
         totalCount={rows.length}
         onExport={handleExport}
       />
 
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("salesOrders.col.orderNo")}</th>
             <th className={th}>{t("salesOrders.col.customerName")}</th>
@@ -173,7 +181,7 @@ export default function SalesOrders() {
                       title={t("salesOrderDetail.updateDeliveryStatus")}
                       className={`${selectClass} w-auto py-1 text-xs`}
                     >
-                      {STATUS_OPTIONS.map((s) => (
+                      {DELIVERY_STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>
                           {t(`status.${s}`)}
                         </option>

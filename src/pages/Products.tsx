@@ -11,7 +11,7 @@ import { TableContainer, EmptyRow, EditedPill, th, td } from "../components/Tabl
 import { StatusBadge } from "../components/StatusBadge";
 import { EditDrawer, type FieldConfig, type FieldValue } from "../components/EditDrawer";
 import { Masked } from "../components/Masked";
-import { formatCurrency, formatNumber, formatDate } from "../lib/format";
+import { formatCurrency, formatNumber, formatDate, maskIfRestricted } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { productLabels } from "../data/productLabels";
 
@@ -69,8 +69,8 @@ export default function Products() {
   const handleExport = () => {
     exportToExcel(
       "products",
-      [t("products.col.sku"), t("products.col.name"), t("products.col.category"), t("products.col.hsCode"), t("products.col.abv"), t("products.col.costPrice"), t("products.col.suggestedPrice"), t("products.col.stockAvailable"), t("products.col.status")],
-      filtered.map((p) => [p.sku, p.name, t(`lookup.category.${p.category}`), p.hsCode, p.abv, p.costPrice, p.suggestedPrice, p.stockAvailable, t(`status.${p.status}`)]),
+      [t("products.col.sku"), t("products.col.name"), t("products.col.category"), t("products.col.hsCode"), t("products.col.abv"), t("products.col.packageSize"), t("products.col.unit"), t("products.col.costPrice"), t("products.col.suggestedPrice"), t("products.col.stockAvailable"), t("products.col.status")],
+      filtered.map((p) => [p.sku, p.name, t(`lookup.category.${p.category}`), p.hsCode, p.abv, p.packageSize, t(`lookup.unit.${p.unit}`), maskIfRestricted(p.costPrice, canViewSensitive), p.suggestedPrice, p.stockAvailable, t(`status.${p.status}`)]),
     );
   };
 
@@ -91,7 +91,7 @@ export default function Products() {
       />
 
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("products.col.sku")}</th>
             <th className={th}>{t("products.col.name")}</th>

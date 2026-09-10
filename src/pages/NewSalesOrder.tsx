@@ -8,12 +8,8 @@ import { useData } from "../state/DataContext";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatCurrency, formatDate } from "../lib/format";
-import { computeLicenseStatus, computeChannelPrice, CHANNEL_PRICE_MODIFIER } from "../lib/business";
+import { computeLicenseStatus, computeChannelPrice, computeSalesNetValue, CHANNEL_PRICE_MODIFIER } from "../lib/business";
 import { CheckItem, FieldLabel, selectClass, inputClass } from "../components/FormKit";
-
-function computeNet(quantity: number, unitPrice: number, discountPercent: number) {
-  return Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100;
-}
 
 export default function NewSalesOrder() {
   const { t, lang } = useLanguage();
@@ -46,7 +42,7 @@ export default function NewSalesOrder() {
   const licenseState = customer?.licenseNo && customer.licenseExpiry ? computeLicenseStatus(customer.licenseExpiry) : null;
   const licenseOk = licenseState ? licenseState.status !== "expired" : false;
 
-  const netValue = computeNet(quantity, unitPrice, discountPercent);
+  const netValue = computeSalesNetValue(quantity, unitPrice, discountPercent);
   const projectedOutstanding = customer ? customer.outstandingBalance + netValue : 0;
   const creditOk = customer ? projectedOutstanding <= customer.creditLimit : false;
 

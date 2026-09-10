@@ -80,7 +80,7 @@ export default function Approvals() {
 
       <h2 className="mb-3 text-sm font-semibold text-gray-900">{t("approvals.importSectionTitle")}</h2>
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("importOrders.col.orderNo")}</th>
             <th className={th}>{t("importOrders.col.supplier")}</th>
@@ -159,7 +159,7 @@ export default function Approvals() {
       <h2 className="mb-1 mt-8 text-sm font-semibold text-gray-900">{t("approvals.salesSectionTitle")}</h2>
       <p className="mb-3 text-xs text-gray-400">{t("approvals.salesSectionNote")}</p>
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("salesOrders.col.orderNo")}</th>
             <th className={th}>{t("salesOrders.col.customerName")}</th>

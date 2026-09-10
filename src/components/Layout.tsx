@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -14,6 +15,8 @@ import {
   BarChart3,
   RotateCcw,
   UserCircle2,
+  Menu,
+  X,
 } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useData } from "../state/DataContext";
@@ -41,6 +44,7 @@ export function Layout() {
   const { importOrders, licenses, resetDemoData } = useData();
   const { identity, identities, setIdentityKey } = useRole();
   const bi = useBi();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pendingCount = importOrders.filter((o) => PENDING_STATUSES.has(o.status)).length;
   /** FR-07: surface expiring/expired licenses the moment the app loads, not only when browsing to the page. */
   const expiringLicenseCount = licenses.filter((l) => {
@@ -55,15 +59,34 @@ export function Layout() {
 
   return (
     <div id="app-shell" className="flex min-h-screen bg-[#f4f5f7] print:bg-white">
-      <aside className="fixed inset-y-0 left-0 flex w-64 flex-col border-r border-gray-200 bg-white print:hidden">
-        <div className="flex shrink-0 items-center gap-2 px-5 py-5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white">
-            <Wine size={18} />
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-gray-900">{t("common.appTitleShort")}</p>
-            <p className="text-xs text-gray-400">v2.0 Demo</p>
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-gray-900/30 lg:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out print:hidden ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-2 px-5 py-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white">
+              <Wine size={18} />
+            </span>
+            <div className="leading-tight">
+              <p className="text-sm font-semibold text-gray-900">{t("common.appTitleShort")}</p>
+              <p className="text-xs text-gray-400">v2.0 Demo</p>
+            </div>
           </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 lg:hidden"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
@@ -72,6 +95,7 @@ export function Layout() {
               key={to}
               to={to}
               end={end}
+              onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
@@ -103,16 +127,24 @@ export function Layout() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col pl-64 print:pl-0">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-6 py-3 backdrop-blur print:hidden">
-          <p className="hidden text-sm text-gray-500 sm:block">{t("common.appTitle")}</p>
-          <div className="flex flex-1 items-center justify-end gap-2">
-            <label className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700">
-              <UserCircle2 size={15} className="text-gray-400" />
+      <div className="flex min-w-0 flex-1 flex-col lg:pl-64 print:pl-0">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6 print:hidden">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 lg:hidden"
+            >
+              <Menu size={20} />
+            </button>
+            <p className="hidden text-sm text-gray-500 sm:block">{t("common.appTitle")}</p>
+          </div>
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+            <label className="flex min-w-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700">
+              <UserCircle2 size={15} className="shrink-0 text-gray-400" />
               <select
                 value={identity.key}
                 onChange={(e) => setIdentityKey(e.target.value)}
-                className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
+                className="w-28 min-w-0 truncate bg-transparent text-sm font-medium text-gray-700 focus:outline-none sm:w-auto"
               >
                 {identities.map((i) => (
                   <option key={i.key} value={i.key}>
@@ -133,7 +165,7 @@ export function Layout() {
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 px-6 py-6">
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
           <Outlet />
         </main>
       </div>

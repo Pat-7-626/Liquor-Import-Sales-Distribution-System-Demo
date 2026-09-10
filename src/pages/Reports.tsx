@@ -4,10 +4,11 @@ import { Printer } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
+import { useRole } from "../state/RoleContext";
 import { PageHeader } from "../components/PageHeader";
 import { TableContainer, EmptyRow, th, td } from "../components/Table";
 import { Masked } from "../components/Masked";
-import { formatCurrency } from "../lib/format";
+import { formatCurrency, maskIfRestricted } from "../lib/format";
 import { exportToExcel, exportToPdf } from "../lib/export";
 import { computeInventoryAge, computeInTransitValue, computeAvailableForSaleValue } from "../lib/business";
 import type { ChannelCode } from "../data/types";
@@ -41,6 +42,7 @@ function ReportSection({ title, onExport, children }: ExportSectionProps) {
 export default function Reports() {
   const { t, lang } = useLanguage();
   const bi = useBi();
+  const { canViewSensitive } = useRole();
   const { salesOrders: allSalesOrders, customers, products, inventory, importOrders, auditLog } = useData();
   // FR-22/FR-25: exclude sales orders still awaiting/failed supervisor approval — they aren't booked yet
   // (no stock or credit impact), so counting them in Sales reports would overstate real activity.
@@ -160,12 +162,12 @@ export default function Reports() {
           exportToExcel(
             "sales-by-sku",
             [t("salesOrders.col.sku"), t("products.col.name"), t("reports.colOrders"), t("reports.colQty"), t("reports.colNetValue")],
-            bySku.map((r) => [r.sku, r.productName, r.orders, r.qty, r.netValue]),
+            bySku.map((r) => [r.sku, r.productName, r.orders, r.qty, maskIfRestricted(r.netValue, canViewSensitive)]),
           )
         }
       >
         <TableContainer>
-          <thead className="bg-gray-50">
+          <thead className="sticky top-0 z-10 bg-gray-50">
             <tr>
               <th className={th}>{t("salesOrders.col.sku")}</th>
               <th className={th}>{t("products.col.name")}</th>
@@ -197,12 +199,17 @@ export default function Reports() {
           exportToExcel(
             "sales-by-channel",
             [t("customers.col.channelType"), t("reports.colOrders"), t("reports.colNetValue"), t("reports.colAvgDiscount")],
-            byChannel.map((r) => [t(`lookup.channel.${r.channel}`), r.orders, r.netValue, `${(r.discountSum / r.orders).toFixed(1)}%`]),
+            byChannel.map((r) => [
+              t(`lookup.channel.${r.channel}`),
+              r.orders,
+              maskIfRestricted(r.netValue, canViewSensitive),
+              maskIfRestricted(`${(r.discountSum / r.orders).toFixed(1)}%`, canViewSensitive),
+            ]),
           )
         }
       >
         <TableContainer>
-          <thead className="bg-gray-50">
+          <thead className="sticky top-0 z-10 bg-gray-50">
             <tr>
               <th className={th}>{t("customers.col.channelType")}</th>
               <th className={th}>{t("reports.colOrders")}</th>
@@ -234,12 +241,12 @@ export default function Reports() {
           exportToExcel(
             "sales-by-customer",
             [t("salesOrders.col.customerName"), t("reports.colOrders"), t("reports.colNetValue"), t("customers.col.outstandingBalance")],
-            byCustomer.map((r) => [r.name, r.orders, r.netValue, r.outstanding]),
+            byCustomer.map((r) => [r.name, r.orders, maskIfRestricted(r.netValue, canViewSensitive), maskIfRestricted(r.outstanding, canViewSensitive)]),
           )
         }
       >
         <TableContainer>
-          <thead className="bg-gray-50">
+          <thead className="sticky top-0 z-10 bg-gray-50">
             <tr>
               <th className={th}>{t("salesOrders.col.customerName")}</th>
               <th className={th}>{t("reports.colOrders")}</th>
@@ -282,14 +289,14 @@ export default function Reports() {
             byPipelineStatus.map((r) => [
               r.key === "inTransit" ? t("reports.pipelineInTransit") : t("reports.pipelineAvailable"),
               r.count,
-              r.value,
+              maskIfRestricted(r.value, canViewSensitive),
             ]),
           )
         }
       >
         <p className="mb-2 text-xs text-gray-400">{t("reports.inventoryByPipelineNote")}</p>
         <TableContainer>
-          <thead className="bg-gray-50">
+          <thead className="sticky top-0 z-10 bg-gray-50">
             <tr>
               <th className={th}>{t("common.status")}</th>
               <th className={th}>{t("reports.colOrderCount")}</th>
@@ -318,12 +325,12 @@ export default function Reports() {
           exportToExcel(
             "inventory-by-status",
             [t("common.status"), t("reports.colLots"), t("reports.colQtyOnHand"), t("reports.colStockValue")],
-            byInventoryStatus.map((r) => [t(`status.${r.status}`), r.lots, r.qty, r.value]),
+            byInventoryStatus.map((r) => [t(`status.${r.status}`), r.lots, r.qty, maskIfRestricted(r.value, canViewSensitive)]),
           )
         }
       >
         <TableContainer>
-          <thead className="bg-gray-50">
+          <thead className="sticky top-0 z-10 bg-gray-50">
             <tr>
               <th className={th}>{t("common.status")}</th>
               <th className={th}>{t("reports.colLots")}</th>
@@ -353,13 +360,20 @@ export default function Reports() {
           exportToExcel(
             "tax-sales-reconciliation",
             [t("reports.colMonth"), t("reports.colSalesNetValue"), t("importOrderDetail.importDuty"), t("importOrderDetail.exciseTax"), t("importOrderDetail.vat"), t("importOrderDetail.totalTax")],
-            byMonth.map((r) => [r.month, r.salesNetValue, r.importDuty, r.exciseTax, r.vat, r.totalTax]),
+            byMonth.map((r) => [
+              r.month,
+              maskIfRestricted(r.salesNetValue, canViewSensitive),
+              maskIfRestricted(r.importDuty, canViewSensitive),
+              maskIfRestricted(r.exciseTax, canViewSensitive),
+              maskIfRestricted(r.vat, canViewSensitive),
+              maskIfRestricted(r.totalTax, canViewSensitive),
+            ]),
           )
         }
       >
         <p className="mb-2 text-xs text-gray-400">{t("reports.taxReconciliationNote")}</p>
         <TableContainer>
-          <thead className="bg-gray-50">
+          <thead className="sticky top-0 z-10 bg-gray-50">
             <tr>
               <th className={th}>{t("reports.colMonth")}</th>
               <th className={th}>{t("reports.colSalesNetValue")}</th>

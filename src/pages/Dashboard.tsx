@@ -50,16 +50,14 @@ function AttentionCard({
   title,
   to,
   children,
-  className = "",
 }: {
   title: string;
   to: string;
   children: React.ReactNode;
-  className?: string;
 }) {
   const { t } = useLanguage();
   return (
-    <div className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm ${className}`}>
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         <Link to={to} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
@@ -121,16 +119,24 @@ export default function Dashboard() {
     [salesOrders],
   );
 
-  const attentionOrders = useMemo(() => {
-    const fromImport = importOrders
-      .filter((o) => IMPORT_ATTENTION_STATUSES.has(o.status))
-      .map((o) => ({ kind: "import" as const, id: o.orderNo, status: o.status, sub: o.supplier }));
-    const fromSales = salesOrders
-      .filter((o) => o.approvalStatus === "pendingApproval" || SALES_ATTENTION_STATUSES.has(o.deliveryStatus))
-      .map((o) => ({ kind: "sales" as const, id: o.orderNo, status: salesOrderDisplayStatus(o), sub: bi(o.customerName) }));
-    return [...fromImport, ...fromSales].slice(0, 5);
+  const attentionImportOrders = useMemo(
+    () =>
+      importOrders
+        .filter((o) => IMPORT_ATTENTION_STATUSES.has(o.status))
+        .slice(0, 5)
+        .map((o) => ({ id: o.orderNo, status: o.status, sub: o.supplier })),
+    [importOrders],
+  );
+
+  const attentionSalesOrders = useMemo(
+    () =>
+      salesOrders
+        .filter((o) => o.approvalStatus === "pendingApproval" || SALES_ATTENTION_STATUSES.has(o.deliveryStatus))
+        .slice(0, 5)
+        .map((o) => ({ id: o.orderNo, status: salesOrderDisplayStatus(o), sub: bi(o.customerName) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importOrders, salesOrders, lang]);
+    [salesOrders, lang],
+  );
 
   const attentionCustomers = useMemo(
     () =>
@@ -237,18 +243,32 @@ export default function Dashboard() {
           ))}
         </AttentionCard>
 
-        <AttentionCard title={t("dashboard.orderIssuesTitle")} to="/import-orders">
-          {attentionOrders.map((o) => (
+        <AttentionCard title={t("dashboard.importOrderIssuesTitle")} to="/import-orders">
+          {attentionImportOrders.map((o) => (
             <Link
               key={o.id}
-              to={o.kind === "import" ? `/import-orders/${o.id}` : `/sales-orders/${o.id}`}
+              to={`/import-orders/${o.id}`}
               className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0 hover:bg-gray-50"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-gray-900">{o.id}</p>
-                <p className="truncate text-xs text-gray-400">
-                  {o.kind === "import" ? t("common.import") : t("common.sales")} · {o.sub}
-                </p>
+                <p className="truncate text-xs text-gray-400">{o.sub}</p>
+              </div>
+              <StatusBadge status={o.status} />
+            </Link>
+          ))}
+        </AttentionCard>
+
+        <AttentionCard title={t("dashboard.salesOrderIssuesTitle")} to="/sales-orders">
+          {attentionSalesOrders.map((o) => (
+            <Link
+              key={o.id}
+              to={`/sales-orders/${o.id}`}
+              className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0 hover:bg-gray-50"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-gray-900">{o.id}</p>
+                <p className="truncate text-xs text-gray-400">{o.sub}</p>
               </div>
               <StatusBadge status={o.status} />
             </Link>
@@ -271,8 +291,7 @@ export default function Dashboard() {
           ))}
         </AttentionCard>
 
-        {/* 5th card in a 2-column grid — span both columns instead of leaving a gap next to it. */}
-        <AttentionCard title={t("dashboard.readyForPickingTitle")} to="/sales-orders" className="lg:col-span-2">
+        <AttentionCard title={t("dashboard.readyForPickingTitle")} to="/sales-orders">
           {readyForPicking.length === 0 && <p className="py-2.5 text-sm text-gray-400">{t("dashboard.readyForPickingEmpty")}</p>}
           {readyForPicking.map((o) => (
             <Link

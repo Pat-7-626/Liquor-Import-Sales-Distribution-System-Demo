@@ -95,7 +95,7 @@ export default function Inventory() {
       />
 
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("inventory.col.sku")}</th>
             <th className={th}>{t("inventory.col.productName")}</th>

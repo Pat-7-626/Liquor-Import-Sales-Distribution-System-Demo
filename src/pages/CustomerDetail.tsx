@@ -11,10 +11,8 @@ import { Masked } from "../components/Masked";
 import { Card, Field, HistoryList } from "../components/DetailKit";
 import { EditDrawer, type FieldConfig, type FieldValue } from "../components/EditDrawer";
 import { formatCurrency, formatDate } from "../lib/format";
-import { computeCreditStatus, computeLicenseStatus, salesOrderDisplayStatus } from "../lib/business";
+import { computeCreditStatus, computeLicenseStatus, salesOrderDisplayStatus, SALES_CHANNEL_OPTIONS } from "../lib/business";
 import type { Customer } from "../data/types";
-
-const CHANNEL_OPTIONS = ["distributor", "retailWholesale", "restaurantBar", "online"];
 
 export default function CustomerDetail() {
   const { customerId } = useParams<{ customerId: string }>();
@@ -65,7 +63,7 @@ export default function CustomerDetail() {
       key: "channelType",
       label: t("customers.col.channelType"),
       type: "select",
-      options: CHANNEL_OPTIONS.map((c) => ({ value: c, label: t(`lookup.channel.${c}`) })),
+      options: SALES_CHANNEL_OPTIONS.map((c) => ({ value: c, label: t(`lookup.channel.${c}`) })),
     },
   ];
 

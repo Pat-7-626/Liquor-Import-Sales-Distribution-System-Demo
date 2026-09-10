@@ -10,7 +10,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { Card, Field, HistoryList } from "../components/DetailKit";
 import { selectClass, inputClass, FieldLabel, CheckItem } from "../components/FormKit";
 import { formatCurrency, formatDate } from "../lib/format";
-import { computeCustomsClearanceStatus, validateImportLine, describeLineIssues } from "../lib/business";
+import { computeCustomsClearanceStatus, validateImportLine, describeLineIssues, todayIso } from "../lib/business";
 import type { DocumentKind, ImportOrderLineItem, ReceivingLine } from "../data/types";
 
 const RECEIVING_ELIGIBLE_STATUSES = new Set(["approved", "customsCleared"]);
@@ -94,7 +94,7 @@ export default function ImportOrderDetail() {
       orderedQty: l.qty,
       receivedQty: l.qty,
       lotBatch: suggestLot(order.orderNo, order.orderDate, idx),
-      exciseStampDate: new Date().toISOString().slice(0, 10),
+      exciseStampDate: todayIso(),
     }));
   }, [order, receivingRows]);
 
@@ -131,7 +131,7 @@ export default function ImportOrderDetail() {
 
   const handleReceive = () => {
     const hasDiscrepancy = rows.some((r) => r.receivedQty !== r.orderedQty);
-    receiveGoods({ orderNo: order.orderNo, receivedDate: new Date().toISOString().slice(0, 10), lines: rows, actor: identity.name });
+    receiveGoods({ orderNo: order.orderNo, receivedDate: todayIso(), lines: rows, actor: identity.name });
     // FR-13: notify the user immediately, not only via the persisted banner shown after reload.
     showToast(`${t("importOrderDetail.receivedToast")}${hasDiscrepancy ? ` — ${t("importOrderDetail.receivingDiscrepancy")}` : ""}`);
   };

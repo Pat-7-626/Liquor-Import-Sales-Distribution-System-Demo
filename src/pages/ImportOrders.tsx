@@ -107,7 +107,7 @@ export default function ImportOrders() {
       />
 
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("importOrders.col.orderNo")}</th>
             <th className={th}>{t("importOrders.col.supplier")}</th>

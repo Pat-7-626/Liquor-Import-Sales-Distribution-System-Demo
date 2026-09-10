@@ -86,7 +86,7 @@ export default function AuditTrail() {
       </div>
 
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("auditTrail.col.timestamp")}</th>
             <th className={th}>{t("auditTrail.col.entity")}</th>

@@ -95,7 +95,7 @@ export default function Licenses() {
       />
 
       <TableContainer>
-        <thead className="bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-gray-50">
           <tr>
             <th className={th}>{t("licenses.col.licenseNo")}</th>
             <th className={th}>{t("licenses.col.type")}</th>

@@ -2,6 +2,7 @@ import type {
   Bilingual,
   ChannelCode,
   CreditStatus,
+  DeliveryStatus,
   ImportOrder,
   ImportOrderLineItem,
   ImportOrderStatus,
@@ -15,6 +16,15 @@ import type {
 } from "../data/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Shared option lists for Sales Order forms/filters — single source so they can't drift between pages. */
+export const DELIVERY_STATUS_OPTIONS: DeliveryStatus[] = ["delivered", "inDelivery", "pendingShipment", "returned", "damaged"];
+export const SALES_CHANNEL_OPTIONS: ChannelCode[] = ["distributor", "retailWholesale", "restaurantBar", "online"];
+
+/** FR-23: net value from quantity, unit price, and discount — used at order creation and at edit time. */
+export function computeSalesNetValue(quantity: number, unitPrice: number, discountPercent: number): number {
+  return Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100;
+}
 
 /** Mirrors the spreadsheet formula: days remaining / status recalculated live against today. */
 export function computeLicenseStatus(expiryDateIso: string): { daysRemaining: number; status: LicenseStatus } {
@@ -68,6 +78,10 @@ export function addDays(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /**
