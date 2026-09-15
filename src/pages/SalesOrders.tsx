@@ -108,13 +108,24 @@ export default function SalesOrders() {
     <div>
       <div className="mb-5 flex items-start justify-between gap-4">
         <PageHeader title={t("salesOrders.title")} subtitle={t("salesOrders.subtitle")} />
-        <Link
-          to="/sales-orders/new"
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          <Plus size={15} />
-          {t("salesOrders.newOrder")}
-        </Link>
+        {canViewSensitive ? (
+          <Link
+            to="/sales-orders/new"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+          >
+            <Plus size={15} />
+            {t("salesOrders.newOrder")}
+          </Link>
+        ) : (
+          <button
+            disabled
+            title={t("common.restrictedTooltip")}
+            className="flex shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg bg-gray-200 px-3.5 py-2 text-sm font-medium text-gray-400"
+          >
+            <Lock size={15} />
+            {t("salesOrders.newOrder")}
+          </button>
+        )}
       </div>
 
       <Toolbar

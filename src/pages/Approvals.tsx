@@ -121,7 +121,9 @@ export default function Approvals() {
                   )}
                 </td>
                 <td className={td}>{o.supplier}</td>
-                <td className={td}>฿{formatCurrency(o.totalValue, lang)}</td>
+                <td className={td}>
+                  <Masked>฿{formatCurrency(o.totalValue, lang)}</Masked>
+                </td>
                 <td className={td}>
                   <div className="flex flex-col gap-1">
                     <StatusBadge status={o.status} />

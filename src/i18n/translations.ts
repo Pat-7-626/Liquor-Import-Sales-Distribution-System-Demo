@@ -36,7 +36,10 @@ const dict = {
     of: { th: "จาก", en: "of" },
     records: { th: "รายการ", en: "records" },
     all: { th: "ทั้งหมด", en: "All" },
-    restrictedTooltip: { th: "ข้อมูลจำกัดสิทธิ์ — Sales Officer/Supervisor เท่านั้น", en: "Restricted — Sales Officer/Supervisor only" },
+    restrictedTooltip: {
+      th: "ข้อมูลจำกัดสิทธิ์ — เฉพาะเจ้าหน้าที่สั่งซื้อ พนักงานขาย เจ้าหน้าที่ภาษี หัวหน้างาน หรือผู้บริหารเท่านั้น",
+      en: "Restricted — Order Officer, Sales Officer, Tax Officer, Supervisor, or Senior Manager only",
+    },
     resetDemo: { th: "รีเซ็ตข้อมูลสาธิต", en: "Reset demo data" },
     resetConfirm: {
       th: "ล้างการแก้ไขทั้งหมดและเริ่มต้นข้อมูลสาธิตใหม่ ยืนยันหรือไม่?",
@@ -70,14 +73,14 @@ const dict = {
     kpi: {
       leadTime: { th: "Lead time เฉลี่ยต่อออเดอร์นำเข้า", en: "Avg. import order lead time" },
       errorRate: { th: "อัตราออเดอร์ที่มีข้อผิดพลาดตั้งแต่ต้นทาง", en: "Import order error rate (Staging)" },
-      inventoryValue: { th: "มูลค่าสต๊อกคงเหลือทั้งหมด", en: "Total current inventory value" },
+      inventoryValue: { th: "มูลค่าสต๊อกคงเหลือทั้งหมด (บาท)", en: "Total current inventory value (THB)" },
       expiringLicenses: { th: "ใบอนุญาตใกล้หมดอายุ (ภายใน 30 วัน)", en: "Licenses expiring within 30 days" },
-      taxCost: { th: "ต้นทุนภาษี/อากรรวม (ทุกออเดอร์)", en: "Total tax & duty cost (all orders)" },
-      totalSales: { th: "ยอดขายรวมเดือนนี้", en: "Total sales this month" },
+      taxCost: { th: "ต้นทุนภาษี/อากรรวม (ทุกออเดอร์, บาท)", en: "Total tax & duty cost (all orders, THB)" },
+      totalSales: { th: "ยอดขายรวมเดือนนี้ (บาท)", en: "Total sales this month (THB)" },
       turnover: { th: "Inventory turnover", en: "Inventory turnover" },
       agingStock: { th: "สต๊อกค้างนานเกินกำหนด", en: "Aging stock beyond threshold" },
       onTimeDelivery: { th: "อัตราการส่งมอบตรงเวลา", en: "On-time delivery rate" },
-      outstandingCredit: { th: "ยอดเครดิตคงค้างรวมทุกลูกค้า", en: "Total outstanding customer credit" },
+      outstandingCredit: { th: "ยอดเครดิตคงค้างรวมทุกลูกค้า (บาท)", en: "Total outstanding customer credit (THB)" },
     },
     days: { th: "วัน", en: "days" },
     items: { th: "รายการ", en: "items" },
@@ -113,8 +116,8 @@ const dict = {
       abv: { th: "ABV (%)", en: "ABV (%)" },
       packageSize: { th: "ขนาดบรรจุ (ml)", en: "Package Size (ml)" },
       unit: { th: "หน่วยนับ", en: "Unit" },
-      costPrice: { th: "ราคาทุน/หน่วย", en: "Cost Price / Unit" },
-      suggestedPrice: { th: "ราคาขายแนะนำ", en: "Suggested Price" },
+      costPrice: { th: "ราคาทุน/หน่วย (บาท)", en: "Cost Price / Unit (THB)" },
+      suggestedPrice: { th: "ราคาขายแนะนำ (บาท)", en: "Suggested Price (THB)" },
       stockAvailable: { th: "สต๊อกพร้อมขาย", en: "Available Stock" },
       status: { th: "สถานะสินค้า", en: "Status" },
       hsCode: { th: "พิกัดศุลกากร (HS Code)", en: "HS Code" },
@@ -155,6 +158,10 @@ const dict = {
       en: "Every order enters Staging for validation before it reaches the main system (FR-01–05)",
     },
     backToList: { th: "กลับไปหน้าออเดอร์นำเข้า", en: "Back to Import Orders" },
+    restrictedPage: {
+      th: "จำกัดสิทธิ์ — การสร้างออเดอร์นำเข้าต้องมีสิทธิ์ดูข้อมูลการเงิน (เจ้าหน้าที่สั่งซื้อ พนักงานขาย เจ้าหน้าที่ภาษี หัวหน้างาน หรือผู้บริหาร)",
+      en: "Restricted — creating an import order requires financial visibility (Order Officer, Sales Officer, Tax Officer, Supervisor, or Senior Manager)",
+    },
 
     sectionIntake: { th: "1. ช่องทางรับออเดอร์", en: "1. Intake Method" },
     intakeApi: { th: "API / EDI", en: "API / EDI" },
@@ -216,7 +223,7 @@ const dict = {
     summaryTitle: { th: "สรุปและสถานะการตรวจสอบ", en: "Summary & Validation" },
     emptySummary: { th: "เพิ่มรายการสินค้าอย่างน้อย 1 รายการ", en: "Add at least one line item" },
     totalSkus: { th: "จำนวนรายการ SKU", en: "SKU Count" },
-    totalValue: { th: "มูลค่ารวม", en: "Total Value" },
+    totalValue: { th: "มูลค่ารวม (บาท)", en: "Total Value (THB)" },
     validationOk: { th: "ทุกรายการผ่านการตรวจสอบอัตโนมัติ", en: "All lines pass automatic validation" },
     validationIssues: { th: "พบปัญหาที่ต้องแก้ไขก่อนส่ง", en: "Issues found — correct before submitting" },
     willEnterStaging: {
@@ -253,10 +260,10 @@ const dict = {
     noLogistics: { th: "ไม่มีข้อมูลโลจิสติกส์สำหรับออเดอร์นี้ (บันทึกเฉพาะออเดอร์ที่สร้างผ่านฟอร์มใหม่)", en: "No logistics data for this order (recorded only for orders created via the New Import Order form)" },
 
     dutyRate: { th: "อัตราอากรขาเข้า", en: "Duty Rate" },
-    importDuty: { th: "อากรขาเข้า", en: "Import Duty" },
-    exciseTax: { th: "ภาษีสรรพสามิต", en: "Excise Tax" },
-    vat: { th: "ภาษีมูลค่าเพิ่ม (VAT 7%)", en: "VAT (7%)" },
-    totalTax: { th: "รวมภาษีและอากร", en: "Total Tax & Duty" },
+    importDuty: { th: "อากรขาเข้า (บาท)", en: "Import Duty (THB)" },
+    exciseTax: { th: "ภาษีสรรพสามิต (บาท)", en: "Excise Tax (THB)" },
+    vat: { th: "ภาษีมูลค่าเพิ่ม (VAT 7%, บาท)", en: "VAT (7%, THB)" },
+    totalTax: { th: "รวมภาษีและอากร (บาท)", en: "Total Tax & Duty (THB)" },
     exciseStampCount: { th: "จำนวนแสตมป์สรรพสามิตที่ต้องใช้", en: "Excise Stamps Required" },
     noTax: { th: "ยังไม่มีการคำนวณภาษีสำหรับออเดอร์นี้", en: "No tax breakdown calculated for this order" },
     taxDisclaimer: {
@@ -265,7 +272,7 @@ const dict = {
     },
 
     noLineItems: { th: "ไม่มีรายละเอียดรายการสินค้าสำหรับออเดอร์นี้", en: "No line-item detail recorded for this order" },
-    lineTotal: { th: "มูลค่ารวม", en: "Line Total" },
+    lineTotal: { th: "มูลค่ารวม (บาท)", en: "Line Total (THB)" },
     editLines: { th: "แก้ไขรายการ", en: "Correct lines" },
     editLinesHint: {
       th: "แก้ไขได้เฉพาะตอนออเดอร์อยู่ใน Staging หรือมีปัญหาการตรวจสอบ (FR-05)",
@@ -427,7 +434,7 @@ const dict = {
     pickingListTitle: { th: "ใบจัดสินค้า (สำหรับเจ้าหน้าที่คลังสินค้า)", en: "Picking List (for Warehouse Officer)" },
     printedOn: { th: "พิมพ์เมื่อ", en: "Printed on" },
     billTo: { th: "ลูกค้า", en: "Bill To" },
-    grandTotal: { th: "ยอดรวมสุทธิ", en: "Grand Total" },
+    grandTotal: { th: "ยอดรวมสุทธิ (บาท)", en: "Grand Total (THB)" },
     traceabilityNote: {
       th: "ใบกำกับภาษีนี้อ้างอิง Lot/Batch และวันที่ประทับแสตมป์สรรพสามิต เพื่อการตรวจสอบย้อนกลับจากการนำเข้าจนถึงการขาย (FR-23, §7.2)",
       en: "This tax invoice references the Lot/Batch and its Excise Stamp Date for full traceability from import through sale (FR-23, §7.2)",
@@ -444,6 +451,10 @@ const dict = {
       en: "License, credit limit, and discount checks run live as you build the order (FR-20–22)",
     },
     backToList: { th: "กลับไปหน้าออเดอร์ขาย", en: "Back to Sales Orders" },
+    restrictedPage: {
+      th: "จำกัดสิทธิ์ — การสร้างออเดอร์ขายต้องมีสิทธิ์ดูข้อมูลการเงิน (เจ้าหน้าที่สั่งซื้อ พนักงานขาย เจ้าหน้าที่ภาษี หัวหน้างาน หรือผู้บริหาร)",
+      en: "Restricted — creating a sales order requires financial visibility (Order Officer, Sales Officer, Tax Officer, Supervisor, or Senior Manager)",
+    },
 
     sectionCustomer: { th: "1. ลูกค้า", en: "1. Customer" },
     selectCustomerPlaceholder: { th: "เลือกลูกค้า...", en: "Select a customer..." },

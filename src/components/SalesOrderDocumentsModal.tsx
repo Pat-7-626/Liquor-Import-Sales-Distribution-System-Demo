@@ -6,6 +6,7 @@ import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
 import type { SalesOrder } from "../data/types";
 import { StatusBadge } from "./StatusBadge";
+import { Masked } from "./Masked";
 import { formatCurrency, formatDate } from "../lib/format";
 import { exportToPdf } from "../lib/export";
 
@@ -137,9 +138,15 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
                   {tab === "invoice" && (
                     <>
                       <td className="px-3 py-2 text-gray-700">{lot?.exciseStampDate ? formatDate(lot.exciseStampDate, lang) : "—"}</td>
-                      <td className="px-3 py-2 text-right text-gray-700">฿{formatCurrency(order.unitPrice, lang)}</td>
-                      <td className="px-3 py-2 text-right text-gray-700">{order.discountPercent}%</td>
-                      <td className="px-3 py-2 text-right font-medium text-gray-900">฿{formatCurrency(order.netValue, lang)}</td>
+                      <td className="px-3 py-2 text-right text-gray-700">
+                        <Masked>฿{formatCurrency(order.unitPrice, lang)}</Masked>
+                      </td>
+                      <td className="px-3 py-2 text-right text-gray-700">
+                        <Masked>{order.discountPercent}%</Masked>
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        <Masked>฿{formatCurrency(order.netValue, lang)}</Masked>
+                      </td>
                     </>
                   )}
                   {tab === "pickingList" && (
@@ -155,7 +162,9 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
               <div className="w-56 space-y-1 text-sm">
                 <div className="flex justify-between font-semibold text-gray-900">
                   <span>{t("salesOrderDocs.grandTotal")}</span>
-                  <span>฿{formatCurrency(order.netValue, lang)}</span>
+                  <span>
+                    <Masked>฿{formatCurrency(order.netValue, lang)}</Masked>
+                  </span>
                 </div>
               </div>
             </div>

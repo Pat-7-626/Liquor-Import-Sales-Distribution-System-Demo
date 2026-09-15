@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, ShieldAlert } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useToast } from "../components/Toast";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
+import { useRole } from "../state/RoleContext";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { CheckItem, FieldLabel, selectClass, inputClass } from "../components/FormKit";
@@ -75,6 +76,7 @@ export default function NewImportOrder() {
   const bi = useBi();
   const showToast = useToast();
   const navigate = useNavigate();
+  const { canViewSensitive } = useRole();
   const { products, licenses, createImportOrder } = useData();
 
   const [intakeMethod, setIntakeMethod] = useState<IntakeMethod>("manual");
@@ -219,6 +221,22 @@ export default function NewImportOrder() {
     { key: "email", label: t("newImportOrder.intakeEmail") },
     { key: "manual", label: t("newImportOrder.intakeManual") },
   ];
+
+  if (!canViewSensitive) {
+    return (
+      <div>
+        <Link to="/import-orders" className="mb-3 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+          <ArrowLeft size={14} />
+          {t("newImportOrder.backToList")}
+        </Link>
+        <PageHeader title={t("newImportOrder.title")} subtitle={t("newImportOrder.subtitle")} />
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-700">
+          <ShieldAlert size={16} />
+          {t("newImportOrder.restrictedPage")}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

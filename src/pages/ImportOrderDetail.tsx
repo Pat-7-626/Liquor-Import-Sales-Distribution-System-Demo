@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Paperclip, Trash2, PackageCheck, Pencil, Plus, X } from "lucide-react";
+import { ArrowLeft, Paperclip, Trash2, PackageCheck, Pencil, Plus, X, Lock } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useToast } from "../components/Toast";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
 import { useRole } from "../state/RoleContext";
 import { StatusBadge } from "../components/StatusBadge";
+import { Masked } from "../components/Masked";
 import { Card, Field, HistoryList } from "../components/DetailKit";
 import { selectClass, inputClass, FieldLabel, CheckItem } from "../components/FormKit";
 import { formatCurrency, formatDate } from "../lib/format";
@@ -38,7 +39,7 @@ export default function ImportOrderDetail() {
   const { t, lang } = useLanguage();
   const bi = useBi();
   const showToast = useToast();
-  const { identity } = useRole();
+  const { identity, canViewSensitive } = useRole();
   const { importOrders, licenses, products, auditLog, attachDocument, removeDocument, receiveGoods, correctImportOrderLines } = useData();
 
   const order = importOrders.find((o) => o.orderNo === orderNo);
@@ -156,7 +157,7 @@ export default function ImportOrderDetail() {
             <Field label={t("importOrders.col.incoterms")} value={order.incoterms} />
             <Field label={t("importOrders.col.orderDate")} value={formatDate(order.orderDate, lang)} />
             <Field label={t("importOrders.col.etaDate")} value={formatDate(order.etaDate, lang)} />
-            <Field label={t("importOrders.col.totalValue")} value={`฿${formatCurrency(order.totalValue, lang)}`} />
+            <Field label={t("importOrders.col.totalValue")} value={<Masked>฿{formatCurrency(order.totalValue, lang)}</Masked>} />
             <Field
               label={t("importOrders.col.approver")}
               value={order.approver ? bi(order.approver) : <span className="text-gray-300">{t("importOrders.none")}</span>}
@@ -204,10 +205,10 @@ export default function ImportOrderDetail() {
               <div className="grid grid-cols-2 gap-4">
                 <Field label={t("importOrderDetail.dutyRate")} value={`${order.tax.dutyRatePercent}%`} />
                 <Field label={t("importOrderDetail.exciseStampCount")} value={order.tax.exciseStampCount} />
-                <Field label={t("importOrderDetail.importDuty")} value={`฿${formatCurrency(order.tax.importDuty, lang)}`} />
-                <Field label={t("importOrderDetail.exciseTax")} value={`฿${formatCurrency(order.tax.exciseTax, lang)}`} />
-                <Field label={t("importOrderDetail.vat")} value={`฿${formatCurrency(order.tax.vat, lang)}`} />
-                <Field label={t("importOrderDetail.totalTax")} value={`฿${formatCurrency(order.tax.totalTax, lang)}`} />
+                <Field label={t("importOrderDetail.importDuty")} value={<Masked>฿{formatCurrency(order.tax.importDuty, lang)}</Masked>} />
+                <Field label={t("importOrderDetail.exciseTax")} value={<Masked>฿{formatCurrency(order.tax.exciseTax, lang)}</Masked>} />
+                <Field label={t("importOrderDetail.vat")} value={<Masked>฿{formatCurrency(order.tax.vat, lang)}</Masked>} />
+                <Field label={t("importOrderDetail.totalTax")} value={<Masked>฿{formatCurrency(order.tax.totalTax, lang)}</Masked>} />
               </div>
               <p className="mt-3 text-xs text-gray-400">{t("importOrderDetail.taxDisclaimer")}</p>
             </>
@@ -222,9 +223,11 @@ export default function ImportOrderDetail() {
             linesEditable && !editingLines ? (
               <button
                 onClick={startEditingLines}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                disabled={!canViewSensitive}
+                title={!canViewSensitive ? t("common.restrictedTooltip") : undefined}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent"
               >
-                <Pencil size={13} />
+                {canViewSensitive ? <Pencil size={13} /> : <Lock size={13} />}
                 {t("importOrderDetail.editLines")}
               </button>
             ) : undefined
@@ -364,8 +367,12 @@ export default function ImportOrderDetail() {
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{product ? `${product.packageSize} ml` : "—"}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{l.abv}%</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{l.qty}</td>
-                          <td className="px-3 py-2 text-right text-gray-700 whitespace-nowrap">฿{formatCurrency(l.unitPrice, lang)}</td>
-                          <td className="px-3 py-2 text-right font-medium text-gray-900 whitespace-nowrap">฿{formatCurrency(l.qty * l.unitPrice, lang)}</td>
+                          <td className="px-3 py-2 text-right text-gray-700 whitespace-nowrap">
+                            <Masked>฿{formatCurrency(l.unitPrice, lang)}</Masked>
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-gray-900 whitespace-nowrap">
+                            <Masked>฿{formatCurrency(l.qty * l.unitPrice, lang)}</Masked>
+                          </td>
                         </tr>
                       );
                     })}

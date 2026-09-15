@@ -1,17 +1,19 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Pencil, Plus, Eye } from "lucide-react";
+import { Pencil, Plus, Eye, Lock } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useToast } from "../components/Toast";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
+import { useRole } from "../state/RoleContext";
 import type { ImportOrder } from "../data/types";
 import { PageHeader } from "../components/PageHeader";
 import { Toolbar } from "../components/Toolbar";
 import { TableContainer, EmptyRow, EditedPill, th, td } from "../components/Table";
 import { StatusBadge } from "../components/StatusBadge";
+import { Masked } from "../components/Masked";
 import { EditDrawer, type FieldConfig, type FieldValue } from "../components/EditDrawer";
-import { formatCurrency, formatDate } from "../lib/format";
+import { formatCurrency, formatDate, maskIfRestricted } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 
 const STATUS_OPTIONS = [
@@ -28,6 +30,7 @@ export default function ImportOrders() {
   const { t, lang } = useLanguage();
   const bi = useBi();
   const showToast = useToast();
+  const { canViewSensitive } = useRole();
   const { importOrders: rows, updateImportOrder } = useData();
   const location = useLocation();
   const highlightOrderNo = (location.state as { highlightOrderNo?: string } | null)?.highlightOrderNo;
@@ -77,7 +80,7 @@ export default function ImportOrders() {
     exportToExcel(
       "import-orders",
       [t("importOrders.col.orderNo"), t("importOrders.col.supplier"), t("importOrders.col.country"), t("importOrders.col.incoterms"), t("importOrders.col.orderDate"), t("importOrders.col.etaDate"), t("importOrders.col.totalValue"), t("importOrders.col.status"), t("importOrders.col.approver")],
-      filtered.map((o) => [o.orderNo, o.supplier, t(`lookup.country.${o.country}`), o.incoterms, o.orderDate, o.etaDate, o.totalValue, t(`status.${o.status}`), o.approver ? bi(o.approver) : ""]),
+      filtered.map((o) => [o.orderNo, o.supplier, t(`lookup.country.${o.country}`), o.incoterms, o.orderDate, o.etaDate, maskIfRestricted(o.totalValue, canViewSensitive), t(`status.${o.status}`), o.approver ? bi(o.approver) : ""]),
     );
   };
 
@@ -85,13 +88,24 @@ export default function ImportOrders() {
     <div>
       <div className="mb-5 flex items-start justify-between gap-4">
         <PageHeader title={t("importOrders.title")} subtitle={t("importOrders.subtitle")} />
-        <Link
-          to="/import-orders/new"
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          <Plus size={15} />
-          {t("importOrders.newOrder")}
-        </Link>
+        {canViewSensitive ? (
+          <Link
+            to="/import-orders/new"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+          >
+            <Plus size={15} />
+            {t("importOrders.newOrder")}
+          </Link>
+        ) : (
+          <button
+            disabled
+            title={t("common.restrictedTooltip")}
+            className="flex shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg bg-gray-200 px-3.5 py-2 text-sm font-medium text-gray-400"
+          >
+            <Lock size={15} />
+            {t("importOrders.newOrder")}
+          </button>
+        )}
       </div>
 
       <Toolbar
@@ -135,7 +149,9 @@ export default function ImportOrders() {
               <td className={td}>{o.incoterms}</td>
               <td className={td}>{formatDate(o.orderDate, lang)}</td>
               <td className={td}>{formatDate(o.etaDate, lang)}</td>
-              <td className={td}>฿{formatCurrency(o.totalValue, lang)}</td>
+              <td className={td}>
+                <Masked>฿{formatCurrency(o.totalValue, lang)}</Masked>
+              </td>
               <td className={td}>
                 <div className="flex flex-col gap-1">
                   <StatusBadge status={o.status} />
@@ -154,9 +170,11 @@ export default function ImportOrders() {
                   </Link>
                   <button
                     onClick={() => setEditingNo(o.orderNo)}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                    disabled={!canViewSensitive}
+                    title={!canViewSensitive ? t("common.restrictedTooltip") : undefined}
+                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent"
                   >
-                    <Pencil size={13} />
+                    {canViewSensitive ? <Pencil size={13} /> : <Lock size={13} />}
                     {t("common.edit")}
                   </button>
                 </div>

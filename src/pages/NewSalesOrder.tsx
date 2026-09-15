@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useToast } from "../components/Toast";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
+import { useRole } from "../state/RoleContext";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatCurrency, formatDate } from "../lib/format";
@@ -16,6 +17,7 @@ export default function NewSalesOrder() {
   const bi = useBi();
   const showToast = useToast();
   const navigate = useNavigate();
+  const { canViewSensitive } = useRole();
   const { products, customers, inventory, createSalesOrder } = useData();
 
   const [customerId, setCustomerId] = useState("");
@@ -88,6 +90,22 @@ export default function NewSalesOrder() {
     showToast(`${t(needsApproval ? "newSalesOrder.submittedForApprovalToast" : "newSalesOrder.createdToast")}: ${order.orderNo}`);
     navigate("/sales-orders", { state: { highlightOrderNo: order.orderNo } });
   };
+
+  if (!canViewSensitive) {
+    return (
+      <div>
+        <Link to="/sales-orders" className="mb-3 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+          <ArrowLeft size={14} />
+          {t("newSalesOrder.backToList")}
+        </Link>
+        <PageHeader title={t("newSalesOrder.title")} subtitle={t("newSalesOrder.subtitle")} />
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-700">
+          <ShieldAlert size={16} />
+          {t("newSalesOrder.restrictedPage")}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
