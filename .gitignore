@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Docker / API
+.env
+server/node_modules
+server/dist
+server/uploads
+
+# Test screenshots
+tests/output/
+
+# Database and document backups
+backups/

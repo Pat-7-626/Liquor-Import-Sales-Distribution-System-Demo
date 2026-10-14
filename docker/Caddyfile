@@ -1,0 +1,6 @@
+# HTTPS in front of the app, with certificates from Let's Encrypt (renewed automatically).
+# Used by `docker compose --profile https up -d` with DOMAIN set in .env.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy web:80
+}

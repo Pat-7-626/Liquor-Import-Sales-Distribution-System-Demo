@@ -1,9 +1,11 @@
 export interface KpiCard {
   key: string;
   value: number;
-  unit: "days" | "percent" | "currency" | "items" | "times" | "skus";
+  unit: "days" | "percent" | "currency" | "items" | "times" | "timesYear" | "skus";
   trend: string;
   trendPositive: boolean;
+  /** Computed from live data (no stored history, so no trend). Otherwise a sample figure from the source sheet. */
+  live?: boolean;
 }
 
 export const kpis: KpiCard[] = [

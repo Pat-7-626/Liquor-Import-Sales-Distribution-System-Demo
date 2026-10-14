@@ -1,15 +1,17 @@
 import type { ImportOrder, ImportOrderLineItem, ImportLogistics } from "./types";
 import { products } from "./products";
-import { computeImportTax } from "../lib/business";
+import { computeImportTax, goodsValueThb, rateOn, referencePurchasePrice } from "../lib/business";
+import { exchangeRates } from "./exchangeRates";
+import { taxSettings } from "./taxSettings";
+import { suppliers } from "./suppliers";
 
 const somchai = { th: "สมชาย วิริยะ (หัวหน้างาน)", en: "Somchai Wiriya (Supervisor)" };
 const piyada = { th: "ปิยะดา ศรีสุข (หัวหน้างาน)", en: "Piyada Srisuk (Supervisor)" };
 
 /**
  * Line-item detail for the 8 orders from the original spreadsheet, which only gave an aggregate
- * SKU count + total value (no per-line breakdown). Quantities/prices below are reconstructed to
- * match that original `totalValue` as closely as possible — the stored `totalValue` field itself
- * is left untouched as the source of truth from the spreadsheet.
+ * SKU count + total value (no per-line breakdown). Quantities/prices below were reconstructed to
+ * match that original total at cost price; see withDetail for how they become supplier prices.
  */
 const lineSets: Record<string, ImportOrderLineItem[]> = {
   "IMP-2026-0142": [
@@ -53,11 +55,24 @@ const logisticsSets: Record<string, ImportLogistics> = {
   "IMP-2026-0149": { manufacturerRegNo: "JP-LIQ-0021", blAwbNumber: "NYKS-3321087", origin: "Osaka, Japan", destination: "Bangkok Port, Thailand", currency: "JPY", paymentTerms: "T/T 30 days" },
 };
 
+/**
+ * The reconstructed prices above sit at each product's cost price, which is its all-in landed cost. What the
+ * supplier charges is less: the same proportion of the product's expected supplier price (cost before duty
+ * and excise). Prices are then expressed in the supplier's currency at the rate on the order date, and the
+ * order's value is the goods value in baht, so landed cost works out at the cost price, as it should.
+ */
 function withDetail(order: Omit<ImportOrder, "lineItems" | "logistics" | "tax">): ImportOrder {
-  const lineItems = lineSets[order.orderNo];
   const logistics = logisticsSets[order.orderNo];
-  const tax = computeImportTax(lineItems, products);
-  return { ...order, lineItems, logistics, tax };
+  const currency = logistics.currency;
+  const exchangeRate = rateOn(exchangeRates, currency, order.orderDate) ?? 1;
+  const lineItems = lineSets[order.orderNo].map((l) => {
+    const product = products.find((p) => p.sku === l.sku)!;
+    const supplierThb = l.unitPrice * (referencePurchasePrice(product, taxSettings) / product.costPrice);
+    return { ...l, unitPrice: Math.round((supplierThb / exchangeRate) * 100) / 100 };
+  });
+  const tax = computeImportTax(lineItems, products, taxSettings, exchangeRate);
+  const supplierId = suppliers.find((s) => s.name === order.supplier)?.supplierId;
+  return { ...order, supplierId, lineItems, logistics, tax, currency, exchangeRate, totalValue: goodsValueThb(lineItems, exchangeRate) };
 }
 
 export const importOrders: ImportOrder[] = [

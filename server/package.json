@@ -1,0 +1,26 @@
+{
+  "name": "lisd-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "API for the Liquor Import, Sales & Distribution System — runs the shared domain rules against PostgreSQL",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist/index.js",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/multipart": "^9.0.3",
+    "fastify": "^5.6.1",
+    "postgres": "^3.4.7",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "esbuild": "^0.25.10",
+    "tsx": "^4.20.6",
+    "typescript": "~5.9.3"
+  }
+}

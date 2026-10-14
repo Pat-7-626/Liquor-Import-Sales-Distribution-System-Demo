@@ -1,4 +1,4 @@
-import type { Identity } from "./types";
+import type { Identity, Permission, Role } from "./types";
 
 /**
  * NFR-03: who is "signed in" right now — drives RBAC gating and audit attribution.
@@ -17,5 +17,57 @@ export const IDENTITIES: Identity[] = [
   { key: "piyada", role: "supervisor", name: { th: "ปิยะดา ศรีสุข (หัวหน้างาน)", en: "Piyada Srisuk (Supervisor)" } },
 ];
 
+/** "Continue as guest": a read-only account with no password (sign-in with a password is impossible). */
+export const GUEST_IDENTITY: Identity = { key: "guest", role: "guest", name: { th: "ผู้เยี่ยมชม (อ่านอย่างเดียว)", en: "Guest (read-only)" } };
+
 /** NFR-03: roles allowed to see Price / Credit / Discount figures unmasked. */
 export const SENSITIVE_DATA_ROLES = new Set(["seniorManager", "salesOfficer", "taxOfficer", "orderOfficer", "supervisor"]);
+
+/**
+ * NFR-03: who may perform which operation. Kept separate from price visibility so, e.g., a Warehouse
+ * Officer can receive goods without seeing cost prices, and a Sales Officer can see prices but can't
+ * raise a customer's own credit limit (segregation of duties).
+ */
+export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
+  // The Senior Manager administers accounts; supervisors can see them (who holds which role) but not change them.
+  seniorManager: new Set<Permission>(["editProduct", "editCustomerTerms", "createCustomer", "managePricing", "manageCompany", "viewUsers", "manageUsers", "managePayables", "manageRates", "manageExpenses", "postJournals", "closePeriods", "reconcileBank"]),
+  orderOfficer: new Set<Permission>(["createImportOrder", "editImportOrder", "manageImportDocuments", "editProduct", "manageSuppliers", "manageReorder", "requestPurchase"]),
+  documentationOfficer: new Set<Permission>(["manageImportDocuments", "recordCustomsClearance", "editLicense"]),
+  warehouseOfficer: new Set<Permission>(["receiveGoods", "adjustInventory", "updateDelivery", "manageWarehouses", "manageReorder", "requestPurchase"]),
+  // Withholding tax is the tax officer's job: they record expenses and remit what was withheld.
+  taxOfficer: new Set<Permission>(["recordCustomsClearance", "manageTax", "manageRates", "manageExpenses"]),
+  salesOfficer: new Set<Permission>(["createSalesOrder", "editSalesOrder", "recordPayment", "createCustomer"]),
+  distributionOfficer: new Set<Permission>(["updateDelivery"]),
+  // A guest may look at everything (prices masked) and change nothing.
+  guest: new Set<Permission>(),
+  supervisor: new Set<Permission>([
+    "createImportOrder",
+    "editImportOrder",
+    "manageImportDocuments",
+    "recordCustomsClearance",
+    "receiveGoods",
+    "createSalesOrder",
+    "editSalesOrder",
+    "updateDelivery",
+    "editProduct",
+    "editLicense",
+    "editCustomerTerms",
+    "recordPayment",
+    "adjustInventory",
+    "createCustomer",
+    "manageSuppliers",
+    "manageWarehouses",
+    "managePricing",
+    "manageTax",
+    "manageReorder",
+    "manageCompany",
+    "viewUsers",
+    "managePayables",
+    "manageRates",
+    "manageExpenses",
+    "postJournals",
+    "reconcileBank",
+    "requestPurchase",
+    "approve",
+  ]),
+};

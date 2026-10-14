@@ -10,4 +10,9 @@ export const inventory: InventoryItem[] = [
   { sku: "SKU-1009", productName: "Sakura Plum Liqueur", lotBatch: "LOT-A2607-03", receivedDate: "2026-07-25", quantityRemaining: 186, ageDays: 38, status: "normal", warehouse: "whA" },
   { sku: "SKU-1010", productName: "Amber Harbor Rum Dark", lotBatch: "LOT-A2607-02", receivedDate: "2026-07-18", quantityRemaining: 55, ageDays: 45, status: "normal", warehouse: "whC" },
   { sku: "SKU-1011", productName: "Golden Barrel Cask Reserve", lotBatch: "LOT-A2601-01", receivedDate: "2026-01-15", quantityRemaining: 12, ageDays: 229, status: "agingLong", warehouse: "whA" },
+  // Opening-balance lots: the Products sheet lists stock for these two SKUs but the Inventory sheet has
+  // no lot for them. Without a lot the stock could be neither sold nor traced, so it's carried here.
+  // Received date is the earliest date in the source data's operating period (an assumption).
+  { sku: "SKU-1004", productName: "Casa Roble Reposado", lotBatch: "LOT-OPEN-1004", receivedDate: "2026-05-01", quantityRemaining: 300, ageDays: 0, status: "normal", warehouse: "whB" },
+  { sku: "SKU-1012", productName: "Riverside Craft Lager 6-pack", lotBatch: "LOT-OPEN-1012", receivedDate: "2026-05-01", quantityRemaining: 560, ageDays: 0, status: "normal", warehouse: "whA" },
 ];
