@@ -1,0 +1,76 @@
+name: CI
+
+# Every push and pull request: typecheck, lint, build, and the API suite against the real stack.
+# Nightly (and on demand): the browser suites too — they take about 15 minutes.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 19 * * *" # 02:00 in Bangkok
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: server
+      - name: Typecheck the API
+        run: npx tsc --noEmit -p .
+        working-directory: server
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck and build the web app
+        run: npm run build
+
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Builds the images, starts db/api/web with a fresh .env, and runs tests/api.test.mjs.
+      - run: npm run test:api
+      - name: API log on failure
+        if: failure()
+        run: docker compose logs api --tail 200
+
+  browser:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:e2e
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-screenshots
+          path: tests/output/
+          if-no-files-found: ignore
