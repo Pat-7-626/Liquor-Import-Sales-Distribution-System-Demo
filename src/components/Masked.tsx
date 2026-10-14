@@ -12,7 +12,7 @@ export function Masked({ children }: { children: ReactNode }) {
   return (
     <span
       title={t("common.restrictedTooltip")}
-      className="inline-flex items-center gap-1 text-gray-300"
+      className="inline-flex items-center gap-1 text-gray-400"
     >
       <Lock size={11} />
       ••••••

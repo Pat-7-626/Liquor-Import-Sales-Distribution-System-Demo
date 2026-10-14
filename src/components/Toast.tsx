@@ -1,35 +1,46 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, AlertCircle } from "lucide-react";
+
+type ToastTone = "success" | "error";
 
 interface ToastItem {
   id: number;
   message: string;
+  tone: ToastTone;
 }
 
-const ToastContext = createContext<((message: string) => void) | null>(null);
+const ToastContext = createContext<((message: string, tone?: ToastTone) => void) | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: string, tone: ToastTone = "success") => {
     const id = ++idRef.current;
-    setToasts((prev) => [...prev, { id, message }]);
+    setToasts((prev) => [...prev, { id, message, tone }]);
+    // Errors stay up longer — they usually explain what to fix.
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 2600);
+    }, tone === "error" ? 6000 : 2600);
   }, []);
 
   return (
     <ToastContext.Provider value={showToast}>
       {children}
-      <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col gap-2">
+      <div aria-live="polite" className="pointer-events-none fixed bottom-5 right-5 z-50 flex max-w-sm flex-col gap-2 print:hidden">
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="pointer-events-auto flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg"
+            role={toast.tone === "error" ? "alert" : "status"}
+            className={`pointer-events-auto flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm font-medium shadow-2xl ring-1 ring-inset ${
+              toast.tone === "error" ? "bg-rose-800 text-white ring-white/10" : "bg-ink-900 text-gold-100 ring-gold-400/20"
+            }`}
           >
-            <CheckCircle2 size={16} className="text-emerald-400" />
+            {toast.tone === "error" ? (
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-200" />
+            ) : (
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-gold-400" />
+            )}
             {toast.message}
           </div>
         ))}

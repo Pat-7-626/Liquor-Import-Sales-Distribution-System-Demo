@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { translate, type Lang } from "./translations";
 
 interface LanguageContextValue {
@@ -12,16 +12,28 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 const STORAGE_KEY = "lisd-lang";
 
 function getInitialLang(): Lang {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === "en" ? "en" : "th";
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) === "en" ? "en" : "th";
+  } catch {
+    return "th";
+  }
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(getInitialLang);
 
+  // Lets CSS and assistive tech know the page language (font fallback, Thai letter-spacing rule).
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const setLang = (next: Lang) => {
     setLangState(next);
-    window.localStorage.setItem(STORAGE_KEY, next);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      /* storage unavailable — language still switches for this session */
+    }
   };
 
   const value = useMemo<LanguageContextValue>(

@@ -1,6 +1,6 @@
 import { useLanguage } from "../i18n/LanguageContext";
 
-type Tone = "green" | "amber" | "red" | "blue" | "gray" | "indigo";
+type Tone = "green" | "amber" | "red" | "blue" | "gray" | "indigo" | "gold";
 
 const TONE_CLASSES: Record<Tone, string> = {
   green: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
@@ -9,6 +9,7 @@ const TONE_CLASSES: Record<Tone, string> = {
   blue: "bg-blue-50 text-blue-700 ring-blue-600/20",
   gray: "bg-gray-100 text-gray-600 ring-gray-500/20",
   indigo: "bg-indigo-50 text-indigo-700 ring-indigo-600/20",
+  gold: "bg-gold-100/70 text-gold-600 ring-gold-500/30",
 };
 
 const DOT_CLASSES: Record<Tone, string> = {
@@ -18,6 +19,7 @@ const DOT_CLASSES: Record<Tone, string> = {
   blue: "bg-blue-500",
   gray: "bg-gray-400",
   indigo: "bg-indigo-500",
+  gold: "bg-gold-500",
 };
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -28,7 +30,7 @@ const STATUS_TONE: Record<string, Tone> = {
   staging: "gray",
   pendingApproval: "amber",
   approved: "blue",
-  customsCleared: "indigo",
+  customsCleared: "gold",
   receivedWarehouse: "green",
   issueDetected: "red",
   rejected: "red",
@@ -57,7 +59,7 @@ export function StatusBadge({ status }: { status: string }) {
   const tone = STATUS_TONE[status] ?? "gray";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset whitespace-nowrap ${TONE_CLASSES[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-[0.01em] ring-1 ring-inset whitespace-nowrap ${TONE_CLASSES[tone]}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${DOT_CLASSES[tone]}`} />
       {t(`status.${status}`)}

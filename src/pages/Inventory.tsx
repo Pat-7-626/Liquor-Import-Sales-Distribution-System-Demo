@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Pencil, Lock } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
-import { useToast } from "../components/Toast";
 import { useData } from "../state/DataContext";
+import { useRole } from "../state/RoleContext";
 import type { InventoryItem } from "../data/types";
 import { PageHeader } from "../components/PageHeader";
 import { Toolbar } from "../components/Toolbar";
@@ -12,16 +13,25 @@ import { EditDrawer, type FieldConfig, type FieldValue } from "../components/Edi
 import { formatDate, formatNumber } from "../lib/format";
 import { computeInventoryAge } from "../lib/business";
 import { exportToExcel } from "../lib/export";
+import { useRunAction } from "../lib/useRunAction";
+import { useWarehouseName } from "../lib/useWarehouseName";
 
 const STATUS_OPTIONS = ["normal", "agingStart", "agingLong"];
-const WAREHOUSE_OPTIONS = ["whA", "whB", "whC"];
+/** Lots at or below this quantity are flagged so they get re-ordered or cleared. */
+const LOW_LOT_QTY = 20;
 
 export default function Inventory() {
   const { t, lang } = useLanguage();
-  const showToast = useToast();
-  const { inventory: rows, updateInventory } = useData();
+  const runAction = useRunAction();
+  const { can } = useRole();
+  const { inventory: rows, warehouses, adjustInventory } = useData();
+  const warehouseName = useWarehouseName();
+  const WAREHOUSE_OPTIONS = warehouses.map((w) => w.code);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [params] = useSearchParams();
+  const [warehouseFilter, setWarehouseFilter] = useState(params.get("warehouse") ?? "");
+  const [hideEmpty, setHideEmpty] = useState(true);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editedKeys, setEditedKeys] = useState<Set<string>>(new Set());
 
@@ -39,42 +49,50 @@ export default function Inventory() {
         i.productName.toLowerCase().includes(q) ||
         i.lotBatch.toLowerCase().includes(q);
       const matchesStatus = !statusFilter || i.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesWarehouse = !warehouseFilter || i.warehouse === warehouseFilter;
+      return matchesSearch && matchesStatus && matchesWarehouse && (!hideEmpty || i.quantityRemaining > 0);
     });
-  }, [computed, search, statusFilter]);
+  }, [computed, search, statusFilter, warehouseFilter, hideEmpty]);
 
   const editingRow = computed.find((i) => i.lotBatch === editingKey) ?? null;
 
   const fields: FieldConfig[] = editingRow
     ? [
-        { key: "quantityRemaining", label: t("inventory.col.quantityRemaining"), type: "number" },
+        { key: "quantityRemaining", label: t("inventory.col.quantityRemaining"), type: "number", min: 0, step: 1 },
         { key: "receivedDate", label: t("inventory.col.receivedDate"), type: "date" },
         {
           key: "warehouse",
           label: t("inventory.col.warehouse"),
           type: "select",
-          options: WAREHOUSE_OPTIONS.map((w) => ({ value: w, label: t(`lookup.warehouse.${w}`) })),
+          options: warehouses
+            .filter((w) => w.active || w.code === editingRow.warehouse)
+            .map((w) => ({ value: w.code, label: warehouseName(w.code) })),
         },
+        { key: "reason", label: t("erp.adjustReason"), type: "text", placeholder: t("erp.adjustReasonPlaceholder") },
       ]
     : [];
 
-  const handleSave = (values: Record<string, FieldValue>) => {
+  const handleSave = async (values: Record<string, FieldValue>) => {
     if (!editingRow) return;
-    updateInventory(editingRow.lotBatch, {
-      quantityRemaining: Number(values.quantityRemaining),
-      receivedDate: String(values.receivedDate),
-      warehouse: values.warehouse as InventoryItem["warehouse"],
-    });
+    const result = await adjustInventory(
+      editingRow.lotBatch,
+      {
+        quantityRemaining: Number(values.quantityRemaining),
+        receivedDate: String(values.receivedDate),
+        warehouse: values.warehouse as InventoryItem["warehouse"],
+      },
+      String(values.reason ?? ""),
+    );
+    if (!await runAction(result, `${t("common.save")}: ${editingRow.lotBatch}`)) return;
     setEditedKeys((prev) => new Set(prev).add(editingRow.lotBatch));
     setEditingKey(null);
-    showToast(`${t("common.save")}: ${editingRow.lotBatch}`);
   };
 
   const handleExport = () => {
     exportToExcel(
       "inventory",
       [t("inventory.col.sku"), t("inventory.col.productName"), t("inventory.col.lotBatch"), t("inventory.col.receivedDate"), t("inventory.col.quantityRemaining"), t("inventory.col.ageDays"), t("inventory.col.status"), t("inventory.col.warehouse"), t("importOrderDetail.exciseStampDate")],
-      filtered.map((i) => [i.sku, i.productName, i.lotBatch, i.receivedDate, i.quantityRemaining, i.ageDays, t(`status.${i.status}`), t(`lookup.warehouse.${i.warehouse}`), i.exciseStampDate ?? ""]),
+      filtered.map((i) => [i.sku, i.productName, i.lotBatch, i.receivedDate, i.quantityRemaining, i.ageDays, t(`status.${i.status}`), warehouseName(i.warehouse), i.exciseStampDate ?? ""]),
     );
   };
 
@@ -92,6 +110,27 @@ export default function Inventory() {
         resultCount={filtered.length}
         totalCount={rows.length}
         onExport={handleExport}
+        extraFilter={
+          <>
+            <select
+              value={warehouseFilter}
+              onChange={(e) => setWarehouseFilter(e.target.value)}
+              aria-label={t("inventory.col.warehouse")}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">{t("erp.allWarehouses")}</option>
+              {WAREHOUSE_OPTIONS.map((w) => (
+                <option key={w} value={w}>
+                  {warehouseName(w)}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1.5 whitespace-nowrap text-sm text-gray-600">
+              <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} className="rounded border-gray-300" />
+              {t("erp.hideEmptyLots")}
+            </label>
+          </>
+        }
       />
 
       <TableContainer>
@@ -118,22 +157,30 @@ export default function Inventory() {
                 {i.productName}
                 {editedKeys.has(i.lotBatch) && <EditedPill />}
               </td>
-              <td className={td}>{i.lotBatch}</td>
+              <td className={td}>
+                <Link to={`/lot-trace?lot=${encodeURIComponent(i.lotBatch)}`} className="text-indigo-600 hover:underline">
+                  {i.lotBatch}
+                </Link>
+              </td>
               <td className={td}>{formatDate(i.receivedDate, lang)}</td>
-              <td className={td}>{formatNumber(i.quantityRemaining, lang, 0)}</td>
+              <td className={`${td} ${i.quantityRemaining === 0 ? "text-gray-400" : i.quantityRemaining <= LOW_LOT_QTY ? "font-medium text-amber-600" : ""}`}>
+                {formatNumber(i.quantityRemaining, lang, 0)}
+              </td>
               <td className={td}>{i.ageDays}</td>
               <td className={td}>
                 <StatusBadge status={i.status} />
               </td>
-              <td className={td}>{t(`lookup.warehouse.${i.warehouse}`)}</td>
-              <td className={td}>{i.exciseStampDate ? formatDate(i.exciseStampDate, lang) : <span className="text-gray-300">{t("common.notRecorded")}</span>}</td>
+              <td className={td}>{warehouseName(i.warehouse)}</td>
+              <td className={td}>{i.exciseStampDate ? formatDate(i.exciseStampDate, lang) : <span className="text-gray-400">{t("common.notRecorded")}</span>}</td>
               <td className={td}>
                 <button
                   onClick={() => setEditingKey(i.lotBatch)}
-                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                  disabled={!can("adjustInventory")}
+                  title={!can("adjustInventory") ? t("erp.noPermission") : undefined}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent"
                 >
-                  <Pencil size={13} />
-                  {t("common.edit")}
+                  {can("adjustInventory") ? <Pencil size={13} /> : <Lock size={13} />}
+                  {t("erp.adjust")}
                 </button>
               </td>
             </tr>
@@ -145,6 +192,7 @@ export default function Inventory() {
         open={editingKey !== null}
         title={t("inventory.editTitle")}
         subtitle={editingRow ? `${editingRow.sku} · ${editingRow.lotBatch}` : ""}
+        note={t("erp.adjustNote")}
         fields={fields}
         values={
           editingRow
@@ -152,6 +200,7 @@ export default function Inventory() {
                 quantityRemaining: editingRow.quantityRemaining,
                 receivedDate: editingRow.receivedDate,
                 warehouse: editingRow.warehouse,
+                reason: "",
               }
             : {}
         }

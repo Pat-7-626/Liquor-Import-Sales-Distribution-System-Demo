@@ -1,18 +1,29 @@
 import { useMemo, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, ShieldAlert } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
-import { useToast } from "../components/Toast";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
 import { useRole } from "../state/RoleContext";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { CheckItem, FieldLabel, selectClass, inputClass } from "../components/FormKit";
-import { formatCurrency } from "../lib/format";
+import { formatNumber, formatCurrency, formatDate } from "../lib/format";
 import { exportToExcel } from "../lib/export";
-import { computeLicenseStatus, getImportLicenseKind, TYPE5_VOLUME_CAP, validateImportLine, describeLineIssues, todayIso, addDays } from "../lib/business";
-import type { CountryCode, ImportLogistics } from "../data/types";
+import {
+  computeLicenseStatus,
+  getImportLicenseKind,
+  TYPE5_VOLUME_CAP,
+  validateImportLine,
+  describeImportOrderIssues,
+  checkImportLicense,
+  todayIso,
+  addDays,
+  rateOn,
+  referencePurchasePrice,
+} from "../lib/business";
+import { useRunAction } from "../lib/useRunAction";
+import type { ImportLogistics, Supplier } from "../data/types";
 
 interface DraftLine {
   id: string;
@@ -22,7 +33,6 @@ interface DraftLine {
   unitPrice: number;
 }
 
-const COUNTRIES: CountryCode[] = ["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan"];
 const INCOTERMS = ["CIF", "FOB"];
 const DEFAULT_LOGISTICS: ImportLogistics = {
   manufacturerRegNo: "",
@@ -41,52 +51,91 @@ function newLine(sku = "", abv = 0, qty = 0, unitPrice = 0): DraftLine {
   return { id: `line-${lineIdCounter}`, sku, abv, qty, unitPrice };
 }
 
-const TEMPLATES: Record<Exclude<IntakeMethod, "manual">, {
-  supplier: string;
-  country: CountryCode;
-  incoterms: string;
-  lines: DraftLine[];
-  logistics: ImportLogistics;
-}> = {
+/** Simulated incoming documents — supplier details come from the Supplier Master, the rest from the "document". */
+const TEMPLATES: Record<Exclude<IntakeMethod, "manual">, { supplierId: string; lines: DraftLine[]; blAwbNumber: string; destination: string }> = {
   api: {
-    supplier: "Highland Spirits Co., Ltd.",
-    country: "scotland",
-    incoterms: "CIF",
-    lines: [newLine("SKU-1001", 43, 200, 1850), newLine("SKU-1003", 40, 400, 780)],
-    logistics: { manufacturerRegNo: "UK-DIST-4471", blAwbNumber: "MAEU-9284710", origin: "Glasgow, Scotland", destination: "Bangkok Port, Thailand", currency: "GBP", paymentTerms: "L/C at sight" },
+    supplierId: "SUP-001",
+    // Sized to come to over ฿500,000 at supplier prices, so it shows the two-supervisor approval.
+    lines: [newLine("SKU-1001", 43, 300, 1850), newLine("SKU-1003", 40, 500, 780)],
+    blAwbNumber: "MAEU-9284710",
+    destination: "Bangkok Port, Thailand",
   },
   excel: {
-    supplier: "Casa Roble Distillery",
-    country: "mexico",
-    incoterms: "FOB",
+    supplierId: "SUP-002",
     lines: [newLine("SKU-1004", 38, 150, 990), newLine("SKU-1099", 38, 80, 1000)],
-    logistics: { manufacturerRegNo: "MX-TEQ-1182", blAwbNumber: "OOLU-2205563", origin: "Jalisco, Mexico", destination: "Laem Chabang Port, Thailand", currency: "USD", paymentTerms: "T/T 30 days" },
+    blAwbNumber: "OOLU-2205563",
+    destination: "Laem Chabang Port, Thailand",
   },
   email: {
-    supplier: "Nordic Frost Distillers",
-    country: "sweden",
-    incoterms: "FOB",
+    supplierId: "SUP-004",
     lines: [newLine("SKU-1007", 85, 300, 520)],
-    logistics: { manufacturerRegNo: "SE-VOD-0093", blAwbNumber: "MSCU-7743201", origin: "Stockholm, Sweden", destination: "Bangkok Port, Thailand", currency: "EUR", paymentTerms: "T/T 30 days" },
+    blAwbNumber: "MSCU-7743201",
+    destination: "Bangkok Port, Thailand",
   },
 };
+
+function logisticsFrom(supplier: Supplier | undefined, keep: Pick<ImportLogistics, "blAwbNumber" | "destination">): ImportLogistics {
+  return {
+    ...keep,
+    manufacturerRegNo: supplier?.manufacturerRegNo ?? "",
+    origin: supplier?.origin ?? "",
+    currency: supplier?.currency ?? DEFAULT_LOGISTICS.currency,
+    paymentTerms: supplier?.paymentTerms ?? DEFAULT_LOGISTICS.paymentTerms,
+  };
+}
 
 export default function NewImportOrder() {
   const { t, lang } = useLanguage();
   const bi = useBi();
-  const showToast = useToast();
+  const runAction = useRunAction();
   const navigate = useNavigate();
-  const { canViewSensitive } = useRole();
-  const { products, licenses, createImportOrder } = useData();
+  const { can } = useRole();
+  const { products, licenses, suppliers, exchangeRates, taxSettings, purchaseRequests, createImportOrder } = useData();
+  const currencies = useMemo(() => ["THB", ...[...new Set(exchangeRates.map((r) => r.currency))].sort()], [exchangeRates]);
+  const activeSuppliers = suppliers.filter((sp) => sp.active);
+
+  // Prefill from a Stock Alert "reorder" link (?supplierId=…&sku=…&qty=…) or an approved purchase request (?request=PR-…).
+  const [params] = useSearchParams();
+  const request = purchaseRequests.find((r) => r.requestNo === params.get("request") && r.status === "approved");
+  const prefillSupplier = suppliers.find((sp) => sp.supplierId === (params.get("supplierId") ?? request?.preferredSupplierId) && sp.active);
+  const prefillProduct = products.find((p) => p.sku === (params.get("sku") ?? request?.sku));
 
   const [intakeMethod, setIntakeMethod] = useState<IntakeMethod>("manual");
-  const [supplier, setSupplier] = useState("");
-  const [country, setCountry] = useState<CountryCode>("scotland");
-  const [incoterms, setIncoterms] = useState("CIF");
+  const [supplierId, setSupplierId] = useState(prefillSupplier?.supplierId ?? "");
+  const supplier = suppliers.find((sp) => sp.supplierId === supplierId);
+  const [incoterms, setIncoterms] = useState(prefillSupplier?.defaultIncoterms ?? "CIF");
   const [orderDate] = useState(todayIso());
+  /** Baht figure → the order's currency at today's rate (2 decimals). Unknown currency: left in baht. */
+  function toCurrency(thb: number, currency: string) {
+    const rate = rateOn(exchangeRates, currency, todayIso()) ?? 1;
+    return Math.round((thb / rate) * 100) / 100;
+  }
   const [etaDate, setEtaDate] = useState(addDays(todayIso(), 35));
-  const [lines, setLines] = useState<DraftLine[]>([newLine()]);
-  const [logistics, setLogistics] = useState<ImportLogistics>(DEFAULT_LOGISTICS);
+  const [lines, setLines] = useState<DraftLine[]>(() =>
+    prefillProduct
+      ? [
+          newLine(
+            prefillProduct.sku,
+            prefillProduct.abv,
+            Math.max(1, Math.round(Number(params.get("qty")) || request?.quantity || 0)),
+            toCurrency(referencePurchasePrice(prefillProduct, taxSettings), prefillSupplier?.currency ?? DEFAULT_LOGISTICS.currency),
+          ),
+        ]
+      : [newLine()],
+  );
+  const [logistics, setLogistics] = useState<ImportLogistics>(() => logisticsFrom(prefillSupplier, DEFAULT_LOGISTICS));
+  // The order is fixed at today's rate for its currency; with no rate it can't be valued (or saved).
+  const rate = rateOn(exchangeRates, logistics.currency, orderDate);
+  const rateFrom = exchangeRates
+    .filter((r) => r.currency === logistics.currency && r.effectiveDate <= orderDate)
+    .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.effectiveDate;
+
+  const handleSelectSupplier = (id: string) => {
+    setSupplierId(id);
+    const sp = suppliers.find((x) => x.supplierId === id);
+    if (sp) setIncoterms(sp.defaultIncoterms);
+    setLogistics((prev) => logisticsFrom(sp, prev));
+  };
   const [importLicenseNo, setImportLicenseNo] = useState("");
 
   const importLicenses = useMemo(() => licenses.filter((l) => l.category === "import"), [licenses]);
@@ -97,19 +146,24 @@ export default function NewImportOrder() {
   const applyTemplate = (method: IntakeMethod) => {
     setIntakeMethod(method);
     if (method === "manual") {
-      setSupplier("");
-      setCountry("scotland");
+      setSupplierId("");
       setIncoterms("CIF");
       setLines([newLine()]);
       setLogistics(DEFAULT_LOGISTICS);
       return;
     }
     const tpl = TEMPLATES[method];
-    setSupplier(tpl.supplier);
-    setCountry(tpl.country);
-    setIncoterms(tpl.incoterms);
-    setLines(tpl.lines.map((l) => ({ ...l })));
-    setLogistics(tpl.logistics);
+    const sp = suppliers.find((x) => x.supplierId === tpl.supplierId);
+    setSupplierId(sp?.active ? sp.supplierId : "");
+    setIncoterms(sp?.defaultIncoterms ?? "CIF");
+    setLines(
+      tpl.lines.map((l) => {
+        const product = products.find((p) => p.sku === l.sku);
+        const supplierThb = product ? l.unitPrice * (referencePurchasePrice(product, taxSettings) / product.costPrice) : l.unitPrice;
+        return { ...l, unitPrice: toCurrency(supplierThb, sp?.currency ?? DEFAULT_LOGISTICS.currency) };
+      }),
+    );
+    setLogistics(logisticsFrom(sp, { blAwbNumber: tpl.blAwbNumber, destination: tpl.destination }));
   };
 
   const updateLine = (id: string, patch: Partial<DraftLine>) => {
@@ -122,52 +176,33 @@ export default function NewImportOrder() {
     () =>
       lines.map((line) => {
         const product = products.find((p) => p.sku.toLowerCase() === line.sku.trim().toLowerCase());
-        return { line, product, ...validateImportLine(line, products) };
+        return { line, product, ...validateImportLine(line, products, rate ?? 1, taxSettings) };
       }),
-    [lines, products],
+    [lines, products, rate, taxSettings],
   );
 
-  const filledLines = evaluatedLines.filter((e) => e.filled);
+  const filledLines = useMemo(() => evaluatedLines.filter((e) => e.filled), [evaluatedLines]);
   const totalQty = filledLines.reduce((sum, e) => sum + e.line.qty, 0);
-  const totalValue = filledLines.reduce((sum, e) => sum + e.line.qty * e.line.unitPrice, 0);
-  const canSubmit = filledLines.length > 0 && supplier.trim() !== "";
+  const totalForeign = filledLines.reduce((sum, e) => sum + e.line.qty * e.line.unitPrice, 0);
+  const totalValue = totalForeign * (rate ?? 1);
+  const etaValid = etaDate >= orderDate;
+  const canSubmit = filledLines.length > 0 && Boolean(supplier?.active) && etaValid && rate !== null;
 
   // FR-09/§7.1: the referenced import license must be valid, cover the ETA, and (for Type 5) stay under its volume cap.
-  const licenseExpired = Boolean(licenseCheck && licenseCheck.status === "expired");
-  const licenseEtaUncovered = Boolean(selectedLicense && etaDate > selectedLicense.expiryDate);
-  const licenseVolumeExceeded = licenseKind === "type5" && totalQty > TYPE5_VOLUME_CAP;
-  const licenseHasIssue = Boolean(selectedLicense) && (licenseExpired || licenseEtaUncovered || licenseVolumeExceeded);
+  const { expired: licenseExpired, etaUncovered: licenseEtaUncovered, volumeExceeded: licenseVolumeExceeded } = checkImportLicense(
+    selectedLicense,
+    etaDate,
+    totalQty,
+  );
 
-  const hasIssues = filledLines.some((e) => !e.skuOk || !e.abvOk || !e.priceOk) || licenseHasIssue;
+  // The exact check the data layer runs when the order is saved — the preview can't disagree with it.
+  const issueMessages = useMemo(
+    () => describeImportOrderIssues({ lineItems: filledLines.map((e) => e.line), etaDate, importLicenseNo, exchangeRate: rate ?? 1 }, products, licenses, taxSettings),
+    [filledLines, etaDate, importLicenseNo, products, licenses, rate, taxSettings],
+  );
+  const hasIssues = issueMessages.length > 0;
 
-  const issueMessages = useMemo(() => {
-    const msgs: { th: string; en: string }[] = describeLineIssues(
-      filledLines.map((e) => e.line),
-      products,
-    );
-    if (licenseExpired) {
-      msgs.push({
-        th: "ใบอนุญาตนำเข้าที่เลือกหมดอายุแล้ว — ผิดเงื่อนไข Import Compliance Risk",
-        en: "The selected import license has expired — violates the Import Compliance Risk control",
-      });
-    }
-    if (!licenseExpired && licenseEtaUncovered) {
-      msgs.push({
-        th: "วันที่คาดว่าถึงอยู่หลังวันหมดอายุใบอนุญาต — ไม่มีหลักฐานว่านำเข้าภายในอายุใบอนุญาต (§7.1)",
-        en: "ETA falls after the license expires — no evidence the import happens within the license period (§7.1)",
-      });
-    }
-    if (licenseVolumeExceeded) {
-      msgs.push({
-        th: `จำนวนรวมเกินเพดานของใบอนุญาตประเภทที่ 5 (${TYPE5_VOLUME_CAP} หน่วย)`,
-        en: `Total quantity exceeds the Type 5 license cap (${TYPE5_VOLUME_CAP} units)`,
-      });
-    }
-    return msgs;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filledLines, licenseExpired, licenseEtaUncovered, licenseVolumeExceeded]);
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
     const intakeLabel = {
       api: { th: "API / EDI", en: "API / EDI" },
@@ -176,24 +211,21 @@ export default function NewImportOrder() {
       manual: { th: "กรอกข้อมูลเอง", en: "Manual Entry" },
     }[intakeMethod];
 
-    const order = createImportOrder({
-      supplier,
-      country,
+    const result = await createImportOrder({
+      supplierId,
+      country: supplier!.country,
       incoterms,
       orderDate,
       etaDate,
-      hasIssues,
-      issueSummary: hasIssues
-        ? { th: issueMessages.map((m) => m.th).join("; "), en: issueMessages.map((m) => m.en).join("; ") }
-        : undefined,
       intakeMethod: intakeLabel,
-      lineItems: filledLines.map((e) => ({ sku: e.line.sku, abv: e.line.abv, qty: e.line.qty, unitPrice: e.line.unitPrice })),
+      lineItems: filledLines.map((e) => ({ sku: e.line.sku.trim().toUpperCase(), abv: e.line.abv, qty: e.line.qty, unitPrice: e.line.unitPrice })),
       logistics,
       importLicenseNo: importLicenseNo || null,
+      purchaseRequestNo: request?.requestNo ?? null,
     });
-
-    showToast(`${t("newImportOrder.createdToast")}: ${order.orderNo}`);
-    navigate("/import-orders", { state: { highlightOrderNo: order.orderNo } });
+    const order = result.ok ? result.order! : null;
+    if (!await runAction(result, `${t("newImportOrder.createdToast")}: ${order?.orderNo ?? ""}`)) return;
+    navigate("/import-orders", { state: { highlightOrderNo: order!.orderNo } });
   };
 
   const handleDownloadTemplate = () => {
@@ -222,7 +254,7 @@ export default function NewImportOrder() {
     { key: "manual", label: t("newImportOrder.intakeManual") },
   ];
 
-  if (!canViewSensitive) {
+  if (!can("createImportOrder")) {
     return (
       <div>
         <Link to="/import-orders" className="mb-3 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
@@ -245,6 +277,11 @@ export default function NewImportOrder() {
         {t("newImportOrder.backToList")}
       </Link>
       <PageHeader title={t("newImportOrder.title")} subtitle={t("newImportOrder.subtitle")} />
+      {request && (
+        <p className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2.5 text-sm text-indigo-800" data-testid="from-request">
+          {t("pr.fulfilling").replace("{no}", request.requestNo).replace("{sku}", request.sku).replace("{qty}", String(request.quantity))}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
@@ -285,24 +322,24 @@ export default function NewImportOrder() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <label className="block">
                 <FieldLabel>{t("newImportOrder.supplier")}</FieldLabel>
-                <input
-                  type="text"
-                  value={supplier}
-                  onChange={(e) => setSupplier(e.target.value)}
-                  placeholder={t("newImportOrder.supplierPlaceholder")}
-                  className={inputClass}
-                />
-              </label>
-              <label className="block">
-                <FieldLabel>{t("importOrders.col.country")}</FieldLabel>
-                <select value={country} onChange={(e) => setCountry(e.target.value as CountryCode)} className={selectClass}>
-                  {COUNTRIES.map((c) => (
-                    <option key={c} value={c}>
-                      {t(`lookup.country.${c}`)}
+                <select value={supplierId} onChange={(e) => handleSelectSupplier(e.target.value)} className={selectClass}>
+                  <option value="">{t("erp.selectSupplier")}</option>
+                  {activeSuppliers.map((sp) => (
+                    <option key={sp.supplierId} value={sp.supplierId}>
+                      {sp.supplierId} · {sp.name}
                     </option>
                   ))}
                 </select>
+                <Link to="/suppliers" className="mt-1 inline-block text-xs text-indigo-600 hover:underline">
+                  {t("erp.manageSuppliers")}
+                </Link>
               </label>
+              <div>
+                <FieldLabel>{t("importOrders.col.country")}</FieldLabel>
+                <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                  {supplier ? t(`lookup.country.${supplier.country}`) : "—"}
+                </p>
+              </div>
               <label className="block">
                 <FieldLabel>{t("importOrders.col.incoterms")}</FieldLabel>
                 <select value={incoterms} onChange={(e) => setIncoterms(e.target.value)} className={selectClass}>
@@ -320,8 +357,9 @@ export default function NewImportOrder() {
                   value={etaDate}
                   min={orderDate}
                   onChange={(e) => setEtaDate(e.target.value)}
-                  className={inputClass}
+                  className={`${inputClass} ${!etaValid ? "border-rose-400 bg-rose-50" : ""}`}
                 />
+                {!etaValid && <p className="mt-1 text-xs text-rose-500">{t("erp.etaBeforeOrder")}</p>}
               </label>
             </div>
           </div>
@@ -349,7 +387,7 @@ export default function NewImportOrder() {
               <div className="mt-3 rounded-lg bg-gray-50 p-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">
-                    {t("licenses.col.expiryDate")}: {selectedLicense.expiryDate}
+                    {t("licenses.col.expiryDate")}: {formatDate(selectedLicense.expiryDate, lang)}
                   </span>
                   {licenseCheck && <StatusBadge status={licenseCheck.status} />}
                 </div>
@@ -413,12 +451,26 @@ export default function NewImportOrder() {
               </label>
               <label className="block">
                 <FieldLabel>{t("importOrderDetail.currency")}</FieldLabel>
-                <input
-                  type="text"
+                <select
                   value={logistics.currency}
                   onChange={(e) => setLogistics((prev) => ({ ...prev, currency: e.target.value }))}
-                  className={inputClass}
-                />
+                  className={selectClass}
+                  data-testid="io-currency"
+                >
+                  {!currencies.includes(logistics.currency) && <option value={logistics.currency}>{logistics.currency}</option>}
+                  {currencies.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <p className={`mt-1 text-xs ${rate === null ? "text-rose-600" : "text-gray-500"}`} data-testid="io-rate">
+                  {rate === null
+                    ? t("fx.noRate").replace("{c}", logistics.currency)
+                    : logistics.currency === "THB"
+                      ? t("fx.baht")
+                      : t("fx.rateLine").replace("{c}", logistics.currency).replace("{r}", String(rate)).replace("{d}", rateFrom ? formatDate(rateFrom, lang) : "")}
+                </p>
               </label>
               <label className="block">
                 <FieldLabel>{t("importOrderDetail.paymentTerms")}</FieldLabel>
@@ -480,13 +532,15 @@ export default function NewImportOrder() {
                         <FieldLabel>{t("newImportOrder.lineQty")}</FieldLabel>
                         <input
                           type="number"
+                          min={1}
+                          step={1}
                           value={line.qty}
                           onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
-                          className={inputClass}
+                          className={`${inputClass} ${filled && !(Number.isInteger(line.qty) && line.qty > 0) ? "border-rose-400 bg-rose-50" : ""}`}
                         />
                       </label>
                       <label className="block">
-                        <FieldLabel>{t("newImportOrder.lineUnitPrice")}</FieldLabel>
+                        <FieldLabel>{`${t("newImportOrder.lineUnitPrice").replace(/\s*\(.*\)$/, "")} (${logistics.currency})`}</FieldLabel>
                         <input
                           type="number"
                           value={line.unitPrice}
@@ -508,8 +562,8 @@ export default function NewImportOrder() {
                     {filled && !abvOk && <p className="mt-1.5 text-xs text-rose-500">{t("newImportOrder.errorAbvRange")}</p>}
                     {filled && product && !priceOk && (
                       <p className="mt-1.5 text-xs text-amber-600">
-                        {t("newImportOrder.errorPriceDeviation")} ({t("newImportOrder.referencePrice")} ฿
-                        {formatCurrency(product.costPrice, lang)})
+                        {t("newImportOrder.errorPriceDeviation")} ({t("newImportOrder.referencePrice")} {logistics.currency}{" "}
+                        {formatNumber(referencePurchasePrice(product, taxSettings) / (rate ?? 1), lang, 2)})
                       </p>
                     )}
                   </div>
@@ -533,9 +587,15 @@ export default function NewImportOrder() {
                     <span className="text-gray-500">{t("newImportOrder.totalSkus")}</span>
                     <span className="font-medium text-gray-800">{filledLines.length}</span>
                   </div>
+                  {logistics.currency !== "THB" && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">{t("fx.inCurrency").replace("{c}", logistics.currency)}</span>
+                      <span className="font-medium tabular-nums text-gray-800">{formatNumber(totalForeign, lang, 2)}</span>
+                    </div>
+                  )}
                   <div className="mt-2 flex justify-between border-t border-gray-200 pt-2">
                     <span className="font-medium text-gray-700">{t("newImportOrder.totalValue")}</span>
-                    <span className="font-semibold text-gray-900">฿{formatCurrency(totalValue, lang)}</span>
+                    <span className="font-semibold tabular-nums text-gray-900">฿{formatCurrency(totalValue, lang)}</span>
                   </div>
                 </div>
 

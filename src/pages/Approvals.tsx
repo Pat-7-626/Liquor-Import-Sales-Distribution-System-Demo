@@ -2,26 +2,27 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Check, X, ShieldAlert } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
-import { useToast } from "../components/Toast";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
 import { useRole } from "../state/RoleContext";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Masked } from "../components/Masked";
+import { OrderItems } from "../components/OrderItems";
 import { TableContainer, EmptyRow, th, td } from "../components/Table";
 import { formatCurrency } from "../lib/format";
 import { HIGH_VALUE_APPROVAL_THRESHOLD } from "../lib/business";
+import { useRunAction } from "../lib/useRunAction";
 
 const PENDING_STATUSES = new Set(["staging", "pendingApproval", "issueDetected"]);
 
 export default function Approvals() {
   const { t, lang } = useLanguage();
   const bi = useBi();
-  const showToast = useToast();
+  const runAction = useRunAction();
   const location = useLocation();
   const highlightOrderNo = (location.state as { highlightOrderNo?: string } | null)?.highlightOrderNo;
-  const { importOrders, salesOrders, customers, products, approveImportOrder, rejectImportOrder, approveSalesOrder, rejectSalesOrderApproval } = useData();
+  const { importOrders, salesOrders, customers, approveImportOrder, rejectImportOrder, approveSalesOrder, rejectSalesOrderApproval } = useData();
   const { identity, isSupervisor } = useRole();
 
   const [rejecting, setRejecting] = useState<{ kind: "import" | "sales"; orderNo: string } | null>(null);
@@ -33,25 +34,20 @@ export default function Approvals() {
   );
 
   // FR-22: only orders actually waiting on a real supervisor decision — not a passive "awareness" list.
-  const pendingSalesOrders = useMemo(() => {
-    return salesOrders
-      .filter((o) => o.approvalStatus === "pendingApproval")
-      .map((o) => {
-        const customerName = bi(o.customerName);
-        const customer = customers.find((c) => bi(c.name) === customerName);
-        return { order: o, standardDiscount: customer?.standardDiscount ?? 0 };
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [salesOrders, customers, lang]);
+  const pendingSalesOrders = useMemo(
+    () =>
+      salesOrders
+        .filter((o) => o.approvalStatus === "pendingApproval")
+        .map((o) => ({ order: o, standardDiscount: customers.find((c) => c.customerId === o.customerId)?.standardDiscount ?? 0 })),
+    [salesOrders, customers],
+  );
 
-  const handleApprove = (orderNo: string) => {
-    approveImportOrder(orderNo, identity.name);
-    showToast(`${t("approvals.approvedToast")}: ${orderNo}`);
+  const handleApprove = async (orderNo: string) => {
+    await runAction(approveImportOrder(orderNo), `${t("approvals.approvedToast")}: ${orderNo}`);
   };
 
-  const handleApproveSales = (orderNo: string) => {
-    approveSalesOrder(orderNo, identity.name);
-    showToast(`${t("approvals.approvedToast")}: ${orderNo}`);
+  const handleApproveSales = async (orderNo: string) => {
+    await runAction(approveSalesOrder(orderNo), `${t("approvals.approvedToast")}: ${orderNo}`);
   };
 
   const openReject = (kind: "import" | "sales", orderNo: string) => {
@@ -59,12 +55,13 @@ export default function Approvals() {
     setRejectReason("");
   };
 
-  const confirmReject = () => {
+  const confirmReject = async () => {
     if (!rejecting || !rejectReason.trim()) return;
-    if (rejecting.kind === "import") rejectImportOrder(rejecting.orderNo, identity.name, rejectReason.trim());
-    else rejectSalesOrderApproval(rejecting.orderNo, identity.name, rejectReason.trim());
-    showToast(`${t("approvals.rejectedToast")}: ${rejecting.orderNo}`);
-    setRejecting(null);
+    const result =
+      rejecting.kind === "import"
+        ? rejectImportOrder(rejecting.orderNo, rejectReason.trim())
+        : rejectSalesOrderApproval(rejecting.orderNo, rejectReason.trim());
+    if (await runAction(result, `${t("approvals.rejectedToast")}: ${rejecting.orderNo}`)) setRejecting(null);
   };
 
   return (
@@ -100,14 +97,17 @@ export default function Approvals() {
           {pendingImportOrders.map((o) => {
             const isHighValue = o.totalValue > HIGH_VALUE_APPROVAL_THRESHOLD;
             const isSelfSecondApproval = Boolean(o.firstApprover && o.firstApprover.en === identity.name.en);
-            const approveDisabled = !isSupervisor || o.status === "issueDetected" || isSelfSecondApproval;
+            const isOwnOrder = Boolean(o.createdBy && o.createdBy.en === identity.name.en);
+            const approveDisabled = !isSupervisor || o.status === "issueDetected" || isSelfSecondApproval || isOwnOrder;
             const approveTooltip = !isSupervisor
               ? t("approvals.supervisorOnlyNote")
               : o.status === "issueDetected"
                 ? t("approvals.fixIssueFirst")
-                : isSelfSecondApproval
-                  ? t("approvals.needDifferentSupervisor")
-                  : undefined;
+                : isOwnOrder
+                  ? t("erp.ownOrderNote")
+                  : isSelfSecondApproval
+                    ? t("approvals.needDifferentSupervisor")
+                    : undefined;
             return (
               <tr key={o.orderNo} className={`hover:bg-gray-50/60 ${o.orderNo === highlightOrderNo ? "bg-indigo-50/40" : ""}`}>
                 <td className={`${td} font-medium text-gray-900`}>
@@ -115,7 +115,7 @@ export default function Approvals() {
                     {o.orderNo}
                   </Link>
                   {isHighValue && (
-                    <span className="ml-2 inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-600">
+                    <span className="ml-2 inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-600">
                       {t("approvals.highValueBadge")}
                     </span>
                   )}
@@ -127,7 +127,12 @@ export default function Approvals() {
                 <td className={td}>
                   <div className="flex flex-col gap-1">
                     <StatusBadge status={o.status} />
-                    {o.note && <span className="text-xs text-rose-500">{bi(o.note)}</span>}
+                    {o.note && <span className="max-w-xs whitespace-normal text-xs text-rose-500">{bi(o.note)}</span>}
+                    {o.firstApprover && (
+                      <span className="text-xs text-gray-400">
+                        {t("erp.level1By")}: {bi(o.firstApprover)}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className={td}>
@@ -136,7 +141,7 @@ export default function Approvals() {
                       onClick={() => handleApprove(o.orderNo)}
                       disabled={approveDisabled}
                       title={approveTooltip}
-                      className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                      className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
                     >
                       <Check size={13} />
                       {t("approvals.approveButton")}
@@ -145,7 +150,7 @@ export default function Approvals() {
                       onClick={() => openReject("import", o.orderNo)}
                       disabled={!isSupervisor}
                       title={!isSupervisor ? t("approvals.supervisorOnlyNote") : undefined}
-                      className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                      className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
                     >
                       <X size={13} />
                       {t("approvals.rejectButton")}
@@ -175,18 +180,23 @@ export default function Approvals() {
         </thead>
         <tbody className="divide-y divide-gray-100">
           {pendingSalesOrders.length === 0 && <EmptyRow colSpan={8} />}
-          {pendingSalesOrders.map(({ order, standardDiscount }) => (
-            <tr key={order.orderNo} className="hover:bg-gray-50/60">
+          {pendingSalesOrders.map(({ order, standardDiscount }) => {
+            const isOwnOrder = Boolean(order.createdBy && order.createdBy.en === identity.name.en);
+            return (
+            <tr key={order.orderNo} className={`hover:bg-gray-50/60 ${order.orderNo === highlightOrderNo ? "bg-indigo-50/40" : ""}`}>
               <td className={`${td} font-medium text-gray-900`}>
                 <Link to={`/sales-orders/${order.orderNo}`} className="hover:underline">
                   {order.orderNo}
                 </Link>
               </td>
               <td className={td}>{bi(order.customerName)}</td>
-              <td className={td}>{products.find((p) => p.sku === order.sku)?.name ?? order.sku}</td>
-              <td className={`${td} text-amber-600`}>{order.approvalReason ? bi(order.approvalReason) : "—"}</td>
+              <td className={`${td} max-w-xs`}>
+                <OrderItems order={order} />
+              </td>
+              <td className={`${td} whitespace-normal text-amber-600`}>{order.approvalReason ? bi(order.approvalReason) : "—"}</td>
               <td className={td}>
-                <Masked>{order.discountPercent}%</Masked>
+                {/* The highest line discount is what tripped the approval rule. */}
+                <Masked>{Math.max(...order.lines.map((l) => l.discountPercent))}%</Masked>
               </td>
               <td className={td}>
                 <Masked>{standardDiscount}%</Masked>
@@ -198,9 +208,9 @@ export default function Approvals() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleApproveSales(order.orderNo)}
-                    disabled={!isSupervisor}
-                    title={!isSupervisor ? t("approvals.supervisorOnlyNote") : undefined}
-                    className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                    disabled={!isSupervisor || isOwnOrder}
+                    title={!isSupervisor ? t("approvals.supervisorOnlyNote") : isOwnOrder ? t("erp.ownOrderNote") : undefined}
+                    className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
                   >
                     <Check size={13} />
                     {t("approvals.approveButton")}
@@ -209,7 +219,7 @@ export default function Approvals() {
                     onClick={() => openReject("sales", order.orderNo)}
                     disabled={!isSupervisor}
                     title={!isSupervisor ? t("approvals.supervisorOnlyNote") : undefined}
-                    className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                    className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
                   >
                     <X size={13} />
                     {t("approvals.rejectButton")}
@@ -217,7 +227,8 @@ export default function Approvals() {
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </TableContainer>
 

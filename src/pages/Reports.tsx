@@ -10,10 +10,18 @@ import { TableContainer, EmptyRow, th, td } from "../components/Table";
 import { Masked } from "../components/Masked";
 import { formatCurrency, maskIfRestricted } from "../lib/format";
 import { exportToExcel, exportToPdf } from "../lib/export";
-import { computeInventoryAge, computeInTransitValue, computeAvailableForSaleValue } from "../lib/business";
+import {
+  computeInventoryAge,
+  computeInTransitValue,
+  computeAvailableForSaleValue,
+  isBookedSale,
+  isReversedSale,
+  IN_TRANSIT_STATUSES,
+  orderCost,
+  revenueExVat,
+} from "../lib/business";
 import type { ChannelCode } from "../data/types";
 
-const PIPELINE_ACTIVE_STATUSES = new Set(["staging", "pendingApproval", "approved", "customsCleared", "issueDetected"]);
 
 interface ExportSectionProps {
   title: string;
@@ -43,20 +51,23 @@ export default function Reports() {
   const { t, lang } = useLanguage();
   const bi = useBi();
   const { canViewSensitive } = useRole();
-  const { salesOrders: allSalesOrders, customers, products, inventory, importOrders, auditLog } = useData();
-  // FR-22/FR-25: exclude sales orders still awaiting/failed supervisor approval — they aren't booked yet
-  // (no stock or credit impact), so counting them in Sales reports would overstate real activity.
-  const salesOrders = useMemo(() => allSalesOrders.filter((o) => !o.approvalStatus), [allSalesOrders]);
+  const { salesOrders: allSalesOrders, customers, products, inventory, importOrders } = useData();
+  // FR-22/FR-25: only booked sales that the customer kept count as net sales — orders awaiting/failed
+  // approval never booked, and returned/damaged orders were reversed with a credit note.
+  const salesOrders = useMemo(() => allSalesOrders.filter((o) => isBookedSale(o) && !isReversedSale(o)), [allSalesOrders]);
+  const reversedSales = useMemo(() => allSalesOrders.filter((o) => isBookedSale(o) && isReversedSale(o)), [allSalesOrders]);
 
   const bySku = useMemo(() => {
     const map = new Map<string, { sku: string; productName: string; orders: number; qty: number; netValue: number }>();
     for (const o of salesOrders) {
-      const product = products.find((p) => p.sku === o.sku);
-      const entry = map.get(o.sku) ?? { sku: o.sku, productName: product?.name ?? o.sku, orders: 0, qty: 0, netValue: 0 };
-      entry.orders += 1;
-      entry.qty += o.quantity;
-      entry.netValue += o.netValue;
-      map.set(o.sku, entry);
+      for (const l of o.lines) {
+        const product = products.find((p) => p.sku === l.sku);
+        const entry = map.get(l.sku) ?? { sku: l.sku, productName: product?.name ?? l.sku, orders: 0, qty: 0, netValue: 0 };
+        entry.orders += 1;
+        entry.qty += l.quantity;
+        entry.netValue += l.netValue;
+        map.set(l.sku, entry);
+      }
     }
     return [...map.values()].sort((a, b) => b.netValue - a.netValue);
   }, [salesOrders, products]);
@@ -64,45 +75,51 @@ export default function Reports() {
   const byChannel = useMemo(() => {
     const map = new Map<ChannelCode, { channel: ChannelCode; orders: number; netValue: number; discountSum: number }>();
     for (const o of salesOrders) {
-      const customer = customers.find((c) => bi(c.name) === bi(o.customerName));
+      const customer = customers.find((c) => c.customerId === o.customerId);
       const channel = o.channelType ?? customer?.channelType ?? "distributor";
       const entry = map.get(channel) ?? { channel, orders: 0, netValue: 0, discountSum: 0 };
       entry.orders += 1;
       entry.netValue += o.netValue;
-      entry.discountSum += o.discountPercent;
+      // Average discount across the channel's order lines.
+      entry.discountSum += o.lines.reduce((sum, l) => sum + l.discountPercent, 0) / o.lines.length;
       map.set(channel, entry);
     }
     return [...map.values()].sort((a, b) => b.netValue - a.netValue);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [salesOrders, customers, lang]);
+  }, [salesOrders, customers]);
 
   const byCustomer = useMemo(() => {
     const map = new Map<string, { name: string; customerId: string | null; orders: number; netValue: number; outstanding: number }>();
     for (const o of salesOrders) {
-      const name = bi(o.customerName);
-      const customer = customers.find((c) => bi(c.name) === name);
-      const entry = map.get(name) ?? { name, customerId: customer?.customerId ?? null, orders: 0, netValue: 0, outstanding: customer?.outstandingBalance ?? 0 };
+      const customer = customers.find((c) => c.customerId === o.customerId);
+      const entry = map.get(o.customerId) ?? {
+        name: bi(customer?.name ?? o.customerName),
+        customerId: customer?.customerId ?? null,
+        orders: 0,
+        netValue: 0,
+        outstanding: customer?.outstandingBalance ?? 0,
+      };
       entry.orders += 1;
       entry.netValue += o.netValue;
-      map.set(name, entry);
+      map.set(o.customerId, entry);
     }
     return [...map.values()].sort((a, b) => b.netValue - a.netValue);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [salesOrders, customers, lang]);
 
   const byPipelineStatus = useMemo(() => {
-    const inTransitOrders = importOrders.filter((o) => PIPELINE_ACTIVE_STATUSES.has(o.status));
+    const inTransitOrders = importOrders.filter((o) => IN_TRANSIT_STATUSES.has(o.status));
     const inTransitValue = computeInTransitValue(importOrders);
     const availableValue = computeAvailableForSaleValue(inventory, products);
     return [
       { key: "inTransit" as const, count: inTransitOrders.length, value: inTransitValue },
-      { key: "available" as const, count: inventory.length, value: availableValue },
+      { key: "available" as const, count: inventory.filter((i) => i.quantityRemaining > 0).length, value: availableValue },
     ];
   }, [importOrders, inventory, products]);
 
   const byInventoryStatus = useMemo(() => {
     const map = new Map<string, { status: string; lots: number; qty: number; value: number }>();
-    for (const i of inventory) {
+    // Fully-sold lots are history, not stock — leave them out of the lot counts.
+    for (const i of inventory.filter((x) => x.quantityRemaining > 0)) {
       const { status } = computeInventoryAge(i.receivedDate);
       const product = products.find((p) => p.sku === i.sku);
       const entry = map.get(status) ?? { status, lots: 0, qty: 0, value: 0 };
@@ -114,8 +131,7 @@ export default function Reports() {
     return [...map.values()];
   }, [inventory, products]);
 
-  /** Tax Officer user story: monthly tax/sales reconciliation. Sales Orders have no date field of their
-   *  own, so each order's month is taken from its real "created" audit entry rather than invented. */
+  /** Tax Officer user story: monthly tax/sales reconciliation, by import order date and sales order date. */
   const byMonth = useMemo(() => {
     type Row = { month: string; salesNetValue: number; importDuty: number; exciseTax: number; vat: number; totalTax: number };
     const map = new Map<string, Row>();
@@ -135,13 +151,15 @@ export default function Reports() {
       row.vat += o.tax.vat;
       row.totalTax += o.tax.totalTax;
     }
-    for (const o of salesOrders) {
-      const created = auditLog.find((e) => e.entityType === "salesOrder" && e.entityId === o.orderNo && e.action === "created");
-      if (!created) continue;
-      get(created.timestamp.slice(0, 7)).salesNetValue += o.netValue;
-    }
+    for (const o of salesOrders) get(o.orderDate.slice(0, 7)).salesNetValue += o.netValue;
     return [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
-  }, [importOrders, salesOrders, auditLog]);
+  }, [importOrders, salesOrders]);
+
+  const netSalesTotal = salesOrders.reduce((sum, o) => sum + o.netValue, 0);
+  const reversedTotal = reversedSales.reduce((sum, o) => sum + o.netValue, 0);
+  // Margin on what the business keeps: sales excluding VAT, less the landed cost of the lots sold.
+  const revenueExVatTotal = salesOrders.reduce((sum, o) => sum + revenueExVat(o), 0);
+  const grossMarginTotal = salesOrders.reduce((sum, o) => sum + revenueExVat(o) - orderCost(o, products), 0);
 
   return (
     <div>
@@ -155,6 +173,29 @@ export default function Reports() {
           {t("common.print")}
         </button>
       </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {[
+          { label: t("erp.netSales"), value: netSalesTotal, sub: `${salesOrders.length} ${t("reports.colOrders").toLowerCase()}` },
+          {
+            label: t("erp.grossMargin"),
+            value: grossMarginTotal,
+            sub: revenueExVatTotal > 0 ? `${((grossMarginTotal / revenueExVatTotal) * 100).toFixed(1)}%` : "—",
+          },
+          { label: t("erp.returnsWriteOffs"), value: reversedTotal, sub: `${reversedSales.length} ${t("reports.colOrders").toLowerCase()}` },
+        ].map((card) => (
+          <div key={card.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-xs text-gray-500">{card.label}</p>
+            <p className="mt-1 text-xl font-semibold text-gray-900">
+              <Masked>฿{formatCurrency(card.value, lang)}</Masked>
+            </p>
+            <p className="mt-0.5 text-xs text-gray-400">
+              <Masked>{card.sub}</Masked>
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="-mt-6 mb-8 text-xs text-gray-400">{t("erp.netSalesNote")}</p>
 
       <ReportSection
         title={t("reports.salesBySku")}

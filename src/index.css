@@ -1,21 +1,118 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens — "private cellar": warm ivory surfaces, ink and claret, brushed-gold detail.
+ * The app's components use Tailwind's `gray-*` / `indigo-*` / `emerald-*` / `blue-*` utilities
+ * throughout, so the palette is re-tuned here at the token level rather than in every component:
+ *   gray    → warm stone neutrals (no cold blue-grey)
+ *   indigo  → claret, the brand accent (buttons, links, focus, active states)
+ *   emerald → bottle green, blue → slate steel (calmer status colours)
+ * plus two new scales: `ink` (sidebar, dark surfaces) and `gold` (fine detail only).
+ */
 @theme {
-  --font-sans: "Inter", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", "Noto Sans Thai Looped", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+
+  /* Readability: the two small sizes used for nearly all UI text are a notch larger than Tailwind's defaults. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.55;
+  --text-sm: 0.9rem;
+  --text-sm--line-height: 1.6;
+  --font-display: "Playfair Display", "Noto Serif Thai", ui-serif, Georgia, serif;
+
+  --color-gray-50: #faf8f5;
+  --color-gray-100: #f3efe9;
+  --color-gray-200: #e7e1d8;
+  --color-gray-300: #d4ccbf;
+  --color-gray-400: #736a5e;
+  --color-gray-500: #625a4f;
+  --color-gray-600: #4f483f;
+  --color-gray-700: #3b352e;
+  --color-gray-800: #2d2823;
+  --color-gray-900: #1c1814;
+
+  --color-indigo-50: #fbf5f4;
+  --color-indigo-100: #f4e3e2;
+  --color-indigo-200: #e8c7c6;
+  --color-indigo-300: #d69f9f;
+  --color-indigo-400: #b96f72;
+  --color-indigo-500: #9a4650;
+  --color-indigo-600: #7d2a35;
+  --color-indigo-700: #66212b;
+  --color-indigo-800: #511b23;
+  --color-indigo-900: #3c141a;
+
+  --color-emerald-50: #f1f6f2;
+  --color-emerald-100: #dceade;
+  --color-emerald-200: #bcd6c0;
+  --color-emerald-400: #6f9e79;
+  --color-emerald-500: #4a7f57;
+  --color-emerald-600: #376845;
+  --color-emerald-700: #2b5337;
+
+  --color-blue-50: #f2f5f8;
+  --color-blue-500: #557089;
+  --color-blue-600: #435b72;
+  --color-blue-700: #364a5d;
+
+  --color-ink-700: #3a332d;
+  --color-ink-800: #26201b;
+  --color-ink-900: #1a1613;
+  --color-ink-950: #120f0d;
+
+  --color-gold-100: #f4ecdc;
+  --color-gold-200: #e6d4ad;
+  --color-gold-300: #d8bd84;
+  --color-gold-400: #c9a96a;
+  --color-gold-500: #b08d4f;
+  --color-gold-600: #7a5c26;
+
+  --color-canvas: #f6f2ec;
+
+  /* Softer, layered elevation — reads as paper on a table rather than a floating box. */
+  --shadow-sm: 0 1px 2px rgb(28 24 20 / 0.04), 0 2px 6px -2px rgb(28 24 20 / 0.05);
+  --shadow-md: 0 2px 4px rgb(28 24 20 / 0.04), 0 8px 20px -6px rgb(28 24 20 / 0.1);
+  --shadow-lg: 0 4px 8px rgb(28 24 20 / 0.05), 0 18px 40px -12px rgb(28 24 20 / 0.18);
+  --shadow-2xl: 0 8px 16px rgb(28 24 20 / 0.06), 0 32px 72px -16px rgb(28 24 20 / 0.32);
 }
 
 html {
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   margin: 0;
-  background-color: #f4f5f7;
-  color: #1e2330;
+  background-color: var(--color-canvas);
+  color: var(--color-gray-900);
+  font-feature-settings: "cv11", "ss01";
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Thai stacks vowel and tone marks above and below the line — it needs more leading than Latin. */
+:lang(th) {
+  --text-xs--line-height: 1.7;
+  --text-sm--line-height: 1.75;
+  --text-base--line-height: 1.75;
+}
+
+/* Thai script must not be letter-spaced — tracking that refines Latin small caps breaks Thai words apart. */
+:lang(th) [class*="tracking-"] {
+  letter-spacing: normal;
+}
+
+::selection {
+  background: var(--color-indigo-100);
+  color: var(--color-indigo-900);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-indigo-400);
+  outline-offset: 2px;
 }
 
 ::-webkit-scrollbar {
@@ -26,11 +123,37 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd2e0;
+  background: var(--color-gray-300);
+  border: 2px solid transparent;
+  background-clip: padding-box;
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #a7b0c4;
+  background: var(--color-gray-400);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Gentle entrance for routed pages. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* "backwards", not "both": a transform left on the wrapper after the animation would become the
+   containing block for every position:fixed drawer and modal inside the page. */
+.page-in {
+  animation: page-in 0.28s ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-in {
+    animation: none;
+  }
 }
 
 @media print {
