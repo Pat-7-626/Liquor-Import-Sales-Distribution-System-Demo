@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { EmailButton, type EmailSpec } from "./EmailDocument";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
@@ -127,6 +128,7 @@ export function PrintFrame<T extends string>({
   onTab,
   onClose,
   extra,
+  email,
   children,
 }: {
   tabs?: { key: T; label: string }[];
@@ -134,9 +136,12 @@ export function PrintFrame<T extends string>({
   onTab?: (t: T) => void;
   onClose: () => void;
   extra?: ReactNode;
+  /** Offers "Email" when sending is set up and the viewer may see the document's figures. */
+  email?: EmailSpec;
   children: ReactNode;
 }) {
   const { t } = useLanguage();
+  const content = useRef<HTMLDivElement>(null);
   return createPortal(
     <div id="print-modal-root">
       <div onClick={onClose} className="fixed inset-0 z-30 bg-gray-900/30 print:hidden" />
@@ -161,6 +166,7 @@ export function PrintFrame<T extends string>({
           </div>
           <div className="flex items-center gap-2">
             {extra}
+            {email && <EmailButton spec={email} contentRef={content} />}
             <button
               onClick={exportToPdf}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -173,7 +179,9 @@ export function PrintFrame<T extends string>({
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-8 py-8 text-gray-900 print:overflow-visible print:px-0 print:py-0">{children}</div>
+        <div ref={content} className="flex-1 overflow-y-auto px-8 py-8 text-gray-900 print:overflow-visible print:px-0 print:py-0">
+          {children}
+        </div>
       </div>
     </div>,
     document.body,

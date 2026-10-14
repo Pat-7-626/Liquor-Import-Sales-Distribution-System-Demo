@@ -53,7 +53,25 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
   ];
 
   return (
-    <PrintFrame tabs={tabs} tab={tab} onTab={setTab} onClose={onClose} extra={tab === "invoice" ? <CopySwitch value={copy} onChange={setCopy} /> : null}>
+    <PrintFrame
+      tabs={tabs}
+      tab={tab}
+      onTab={setTab}
+      onClose={onClose}
+      extra={tab === "invoice" ? <CopySwitch value={copy} onChange={setCopy} /> : null}
+      email={
+        tab === "invoice" && order.taxInvoiceNo !== "—"
+          ? {
+              to: customer?.email,
+              subject: `ใบกำกับภาษี / Tax invoice ${order.taxInvoiceNo}`,
+              document: `tax invoice ${order.taxInvoiceNo}`,
+              filename: order.taxInvoiceNo,
+              entityType: "salesOrder",
+              entityId: order.orderNo,
+            }
+          : undefined
+      }
+    >
       {/* Header: seller left, document title and number right */}
       <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 print:flex-row">
         <div className="min-w-0 flex-1">

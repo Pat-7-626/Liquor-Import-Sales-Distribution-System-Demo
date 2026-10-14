@@ -59,6 +59,7 @@ const ENTITY_TYPES: AuditEntityType[] = [
   "bank",
   "quotation",
   "purchaseRequest",
+  "stockCount",
 ];
 
 interface AuditPage {
@@ -121,6 +122,7 @@ export default function AuditTrail() {
     if (type === "bank") return "/accounting/bank";
     if (type === "quotation") return "/quotations";
     if (type === "purchaseRequest") return "/purchase-requests";
+    if (type === "stockCount") return "/stock-counts";
     return null;
   };
 

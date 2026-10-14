@@ -1,4 +1,6 @@
 import type {
+  StockCount,
+  ArReminder,
   ApDocument,
   BankLine,
   Expense,
@@ -52,6 +54,10 @@ export interface Store {
   bankLines: BankLine[];
   quotations: Quotation[];
   purchaseRequests: PurchaseRequest[];
+  /** Payment reminders sent to customers. */
+  arReminders: ArReminder[];
+  /** Physical stock counts. */
+  stockCounts: StockCount[];
 }
 
 export const STORE_KEYS: (keyof Store)[] = [
@@ -77,6 +83,8 @@ export const STORE_KEYS: (keyof Store)[] = [
   "bankLines",
   "quotations",
   "purchaseRequests",
+  "arReminders",
+  "stockCounts",
 ];
 
 export function makeId() {

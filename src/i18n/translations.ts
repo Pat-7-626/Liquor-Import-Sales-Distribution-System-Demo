@@ -93,6 +93,7 @@ const dict = {
     manualJournals: { th: "บันทึกรายการบัญชี", en: "Manual Journals" },
     bankReconciliation: { th: "กระทบยอดธนาคาร", en: "Bank Reconciliation" },
     periodClosing: { th: "ปิดงวดบัญชี", en: "Month-end Close" },
+    stockCounts: { th: "ตรวจนับสต๊อก", en: "Stock Counts" },
     overview: { th: "ภาพรวม", en: "Overview" },
     transactions: { th: "ธุรกรรม", en: "Transactions" },
     masterData: { th: "ข้อมูลหลัก", en: "Master data" },
@@ -419,6 +420,7 @@ const dict = {
   },
 
   customerDetail: {
+    accountsEmail: { th: "อีเมลฝ่ายบัญชี", en: "Accounts email" },
     backToList: { th: "กลับไปหน้าลูกค้า", en: "Back to Customers" },
     sectionOverview: { th: "ข้อมูลลูกค้า", en: "Customer Overview" },
     sectionCredit: { th: "การใช้วงเงินเครดิต", en: "Credit Utilization" },
@@ -497,6 +499,11 @@ const dict = {
   },
 
   newSalesOrder: {
+    checklistOverdue: { th: "ไม่มีใบแจ้งหนี้ค้างชำระเกิน 60 วัน", en: "No invoices over 60 days overdue" },
+    checklistOverdueHold: {
+      th: "ค้างชำระนานสุด {n} วัน — ระงับเครดิต ออเดอร์ต้องได้รับอนุมัติ",
+      en: "Oldest invoice {n} days overdue — credit hold, the order needs approval",
+    },
     title: { th: "สร้างออเดอร์ขายใหม่", en: "New Sales Order" },
     subtitle: {
       th: "ระบบตรวจสอบใบอนุญาต วงเงินเครดิต และส่วนลดแบบเรียลไทม์ (FR-20–22)",
@@ -742,6 +749,7 @@ const dict = {
       bank: { th: "ธนาคาร", en: "Bank" },
       quotation: { th: "ใบเสนอราคา", en: "Quotation" },
       purchaseRequest: { th: "ใบขอซื้อ", en: "Purchase Request" },
+      stockCount: { th: "ตรวจนับสต๊อก", en: "Stock Count" },
     },
   },
 
@@ -1842,6 +1850,91 @@ const dict = {
       th: "นำเข้า {added} รายการ (ข้าม {skipped}) จับคู่อัตโนมัติ {matched}",
       en: "Imported {added} lines ({skipped} skipped), {matched} matched",
     },
+  },
+
+  email: {
+    send: { th: "ส่งอีเมล", en: "Email" },
+    title: { th: "ส่งเอกสารทางอีเมล", en: "Email this document" },
+    to: { th: "ถึง", en: "To" },
+    toHint: { th: "ได้สูงสุด 5 อีเมล คั่นด้วยจุลภาค", en: "Up to 5 addresses, separated by commas" },
+    subject: { th: "เรื่อง", en: "Subject" },
+    message: { th: "ข้อความ", en: "Message" },
+    sending: { th: "กำลังส่ง…", en: "Sending…" },
+    sent: { th: "ส่งอีเมลถึง {to} แล้ว", en: "Emailed to {to}" },
+    catchAll: {
+      th: "ระบบยังไม่ได้ตั้งค่าอีเมลจริง — อีเมลทั้งหมดถูกเก็บไว้ในกล่องจดหมายทดสอบที่",
+      en: "Real email isn't set up yet — every email is kept in the test mailbox at",
+    },
+  },
+
+  collect: {
+    title: { th: "ติดตามหนี้", en: "Collections" },
+    subtitle: {
+      th: "ลูกค้าที่มียอดเกินกำหนด เรียงจากค้างนานที่สุด — ค้างเกิน {n} วันจะถูกระงับเครดิต (ออเดอร์ใหม่ต้องได้รับอนุมัติ)",
+      en: "Customers with overdue invoices, longest first — over {n} days puts them on credit hold (new orders need approval)",
+    },
+    nothing: { th: "ไม่มีลูกค้าค้างชำระเกินกำหนด", en: "Nobody is overdue" },
+    onHold: { th: "ระงับเครดิต", en: "Credit hold" },
+    overdueLine: { th: "เกินกำหนด {amt} · นานสุด {n} วัน", en: "{amt} overdue · oldest {n} days" },
+    lastReminder: { th: "ทวงถามล่าสุด ครั้งที่ {level} เมื่อ {d}", en: "last reminder {level} on {d}" },
+    noReminder: { th: "ยังไม่เคยทวงถาม", en: "not yet reminded" },
+    statement: { th: "ใบแจ้งยอด", en: "Statement" },
+    reminderLetter: { th: "หนังสือทวงถาม", en: "Reminder letter" },
+    remind: { th: "ทวงถามครั้งที่ {level}", en: "Send reminder {level}" },
+    sendReminder: { th: "ส่งหนังสือทวงถาม", en: "Send reminder" },
+    level: { th: "ระดับ", en: "Level" },
+    level1: { th: "1 — แจ้งเตือน", en: "1 — Friendly reminder" },
+    level2: { th: "2 — ทวงถาม (ชำระใน 7 วัน)", en: "2 — Firm request (pay within 7 days)" },
+    level3: { th: "3 — ทวงถามครั้งสุดท้าย", en: "3 — Final notice" },
+    note: { th: "บันทึก", en: "Note" },
+    notePlaceholder: { th: "เช่น โทรคุยกับคุณ…", en: "e.g. Spoke with their accountant" },
+    explain: {
+      th: "บันทึกการทวงถามไว้ในประวัติลูกค้า แล้วเปิดหนังสือให้พิมพ์หรือส่งอีเมล",
+      en: "Records the reminder on the customer's history, then opens the letter to print or email",
+    },
+    recorded: { th: "บันทึกการทวงถามแล้ว", en: "Reminder recorded" },
+  },
+
+  sc: {
+    title: { th: "ตรวจนับสต๊อก", en: "Stock Counts" },
+    subtitle: {
+      th: "นับสินค้าทั้งคลัง บันทึกจำนวนที่นับได้ แล้วปรับปรุงทุกล็อตที่ไม่ตรงในครั้งเดียว — ผลต่างลงบัญชีอัตโนมัติ",
+      en: "Count a whole warehouse, enter what was found, and adjust every lot that differs in one go — the differences post to the books",
+    },
+    start: { th: "เริ่มตรวจนับ", en: "Start a count" },
+    startedToast: { th: "เริ่มตรวจนับแล้ว", en: "Count started" },
+    startExplain: {
+      th: "ระบบจะบันทึกจำนวนคงเหลือของทุกล็อตในคลัง ณ ตอนนี้ ผลต่างจะคิดจากจำนวนนี้ การขายระหว่างนับจึงไม่ถูกนับเป็นของหาย",
+      en: "Records what every lot in the warehouse holds right now; differences are worked out against that, so sales made while counting aren't mistaken for losses",
+    },
+    none: { th: "ยังไม่มีการตรวจนับ", en: "No counts yet" },
+    noWarehouse: { th: "ไม่มีคลังที่ตรวจนับได้ (ไม่มีสินค้า หรือมีการนับค้างอยู่)", en: "No warehouse to count (empty, or already being counted)" },
+    note: { th: "หมายเหตุ", en: "Note" },
+    notePlaceholder: { th: "เช่น ตรวจนับสิ้นเดือน", en: "e.g. Month-end count" },
+    status: {
+      open: { th: "กำลังนับ", en: "In progress" },
+      posted: { th: "ลงผลแล้ว", en: "Posted" },
+      cancelled: { th: "ยกเลิก", en: "Cancelled" },
+    },
+    progress: { th: "นับแล้ว {n}/{total}", en: "{n} of {total} counted" },
+    sheet: { th: "ใบตรวจนับ", en: "Count sheet" },
+    expected: { th: "ตามระบบ", en: "System" },
+    counted: { th: "นับได้", en: "Counted" },
+    difference: { th: "ผลต่าง", en: "Difference" },
+    differences: { th: "{n} ล็อตไม่ตรงกับระบบ", en: "{n} lots differ from the system" },
+    noDifferences: { th: "ทุกล็อตที่นับตรงกับระบบ", en: "Everything counted matches the system" },
+    save: { th: "บันทึก", en: "Save" },
+    savedToast: { th: "บันทึกจำนวนนับแล้ว", en: "Counts saved" },
+    post: { th: "ลงผลตรวจนับ", en: "Post count" },
+    postConfirm: {
+      th: "ปรับปรุงสต๊อก {n} ล็อตตามผลนับ? ทำแล้วย้อนกลับไม่ได้",
+      en: "Adjust stock for {n} lots to match the count? This can't be undone.",
+    },
+    postedToast: { th: "ลงผลตรวจนับแล้ว", en: "Count posted" },
+    countAllFirst: { th: "นับให้ครบทุกล็อตก่อน", en: "Count every lot first" },
+    cancel: { th: "ยกเลิกการนับ", en: "Cancel count" },
+    cancelledToast: { th: "ยกเลิกการตรวจนับแล้ว", en: "Count cancelled" },
+    postedBy: { th: "ลงผลโดย {who} เมื่อ {d}", en: "Posted by {who} on {d}" },
   },
 
   qt: {

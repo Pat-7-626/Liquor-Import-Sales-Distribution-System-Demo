@@ -1,6 +1,6 @@
 // Pure helpers for the finance screens and actions: withholding by month, quotation state, and matching a
 // bank statement to the books. No state is changed here.
-import type { BankLine, Expense, ManualJournal, Quotation } from "../data/types";
+import type { ArDocument, BankLine, Expense, ManualJournal, Quotation, SalesOrder } from "../data/types";
 import { addDays } from "../lib/business";
 import { bankAmount, type JournalEntry } from "./ledger";
 
@@ -136,4 +136,49 @@ export function reconcile(lines: BankLine[], entries: JournalEntry[]): Reconcili
     unmatchedEntries: inRange.filter((e) => !matchedIds.has(e.id)),
     matched: lines.filter((l) => l.matchedEntryId).length,
   };
+}
+
+export interface StatementLine {
+  date: string;
+  kind: "invoice" | "creditNote" | "debitNote" | "payment" | "openingBalance";
+  ref: string;
+  /** The order behind an invoice or note. */
+  orderNo?: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+/**
+ * A customer's statement of account for a period: what they owed at the start, every invoice, note and
+ * payment in the period with a running balance, and what they owe at the end. Built from the same
+ * documents as the books, so the closing balance is the customer's outstanding balance on that day.
+ */
+export function customerStatement(
+  customerId: string,
+  salesOrders: SalesOrder[],
+  arDocuments: ArDocument[],
+  from: string,
+  to: string,
+): { opening: number; lines: StatementLine[]; closing: number } {
+  const all: Omit<StatementLine, "balance">[] = [];
+  for (const o of salesOrders)
+    if (o.customerId === customerId && o.invoice && o.invoiceDate)
+      all.push({ date: o.invoiceDate, kind: "invoice", ref: o.taxInvoiceNo, orderNo: o.orderNo, debit: o.invoice.netValue, credit: 0 });
+  for (const d of arDocuments) {
+    if (d.customerId !== customerId) continue;
+    const up = d.type === "openingBalance" || d.type === "debitNote";
+    all.push({ date: d.date, kind: d.type, ref: d.docNo, orderNo: d.type === "payment" ? d.appliesTo : d.reference, debit: up ? d.amount : 0, credit: up ? 0 : d.amount });
+  }
+  all.sort((a, b) => a.date.localeCompare(b.date) || a.ref.localeCompare(b.ref));
+  const net = (l: { debit: number; credit: number }) => l.debit - l.credit;
+  const opening = r2(all.filter((l) => l.date < from).reduce((s, l) => s + net(l), 0));
+  let balance = opening;
+  const lines = all
+    .filter((l) => l.date >= from && l.date <= to)
+    .map((l) => {
+      balance = r2(balance + net(l));
+      return { ...l, balance };
+    });
+  return { opening, lines, closing: balance };
 }

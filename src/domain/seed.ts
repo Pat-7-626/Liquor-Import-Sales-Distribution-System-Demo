@@ -171,7 +171,8 @@ export function seedState(): Store {
     products: seedProducts(),
     importOrders: initialImportOrders.map(withImportHistory),
     licenses: initialLicenses,
-    customers: initialCustomers,
+    // Accounts contacts (example.com never delivers; the demo mailbox catches everything anyway).
+    customers: initialCustomers.map((c) => ({ ...c, email: `accounts.${c.customerId.toLowerCase()}@example.com` })),
     salesOrders: initialSalesOrders.map(withSalesHistory).map(withCosts),
     inventory: seedInventory(),
     auditLog: buildSeedAuditLog(),
@@ -190,6 +191,18 @@ export function seedState(): Store {
     bankLines: [],
     quotations: seedQuotations(),
     purchaseRequests: seedPurchaseRequests(),
+    stockCounts: [],
+    arReminders: [
+      {
+        id: "rem-seed-1",
+        customerId: "CUS-0006",
+        date: addDays(todayIso(), -10),
+        level: 1,
+        overdueAmount: 0,
+        note: "โทรแจ้งฝ่ายบัญชีลูกค้าแล้ว / Called their accounts team",
+        actor: SALES_OFFICER_ACTOR,
+      },
+    ],
   };
 }
 
@@ -302,7 +315,8 @@ function buildOpeningBalances(): ArDocument[] {
       .reduce((sum, o) => sum + o.netValue, 0);
     const total = Math.round((c.outstandingBalance - invoiced) * 100) / 100;
     if (total <= 0) continue;
-    const parts = spread(c.creditTermDays);
+    // CUS-0006 (already over its limit) has one bill long unpaid, so it's on credit hold in the demo.
+    const parts = spread(c.creditTermDays).map((p, i, all) => (c.customerId === "CUS-0006" && i === all.length - 1 ? { ...p, daysAgo: c.creditTermDays + 75 } : p));
     let left = total;
     parts.forEach((p, i) => {
       // The last part takes the remainder so the parts add up to the balance to the satang.

@@ -1,4 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { FileText, Send } from "lucide-react";
+import { CustomerDocumentsModal } from "../components/CustomerDocuments";
+import { Dialog, DialogActions } from "../components/Dialog";
+import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
+import { useRunAction } from "../lib/useRunAction";
+import { formatDate } from "../lib/format";
+import type { Customer } from "../data/types";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -11,7 +18,7 @@ import { ChartCard, KpiTile, StackedBar } from "../components/charts";
 import { formatCurrency } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { formatPercent } from "../lib/analytics";
-import { AGING_BUCKETS, agingTotals, computeArOpenItems, todayIso, type AgingBucket } from "../lib/business";
+import { AGING_BUCKETS, OVERDUE_HOLD_DAYS, agingTotals, computeArOpenItems, daysOverdue, todayIso, type AgingBucket } from "../lib/business";
 
 /** Ordinal ramp: on time → most overdue. */
 const BUCKET_COLORS: Record<AgingBucket, string> = {
@@ -27,8 +34,11 @@ const emptyTotals = (): Record<AgingBucket, number> => ({ current: 0, "1-30": 0,
 export default function ArAging() {
   const { t, lang } = useLanguage();
   const bi = useBi();
-  const { canViewSensitive } = useRole();
-  const { customers, salesOrders, arDocuments } = useData();
+  const { canViewSensitive, can } = useRole();
+  const runAction = useRunAction();
+  const { customers, salesOrders, arDocuments, arReminders, recordReminder } = useData();
+  const [doc, setDoc] = useState<{ customer: Customer; tab: "statement" | "reminder"; level: 1 | 2 | 3 } | null>(null);
+  const [reminding, setReminding] = useState<{ customer: Customer; level: 1 | 2 | 3; note: string } | null>(null);
   const baht = (n: number) => `฿${formatCurrency(n, lang)}`;
   const today = todayIso();
 
@@ -40,11 +50,13 @@ export default function ArAging() {
           const buckets = agingTotals(items, today);
           const total = AGING_BUCKETS.reduce((s, b) => s + buckets[b], 0);
           const overdue = total - buckets.current;
-          return { c, items, buckets, total, overdue };
+          const oldest = Math.max(0, ...items.map((i) => daysOverdue(i.dueDate, today)));
+          const lastReminder = arReminders.filter((r) => r.customerId === c.customerId).sort((a, b) => b.date.localeCompare(a.date))[0];
+          return { c, items, buckets, total, overdue, oldest, lastReminder };
         })
         .filter((r) => r.total > 0.005)
         .sort((a, b) => b.overdue - a.overdue || b.total - a.total),
-    [customers, salesOrders, arDocuments, today],
+    [customers, salesOrders, arDocuments, arReminders, today],
   );
 
   const totals = rows.reduce((acc, r) => {
@@ -174,6 +186,93 @@ export default function ArAging() {
         )}
       </TableContainer>
       <p className="mt-3 text-xs text-gray-500">{t("ar.allocationNote")}</p>
+
+      {/* Collections: who to chase, how late they are, and what was last sent. */}
+      <h3 className="mt-8 mb-1 text-sm font-semibold text-gray-900">{t("collect.title")}</h3>
+      <p className="mb-3 text-xs text-gray-500">{t("collect.subtitle").replace("{n}", String(OVERDUE_HOLD_DAYS))}</p>
+      <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm">
+        {rows.filter((r) => r.overdue > 0.005).length === 0 && <li className="py-8 text-center text-sm text-emerald-700">{t("collect.nothing")}</li>}
+        {rows
+          .filter((r) => r.overdue > 0.005)
+          .sort((a, b) => b.oldest - a.oldest)
+          .map((r) => {
+            const next = Math.min(3, (r.lastReminder?.level ?? 0) + 1) as 1 | 2 | 3;
+            return (
+              <li key={r.c.customerId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm" data-testid="collection-row" data-customer={r.c.customerId}>
+                <div>
+                  <Link to={`/customers/${r.c.customerId}`} className="font-medium text-gray-900 hover:text-indigo-600 hover:underline">
+                    {bi(r.c.name)}
+                  </Link>
+                  {r.oldest > OVERDUE_HOLD_DAYS && (
+                    <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700" data-testid="credit-hold">
+                      {t("collect.onHold")}
+                    </span>
+                  )}
+                  <span className="block text-xs text-gray-500">
+                    {t("collect.overdueLine").replace("{amt}", baht(r.overdue)).replace("{n}", String(r.oldest))}
+                    {" · "}
+                    {r.lastReminder
+                      ? t("collect.lastReminder").replace("{level}", String(r.lastReminder.level)).replace("{d}", formatDate(r.lastReminder.date, lang))
+                      : t("collect.noReminder")}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setDoc({ customer: r.c, tab: "statement", level: next })}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                    data-testid={`statement-${r.c.customerId}`}
+                  >
+                    <FileText size={13} />
+                    {t("collect.statement")}
+                  </button>
+                  {can("recordPayment") && (
+                    <button
+                      onClick={() => setReminding({ customer: r.c, level: next, note: "" })}
+                      className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+                      data-testid={`remind-${r.c.customerId}`}
+                    >
+                      <Send size={13} />
+                      {t("collect.remind").replace("{level}", String(next))}
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+      </ul>
+
+      {reminding && (
+        <Dialog title={`${t("collect.sendReminder")} · ${bi(reminding.customer.name)}`} onClose={() => setReminding(null)}>
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (await runAction(recordReminder(reminding.customer.customerId, reminding.level, reminding.note), t("collect.recorded"))) {
+                setDoc({ customer: reminding.customer, tab: "reminder", level: reminding.level });
+                setReminding(null);
+              }
+            }}
+          >
+            <label className="block">
+              <FieldLabel>{t("collect.level")}</FieldLabel>
+              <select value={reminding.level} onChange={(e) => setReminding({ ...reminding, level: Number(e.target.value) as 1 | 2 | 3 })} className={selectClass} data-testid="remind-level">
+                {([1, 2, 3] as const).map((l) => (
+                  <option key={l} value={l}>
+                    {t(`collect.level${l}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <FieldLabel>{t("collect.note")}</FieldLabel>
+              <input value={reminding.note} onChange={(e) => setReminding({ ...reminding, note: e.target.value })} className={inputClass} placeholder={t("collect.notePlaceholder")} />
+            </label>
+            <p className="text-xs text-gray-500">{t("collect.explain")}</p>
+            <DialogActions onCancel={() => setReminding(null)} submitLabel={t("collect.sendReminder")} testid="remind-save" />
+          </form>
+        </Dialog>
+      )}
+      {doc && <CustomerDocumentsModal customer={doc.customer} initialTab={doc.tab} level={doc.level} onClose={() => setDoc(null)} />}
     </div>
   );
 }

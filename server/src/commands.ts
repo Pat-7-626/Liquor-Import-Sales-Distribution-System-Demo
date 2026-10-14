@@ -28,7 +28,7 @@ const COMMANDS = {
     run: A.updateCustomerTerms,
   },
   updateCustomerProfile: {
-    args: z.tuple([id, z.object({ name: bi, taxId: z.string().max(20), branch: z.string().max(10), address: bi })]),
+    args: z.tuple([id, z.object({ name: bi, taxId: z.string().max(20), branch: z.string().max(10), address: bi, email: z.string().max(200).optional() })]),
     run: A.updateCustomerProfile,
   },
   updateCompanyProfile: {
@@ -108,6 +108,11 @@ const COMMANDS = {
     run: A.createPurchaseRequest,
   },
   decidePurchaseRequest: { args: z.tuple([id, z.boolean(), str]), run: A.decidePurchaseRequest },
+  startStockCount: { args: z.tuple([id, z.string().trim().max(200)]), run: A.startStockCount },
+  enterStockCount: { args: z.tuple([id, z.array(z.object({ lotBatch: id, counted: num.nullable() })).min(1).max(2000)]), run: A.enterStockCount },
+  postStockCount: { args: z.tuple([id]), run: A.postStockCount },
+  cancelStockCount: { args: z.tuple([id]), run: A.cancelStockCount },
+  recordReminder: { args: z.tuple([id, z.number().int(), z.string().trim().max(300)]), run: A.recordReminder },
   returnSalesLines: {
     args: z.tuple([id, z.array(z.object({ line: z.number().int().min(0).max(49), quantity: num })).min(1).max(50), z.string().trim().max(200)]),
     run: A.returnSalesLines,

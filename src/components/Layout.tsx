@@ -99,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
     transactions: [
       { to: "/inventory", key: "inventory" },
       { to: "/stock-movements", key: "stockMovements" },
+      { to: "/stock-counts", key: "stockCounts" },
       { to: "/stock-alerts", key: "stockAlerts" },
       { to: "/lot-trace", key: "lotTrace" },
     ],

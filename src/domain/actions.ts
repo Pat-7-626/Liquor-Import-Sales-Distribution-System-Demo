@@ -68,6 +68,8 @@ import {
   sumLines,
   quantityByLot,
   isValidThaiTaxId,
+  oldestOverdueDays,
+  computeArOpenItems,
 } from "../lib/business";
 import type { Store } from "./store";
 import { makeId } from "./store";
@@ -121,6 +123,7 @@ export interface CustomerProfileInput {
   taxId: string;
   branch: string;
   address: Bilingual;
+  email?: string;
 }
 
 export interface NewImportOrderInput {
@@ -237,6 +240,8 @@ function bind(s: Store, ctx: Ctx) {
     setBankLines: setter("bankLines"),
     setQuotations: setter("quotations"),
     setPurchaseRequests: setter("purchaseRequests"),
+    setArReminders: setter("arReminders"),
+    setStockCounts: setter("stockCounts"),
     allowed: ctx.can,
     actorRef: { current: ctx.actor },
     pushAudit: (entry: Omit<AuditEntry, "id" | "timestamp" | "actor"> & { actor?: Bilingual }) => pushAudit(s, ctx, entry),
@@ -497,7 +502,12 @@ export function createSalesOrder(s: Store, ctx: Ctx, input: NewSalesOrderInput):
 
   const netValue = sumLines(lines);
   // The approval decision is made here from live data — never trusted from the form.
-  const reasons = salesApprovalReasons({ customer, lines: lines.map((l) => ({ ...l, costPrice: l.unitCost ?? costOf(s, l.sku) })) });
+  const reasons = salesApprovalReasons({
+    customer,
+    lines: lines.map((l) => ({ ...l, costPrice: l.unitCost ?? costOf(s, l.sku) })),
+    // Credit hold: a customer far behind on paying can still order, but a supervisor decides.
+    overdueDays: oldestOverdueDays(customer, s.salesOrders, s.arDocuments),
+  });
   const needsApproval = reasons.length > 0;
   const approvalReason = joinReasons(reasons);
   const actor = actorRef.current;
@@ -1427,15 +1437,18 @@ export function updateCustomerProfile(s: Store, ctx: Ctx, customerId: string, pa
   if (!patch.name.th.trim() || !patch.name.en.trim()) return fail("กรุณาระบุชื่อทั้งภาษาไทยและอังกฤษ", "Name is required in both Thai and English");
   const legal = checkLegalDetails(patch);
   if (!legal.ok) return legal;
+  const email = (patch.email ?? customer.email ?? "").trim();
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail("อีเมลไม่ถูกต้อง", "Email isn't valid");
   const clean = {
     name: { th: patch.name.th.trim(), en: patch.name.en.trim() },
     taxId: patch.taxId.trim(),
     branch: patch.branch.trim(),
     address: { th: patch.address.th.trim(), en: patch.address.en.trim() },
+    email,
   };
   const changes = describeChanges(
-    { name: customer.name.en, nameTh: customer.name.th, taxId: customer.taxId, branch: customer.branch, address: customer.address.en, addressTh: customer.address.th },
-    { name: clean.name.en, nameTh: clean.name.th, taxId: clean.taxId, branch: clean.branch, address: clean.address.en, addressTh: clean.address.th },
+    { name: customer.name.en, nameTh: customer.name.th, taxId: customer.taxId, branch: customer.branch, address: customer.address.en, addressTh: customer.address.th, email: customer.email ?? "" },
+    { name: clean.name.en, nameTh: clean.name.th, taxId: clean.taxId, branch: clean.branch, address: clean.address.en, addressTh: clean.address.th, email: clean.email },
   );
   if (changes.length === 0) return OK;
   // Only new documents carry the new details; issued invoices keep the name they were issued under.
@@ -2178,6 +2191,146 @@ export function convertQuotation(s: Store, ctx: Ctx, quoteNo: string, plannedDel
   s.quotations = s.quotations.map((x) => (x.quoteNo === quoteNo ? { ...x, status: "accepted" as const, salesOrderNo: orderNo } : x));
   pushAudit(s, ctx, { entityType: "quotation", entityId: quoteNo, action: "approved", summary: { th: `ลูกค้าตอบรับ — เปิดออเดอร์ ${orderNo}`, en: `Accepted — became sales order ${orderNo}` } });
   return res;
+}
+
+// ───────────────────────────── emailed documents ─────────────────────────────
+
+/** Puts a sent email on the record it was about (the sending itself is done by the API). */
+export function logEmail(s: Store, ctx: Ctx, entityType: AuditEntry["entityType"], entityId: string, document: string, to: string[]): ActionResult {
+  pushAudit(s, ctx, {
+    entityType,
+    entityId,
+    action: "updated",
+    summary: { th: `ส่ง${document}ทางอีเมลถึง ${to.join(", ")}`, en: `Emailed ${document} to ${to.join(", ")}` },
+  });
+  return OK;
+}
+
+// ───────────────────────────── stock counts ─────────────────────────────
+
+/** Starts counting a warehouse: every lot with stock in it, at what the system says it holds now. */
+export function startStockCount(s: Store, ctx: Ctx, warehouse: string, note: string): ActionResult & { countNo?: string } {
+  const { warehouses, inventory, stockCounts, setStockCounts, pushAudit, allowed, actorRef } = bind(s, ctx);
+
+  if (!allowed("adjustInventory")) return DENIED;
+  const wh = warehouses.find((w) => w.code === warehouse);
+  if (!wh) return fail("ไม่พบคลังสินค้า", "Warehouse not found");
+  if (stockCounts.some((c) => c.warehouse === warehouse && c.status === "open"))
+    return fail("คลังนี้มีการตรวจนับที่ยังไม่ปิดอยู่แล้ว", "This warehouse already has a count in progress");
+  const lots = inventory.filter((i) => i.warehouse === warehouse && i.quantityRemaining > 0).sort((a, b) => a.sku.localeCompare(b.sku) || a.lotBatch.localeCompare(b.lotBatch));
+  if (lots.length === 0) return fail("คลังนี้ไม่มีสินค้า", "There's no stock in this warehouse to count");
+  const countNo = nextDocNo("SC", stockCounts.map((c) => c.countNo));
+  setStockCounts((prev) => [
+    {
+      countNo,
+      warehouse: wh.code,
+      date: todayIso(),
+      status: "open",
+      lines: lots.map((l) => ({ lotBatch: l.lotBatch, sku: l.sku, expected: l.quantityRemaining, counted: null })),
+      note: note.trim(),
+      createdBy: actorRef.current,
+    },
+    ...prev,
+  ]);
+  pushAudit({ entityType: "stockCount", entityId: countNo, action: "created", summary: { th: `เริ่มตรวจนับคลัง ${wh.code} (${lots.length} ล็อต)`, en: `Started counting ${wh.code} (${lots.length} lots)` } });
+  return { ok: true, countNo };
+}
+
+/** Saves what was counted (any lines; others stay as they are). */
+export function enterStockCount(s: Store, ctx: Ctx, countNo: string, counts: { lotBatch: string; counted: number | null }[]): ActionResult {
+  const { stockCounts, setStockCounts, allowed } = bind(s, ctx);
+
+  if (!allowed("adjustInventory")) return DENIED;
+  const sc = stockCounts.find((c) => c.countNo === countNo);
+  if (!sc) return fail("ไม่พบใบตรวจนับ", "Stock count not found");
+  if (sc.status !== "open") return fail("ใบตรวจนับนี้ปิดแล้ว", "This count is already closed");
+  for (const c of counts) {
+    if (!sc.lines.some((l) => l.lotBatch === c.lotBatch)) return fail(`ล็อต ${c.lotBatch} ไม่อยู่ในใบตรวจนับ`, `${c.lotBatch} isn't on this count`);
+    if (c.counted !== null && !(Number.isInteger(c.counted) && c.counted >= 0 && c.counted <= 1_000_000))
+      return fail(`${c.lotBatch}: จำนวนนับต้องเป็นจำนวนเต็มไม่ติดลบ`, `${c.lotBatch}: the count must be a whole number, 0 or more`);
+  }
+  const byLot = new Map(counts.map((c) => [c.lotBatch, c.counted]));
+  setStockCounts((prev) =>
+    prev.map((c) => (c.countNo === countNo ? { ...c, lines: c.lines.map((l) => (byLot.has(l.lotBatch) ? { ...l, counted: byLot.get(l.lotBatch)! } : l)) } : c)),
+  );
+  return OK;
+}
+
+/**
+ * Posts a finished count: each lot is adjusted by (counted − expected), the difference found against what
+ * the system said when counting began — so sales made while counting aren't mistaken for losses.
+ */
+export function postStockCount(s: Store, ctx: Ctx, countNo: string): ActionResult {
+  const { stockCounts, inventory, setStockCounts, moveStock, pushAudit, allowed, actorRef } = bind(s, ctx);
+
+  if (!allowed("adjustInventory")) return DENIED;
+  const sc = stockCounts.find((c) => c.countNo === countNo);
+  if (!sc) return fail("ไม่พบใบตรวจนับ", "Stock count not found");
+  if (sc.status !== "open") return fail("ใบตรวจนับนี้ปิดแล้ว", "This count is already closed");
+  const missing = sc.lines.filter((l) => l.counted === null).length;
+  if (missing) return fail(`ยังไม่ได้นับอีก ${missing} ล็อต`, `${missing} lots haven't been counted yet`);
+  const diffs = sc.lines.map((l) => ({ ...l, diff: (l.counted ?? 0) - l.expected })).filter((l) => l.diff !== 0);
+  for (const d of diffs) {
+    const lot = inventory.find((i) => i.lotBatch === d.lotBatch);
+    if (!lot) return fail(`ไม่พบล็อต ${d.lotBatch}`, `Lot ${d.lotBatch} not found`);
+    if (lot.quantityRemaining + d.diff < 0)
+      return fail(`${d.lotBatch}: คงเหลือในระบบตอนนี้ ${lot.quantityRemaining} ปรับลด ${-d.diff} ไม่ได้`, `${d.lotBatch}: only ${lot.quantityRemaining} left now, can't take off ${-d.diff}`);
+  }
+  for (const d of diffs) moveStock(d.sku, d.lotBatch, d.diff, "adjustment", `${countNo} count`);
+  setStockCounts((prev) => prev.map((c) => (c.countNo === countNo ? { ...c, status: "posted" as const, postedBy: actorRef.current, postedOn: todayIso() } : c)));
+  const what = diffs.map((d) => `${d.lotBatch} ${d.diff > 0 ? "+" : ""}${d.diff}`).join(", ");
+  pushAudit({
+    entityType: "stockCount",
+    entityId: countNo,
+    action: "approved",
+    summary: diffs.length
+      ? { th: `ลงผลตรวจนับ ${sc.warehouse}: ${what}`, en: `Posted count of ${sc.warehouse}: ${what}` }
+      : { th: `ลงผลตรวจนับ ${sc.warehouse}: ตรงกับระบบทุกล็อต`, en: `Posted count of ${sc.warehouse}: every lot matched` },
+  });
+  return OK;
+}
+
+export function cancelStockCount(s: Store, ctx: Ctx, countNo: string): ActionResult {
+  const { stockCounts, setStockCounts, pushAudit, allowed } = bind(s, ctx);
+
+  if (!allowed("adjustInventory")) return DENIED;
+  const sc = stockCounts.find((c) => c.countNo === countNo);
+  if (!sc) return fail("ไม่พบใบตรวจนับ", "Stock count not found");
+  if (sc.status !== "open") return fail("ใบตรวจนับนี้ปิดแล้ว", "This count is already closed");
+  setStockCounts((prev) => prev.map((c) => (c.countNo === countNo ? { ...c, status: "cancelled" as const } : c)));
+  pushAudit({ entityType: "stockCount", entityId: countNo, action: "rejected", summary: { th: "ยกเลิกการตรวจนับ", en: "Count cancelled" } });
+  return OK;
+}
+
+// ───────────────────────────── payment reminders ─────────────────────────────
+
+/** Records that a customer was reminded to pay what's overdue (the letter itself is printed or emailed). */
+export function recordReminder(s: Store, ctx: Ctx, customerId: string, level: number, note: string): ActionResult {
+  const { customers, salesOrders, arDocuments, setArReminders, pushAudit, allowed, actorRef } = bind(s, ctx);
+
+  if (!allowed("recordPayment")) return DENIED;
+  const customer = customers.find((c) => c.customerId === customerId);
+  if (!customer) return fail("ไม่พบลูกค้า", "Customer not found");
+  if (level !== 1 && level !== 2 && level !== 3) return fail("ระดับการทวงถามไม่ถูกต้อง", "Reminder level must be 1, 2 or 3");
+  const today = todayIso();
+  const overdue = round2(
+    computeArOpenItems(customer, salesOrders, arDocuments)
+      .filter((i) => i.dueDate < today)
+      .reduce((sum, i) => sum + i.open, 0),
+  );
+  if (overdue <= 0) return fail("ลูกค้ารายนี้ไม่มียอดค้างชำระเกินกำหนด", "This customer has nothing overdue");
+  setArReminders((prev) => [{ id: makeId(), customerId, date: today, level, overdueAmount: overdue, note: note.trim(), actor: actorRef.current }, ...prev]);
+  pushAudit({
+    entityType: "customer",
+    entityId: customerId,
+    action: "updated",
+    sensitive: true,
+    summary: {
+      th: `ส่งหนังสือทวงถามครั้งที่ ${level} — ค้างชำระ ฿${fmt(overdue)}${note.trim() ? ` (${note.trim()})` : ""}`,
+      en: `Payment reminder ${level} sent — ฿${fmt(overdue)} overdue${note.trim() ? ` (${note.trim()})` : ""}`,
+    },
+  });
+  return OK;
 }
 
 // ───────────────────────────── purchase requests ─────────────────────────────

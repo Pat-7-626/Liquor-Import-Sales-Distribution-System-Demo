@@ -133,6 +133,11 @@ interface DataContextValue extends ClientState {
   convertQuotation: (quoteNo: string, plannedDeliveryDate?: string) => Result<{ order?: SalesOrder }>;
   createPurchaseRequest: (input: PurchaseRequestInput) => Result<{ requestNo?: string }>;
   decidePurchaseRequest: (requestNo: string, approve: boolean, note: string) => Result;
+  recordReminder: (customerId: string, level: number, note: string) => Result;
+  startStockCount: (warehouse: string, note: string) => Result<{ countNo?: string }>;
+  enterStockCount: (countNo: string, counts: { lotBatch: string; counted: number | null }[]) => Result;
+  postStockCount: (countNo: string) => Result;
+  cancelStockCount: (countNo: string) => Result;
 
   /** Demo mode only: restores the original demo dataset on the server. */
   resetDemoData: () => Promise<void>;
@@ -254,6 +259,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       convertQuotation: c("convertQuotation"),
       createPurchaseRequest: c("createPurchaseRequest"),
       decidePurchaseRequest: c("decidePurchaseRequest"),
+      recordReminder: c("recordReminder"),
+      startStockCount: c("startStockCount"),
+      enterStockCount: c("enterStockCount"),
+      postStockCount: c("postStockCount"),
+      cancelStockCount: c("cancelStockCount"),
       resetDemoData,
     };
   }, [store, version, command, attachDocument, resetDemoData]);

@@ -44,6 +44,7 @@ export function maskStore(s: Store): Store {
     expenses: s.expenses.map((x) => ({ ...x, amount: 0, vat: 0, whtAmount: 0, paid: 0 })),
     manualJournals: s.manualJournals.map((j) => ({ ...j, lines: j.lines.map((l) => ({ ...l, debit: 0, credit: 0 })) })),
     bankLines: s.bankLines.map((l) => ({ ...l, amount: 0 })),
+    arReminders: s.arReminders.map((r) => ({ ...r, overdueAmount: 0 })),
     quotations: s.quotations.map((q) => ({ ...q, netValue: 0, lines: q.lines.map((l) => ({ ...l, unitPrice: 0, discountPercent: 0, netValue: 0 })) })),
     auditLog: s.auditLog.map(maskAudit),
   };

@@ -170,6 +170,8 @@ export interface Customer {
   /** "00000" = head office, otherwise the branch number printed on the tax invoice. */
   branch: string;
   address: Bilingual;
+  /** Accounts contact — where invoices, statements and reminders are emailed. */
+  email?: string;
   /** Payment terms: invoices fall due this many days after they are issued. */
   creditTermDays: number;
   channelType: ChannelCode;
@@ -274,7 +276,8 @@ export type AuditEntityType =
   | "period"
   | "bank"
   | "quotation"
-  | "purchaseRequest";
+  | "purchaseRequest"
+  | "stockCount";
 
 /** BR-04 / FR-29: who approved, modified, or rejected each record, and when. */
 export interface AuditEntry {
@@ -502,6 +505,40 @@ export interface Expense {
   paid: number;
   method: PaymentMethod;
   reference: string;
+  actor: Bilingual;
+}
+
+/** One lot on a stock count: what the system said when the count started, and what was found. */
+export interface StockCountLine {
+  lotBatch: string;
+  sku: string;
+  expected: number;
+  /** Null until counted. */
+  counted: number | null;
+}
+
+/** A physical count of one warehouse; posting it adjusts every lot that differs, in one go. */
+export interface StockCount {
+  countNo: string;
+  warehouse: WarehouseCode;
+  date: string;
+  status: "open" | "posted" | "cancelled";
+  lines: StockCountLine[];
+  note: string;
+  createdBy: Bilingual;
+  postedBy?: Bilingual;
+  postedOn?: string;
+}
+
+/** A payment reminder sent to a customer with overdue invoices — friendly, firm, then final. */
+export interface ArReminder {
+  id: string;
+  customerId: string;
+  date: string;
+  level: 1 | 2 | 3;
+  /** What was overdue when it was sent. */
+  overdueAmount: number;
+  note: string;
   actor: Bilingual;
 }
 

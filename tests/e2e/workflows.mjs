@@ -735,6 +735,66 @@ consoleProblems.length = 0;
   check("no console errors on the new finance screens", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
 }
 
+// ── Collections, statements, emailing, stock counts ──
+{
+  await admin.post("/api/admin/reset");
+  consoleProblems.length = 0;
+
+  await as("salesOfficer");
+  await go("/ar-aging");
+  check("collections list who's overdue", (await page.locator("[data-testid=collection-row]").count()) > 0);
+  check("…and flags the customer on credit hold", (await page.locator('[data-testid=collection-row][data-customer="CUS-0006"] [data-testid=credit-hold]').count()) === 1);
+
+  // Statement: its closing balance is what the customer owes.
+  const owed = (await state()).customers.find((c) => c.customerId === "CUS-0006").outstandingBalance;
+  await page.click("[data-testid=statement-CUS-0006]");
+  const closing = Number((await page.locator("[data-testid=statement-closing]").innerText()).replace(/,/g, ""));
+  check("statement closes at what the customer owes", Math.abs(closing - owed) < 0.01, `${closing} vs ${owed}`);
+
+  // Email it to the demo mailbox.
+  await page.click("[data-testid=email-document]");
+  check("email form is prefilled with the customer's accounts email", /@/.test(await page.locator("[data-testid=email-to]").inputValue()));
+  await page.fill("[data-testid=email-to]", "ui-test@example.com");
+  await page.click("[data-testid=email-send]");
+  await page.waitForTimeout(1200);
+  const box = await (await fetch("http://localhost:8025/api/v1/search?query=" + encodeURIComponent("to:ui-test@example.com"))).json().catch(() => ({ messages: [] }));
+  check("statement arrives in the mailbox", (box.messages ?? []).some((m) => /Statement of account CUS-0006/.test(m.Subject)), String(box.messages?.length));
+  await page.locator('#print-modal-root button[aria-label="Close"]').click();
+
+  // A reminder: recorded, then the letter opens.
+  await page.click("[data-testid=remind-CUS-0006]");
+  await page.click("[data-testid=remind-save]");
+  await page.waitForTimeout(500);
+  check("sending a reminder opens the letter", (await page.locator("[data-testid=reminder-table]").count()) === 1);
+  check("…and records it", (await state()).arReminders.filter((r) => r.customerId === "CUS-0006").length === 2);
+  await page.locator('#print-modal-root button[aria-label="Close"]').click();
+
+  await go("/customers/CUS-0005");
+  await page.click("[data-testid=customer-statement]");
+  check("statement opens from the customer page", (await page.locator("[data-testid=statement-table]").count()) === 1);
+  await page.locator('#print-modal-root button[aria-label="Close"]').click();
+
+  // Stock count of a warehouse.
+  await as("whOfficer");
+  await go("/stock-counts");
+  await page.click('button:has-text("Start a count")');
+  const whCode = await page.locator("[data-testid=count-warehouse]").inputValue();
+  await page.click("[data-testid=count-start]");
+  await page.waitForTimeout(500);
+  const sc = (await state()).stockCounts.find((c) => c.status === "open" && c.warehouse === whCode);
+  check("warehouse officer starts a count", Boolean(sc));
+  const card = page.locator(`[data-testid=stock-count][data-count="${sc.countNo}"]`);
+  const lines = card.locator("[data-testid=count-line]");
+  const n = await lines.count();
+  for (let i = 0; i < n; i++) await lines.nth(i).locator("input").fill(String(sc.lines[i].expected - (i === 0 ? 1 : 0)));
+  await page.click(`[data-testid=count-post-${sc.countNo}]`);
+  await page.waitForTimeout(800);
+  const after = await state();
+  check("posting the count adjusts the lot that was short", after.stockCounts.find((c) => c.countNo === sc.countNo).status === "posted" && after.inventory.find((i) => i.lotBatch === sc.lines[0].lotBatch).quantityRemaining === sc.lines[0].expected - 1);
+
+  check("no console errors on collections and counts", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
+}
+
 // ── Users & Access ──
 {
   await as("salesOfficer");

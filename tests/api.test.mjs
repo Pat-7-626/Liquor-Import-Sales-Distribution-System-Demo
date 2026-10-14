@@ -663,6 +663,92 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   check("a request not yet approved can't be ordered", !pending.json.result.ok && /approved/.test(pending.json.result.error.en));
 }
 
+// ── credit hold, payment reminders, stock counts, emailing documents ──
+{
+  await sup.call("POST", "/api/admin/reset");
+  const so = await session("salesOfficer");
+  const s0 = (await sup.call("GET", "/api/state")).json;
+  const lotOf = (sku) => s0.inventory.filter((i) => i.sku === sku && i.quantityRemaining > 0).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate))[0];
+
+  // Credit hold: CUS-0006 has a bill more than 60 days overdue (its license is renewed first, so that isn't why).
+  check("license renewed for the credit-hold test", (await doc.cmd("updateLicense", "LIC-SELL-2206", { expiryDate: "2027-12-31" })).json.result.ok);
+  const v = lotOf("SKU-1007");
+  const held = await so.cmd("createSalesOrder", one("CUS-0006", "SKU-1007", v.lotBatch, 1, 790, 0));
+  check("a customer far behind on paying goes to approval (credit hold)", held.json.result.ok && held.json.result.order.approvalStatus === "pendingApproval" && /overdue/.test(held.json.result.order.approvalReason.en), JSON.stringify(held.json.result.order?.approvalReason));
+  const fine = await so.cmd("createSalesOrder", one("CUS-0003", "SKU-1007", v.lotBatch, 1, 790, 0));
+  check("…while customers within 60 days book as usual", fine.json.result.ok && !fine.json.result.order.approvalStatus, JSON.stringify(fine.json.result.order?.approvalReason));
+
+  // Reminders.
+  check("seeded with a reminder already sent", s0.arReminders.length === 1);
+  const rem = await so.cmd("recordReminder", "CUS-0006", 2, "Second letter");
+  const r = rem.json.state?.arReminders.find((x) => x.customerId === "CUS-0006" && x.level === 2);
+  check("sales staff record a payment reminder with what was overdue", rem.json.result.ok && r.overdueAmount > 0);
+  check("reminder levels are 1–3", !(await so.cmd("recordReminder", "CUS-0006", 4, "")).json.result.ok);
+  check("warehouse staff can't send reminders", !(await wh.cmd("recordReminder", "CUS-0006", 1, "")).json.result.ok);
+  const cleanCustomer = (await sup.call("GET", "/api/state")).json.customers.find((c) => c.outstandingBalance === 0);
+  if (cleanCustomer) check("nobody is reminded about nothing", !(await so.cmd("recordReminder", cleanCustomer.customerId, 1, "")).json.result.ok);
+  check("the reminder is on the customer's history", (await sup.call("GET", "/api/audit?entityId=CUS-0006&limit=50")).json.rows.some((e) => /reminder 2/.test(e.summary.en)));
+  check("restricted roles get reminder amounts masked", (await wh.call("GET", "/api/state")).json.arReminders.every((x) => x.overdueAmount === 0));
+
+  // Customer email.
+  const prof = s0.customers.find((c) => c.customerId === "CUS-0003");
+  check("seeded customers have an accounts email", /@/.test(prof.email ?? ""));
+  const bad = await so.cmd("updateCustomerProfile", "CUS-0003", { name: prof.name, taxId: prof.taxId, branch: prof.branch, address: prof.address, email: "not-an-email" });
+  check("a malformed customer email is refused", !bad.json.result.ok);
+  const okMail = await so.cmd("updateCustomerProfile", "CUS-0003", { name: prof.name, taxId: prof.taxId, branch: prof.branch, address: prof.address, email: "ap@riverside.example.com" });
+  check("customer email can be changed", okMail.json.result.ok && okMail.json.state.customers.find((c) => c.customerId === "CUS-0003").email === "ap@riverside.example.com");
+
+  // Stock counts.
+  const lotsA = s0.inventory.filter((i) => i.warehouse === "whA" && i.quantityRemaining > 0);
+  check("only warehouse roles start counts", !(await so.cmd("startStockCount", "whA", "")).json.result.ok);
+  const start = await wh.cmd("startStockCount", "whA", "API count");
+  const countNo = start.json.result.countNo;
+  const sc = start.json.state.stockCounts.find((c) => c.countNo === countNo);
+  check("a count lists every lot in the warehouse at what the system holds", start.json.result.ok && sc.lines.length === lotsA.length && sc.lines.every((l) => l.counted === null));
+  check("one count at a time per warehouse", !(await wh.cmd("startStockCount", "whA", "")).json.result.ok);
+  check("counts must be whole numbers", !(await wh.cmd("enterStockCount", countNo, [{ lotBatch: sc.lines[0].lotBatch, counted: -1 }])).json.result.ok);
+  check("a partial count can't be posted", !(await wh.cmd("postStockCount", countNo)).json.result.ok);
+  // Everything matches except the first lot (2 missing) and the second (1 extra).
+  const entered = sc.lines.map((l, i) => ({ lotBatch: l.lotBatch, counted: l.expected + (i === 0 ? -2 : i === 1 ? 1 : 0) }));
+  check("counts are saved", (await wh.cmd("enterStockCount", countNo, entered)).json.result.ok);
+  // A sale while counting: the difference is still against what the system said when counting began.
+  const busy = sc.lines[2] ?? sc.lines[0];
+  const sold = await so.cmd("createSalesOrder", one("CUS-0003", busy.sku, busy.lotBatch, 1, 99999, 0));
+  const tbBefore = (await sup.call("GET", "/api/accounting/trial-balance")).json.accounts.find((a) => a.code === "5200").balance;
+  const post = await wh.cmd("postStockCount", countNo);
+  const after = post.json.state;
+  const qty = (lot) => after.inventory.find((i) => i.lotBatch === lot).quantityRemaining;
+  check("posting adjusts only the lots that differ, by the difference found",
+    post.json.result.ok && qty(sc.lines[0].lotBatch) === sc.lines[0].expected - 2 - (busy === sc.lines[0] && sold.json.result.ok ? 1 : 0) && qty(sc.lines[1].lotBatch) === sc.lines[1].expected + 1,
+    JSON.stringify(post.json.result).slice(0, 100));
+  check("…a sale during the count isn't mistaken for a loss", busy === sc.lines[0] || qty(busy.lotBatch) === busy.expected - (sold.json.result.ok && !sold.json.result.order.approvalStatus ? 1 : 0));
+  check("the count is marked posted", after.stockCounts.find((c) => c.countNo === countNo).status === "posted");
+  check("a posted count can't be posted again", !(await wh.cmd("postStockCount", countNo)).json.result.ok);
+  const tbAfter = (await sup.call("GET", "/api/accounting/trial-balance")).json;
+  check("the net shortage posts to inventory adjustments in the books", tbAfter.accounts.find((a) => a.code === "5200").balance !== tbBefore && tbAfter.unbalancedEntries.length === 0);
+  check("stock ledger still reconciles after a count", ledgerOk(await fullState(sup)));
+  const c2 = await wh.cmd("startStockCount", "whA", "");
+  check("a count can be cancelled", (await wh.cmd("cancelStockCount", c2.json.result.countNo)).json.result.ok);
+
+  // Emailing a document (to the stack's catch-all mailbox).
+  const status = (await sup.call("GET", "/api/email/status")).json;
+  check("email is available in the demo stack", status.enabled === true);
+  const page = "<!doctype html><html><head><style>p{color:red}</style></head><body><p>INV-TEST document</p></body></html>";
+  const mail = { to: ["buyer@example.com"], subject: "Tax invoice INV-TEST", message: "Please find attached.", documentHtml: page, filename: "INV-TEST", entityType: "salesOrder", entityId: "SO-2026-3301", document: "tax invoice INV-TEST" };
+  check("roles without price access can't email documents", (await wh.call("POST", "/api/email", mail)).status === 403);
+  check("bad recipients are refused", (await sup.call("POST", "/api/email", { ...mail, to: ["nope"] })).status === 422);
+  const sentMail = await sup.call("POST", "/api/email", mail);
+  check("a document is emailed", sentMail.status === 200 && sentMail.json.result.ok, sentMail.text.slice(0, 120));
+  check("…and recorded on the order's history", (await sup.call("GET", "/api/audit?entityId=SO-2026-3301&limit=50")).json.rows.some((e) => /Emailed tax invoice INV-TEST to buyer@example.com/.test(e.summary.en)));
+  try {
+    const box = await (await fetch("http://localhost:8025/api/v1/messages")).json();
+    const m = box.messages.find((x) => x.Subject === "Tax invoice INV-TEST");
+    check("…and it arrives with the document attached", Boolean(m) && m.Attachments === 1 && m.To[0].Address === "buyer@example.com");
+  } catch {
+    check("the demo mailbox is reachable", false);
+  }
+}
+
 // ── user management ──
 {
   const mgr = await session("manager");

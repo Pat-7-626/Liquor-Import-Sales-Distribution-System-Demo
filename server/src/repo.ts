@@ -5,6 +5,8 @@
  */
 import type { JSONValue } from "postgres";
 import type {
+  StockCount,
+  ArReminder,
   ApDocument,
   BankLine,
   Expense,
@@ -79,6 +81,8 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
     bankRows,
     quoteRows,
     requestRows,
+    reminderRows,
+    countRows,
   ] = await Promise.all([
     db<Row[]>`select * from products order by sku`,
     db<Row[]>`select * from suppliers order by supplier_id`,
@@ -107,6 +111,8 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
     db<Row[]>`select * from bank_lines order by date, id`,
     db<Row[]>`select * from quotations order by date desc, quote_no desc`,
     db<Row[]>`select * from purchase_requests order by date desc, request_no desc`,
+    db<Row[]>`select * from ar_reminders order by date desc, id`,
+    db<Row[]>`select * from stock_counts order by date desc, count_no desc`,
   ]);
   const co = companyRows[0];
 
@@ -174,6 +180,7 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
         taxId: r.tax_id as string,
         branch: r.branch as string,
         address: r.address as Customer["address"],
+        email: (r.email as string) ?? "",
         creditTermDays: r.credit_term_days as number,
         channelType: r.channel_type as Customer["channelType"],
         licenseNo: (r.license_no as string | null) ?? null,
@@ -395,6 +402,31 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
           createdBy: r.created_by as Quotation["createdBy"],
         }),
     ),
+    stockCounts: countRows.map(
+      (r): StockCount =>
+        clean({
+          countNo: r.count_no as string,
+          warehouse: r.warehouse as StockCount["warehouse"],
+          date: r.date as string,
+          status: r.status as StockCount["status"],
+          lines: r.lines as StockCount["lines"],
+          note: r.note as string,
+          createdBy: r.created_by as StockCount["createdBy"],
+          postedBy: r.posted_by as StockCount["postedBy"],
+          postedOn: r.posted_on as string | undefined,
+        }),
+    ),
+    arReminders: reminderRows.map(
+      (r): ArReminder => ({
+        id: r.id as string,
+        customerId: r.customer_id as string,
+        date: r.date as string,
+        level: r.level as ArReminder["level"],
+        overdueAmount: r.overdue_amount as number,
+        note: r.note as string,
+        actor: r.actor as ArReminder["actor"],
+      }),
+    ),
     purchaseRequests: requestRows.map(
       (r): PurchaseRequest =>
         clean({
@@ -491,6 +523,7 @@ const customerRow = (db: Db, c: Customer) => ({
   tax_id: c.taxId,
   branch: c.branch,
   address: json(db, c.address),
+  email: c.email ?? "",
   credit_term_days: c.creditTermDays,
   channel_type: c.channelType,
   license_no: c.licenseNo,
@@ -800,6 +833,36 @@ export async function saveStore(db: Db, before: Store, after: Store) {
   if (linesChanged.length) await db`update bank_lines set matched_entry_id = null where id in ${db(linesChanged.map((l) => l.id))}`;
   await upsert(db, "bank_lines", ["id"], linesChanged.map(bankLineRow));
   await upsert(db, "quotations", ["quote_no"], changed(before.quotations, after.quotations, (q) => q.quoteNo).map((q) => quotationRow(db, q)));
+  await upsert(
+    db,
+    "stock_counts",
+    ["count_no"],
+    changed(before.stockCounts, after.stockCounts, (c) => c.countNo).map((c) => ({
+      count_no: c.countNo,
+      warehouse: c.warehouse,
+      date: c.date,
+      status: c.status,
+      lines: json(db, c.lines),
+      note: c.note,
+      created_by: json(db, c.createdBy),
+      posted_by: json(db, c.postedBy),
+      posted_on: c.postedOn ?? null,
+    })),
+  );
+  await upsert(
+    db,
+    "ar_reminders",
+    ["id"],
+    changed(before.arReminders, after.arReminders, (r) => r.id).map((r) => ({
+      id: r.id,
+      customer_id: r.customerId,
+      date: r.date,
+      level: r.level,
+      overdue_amount: r.overdueAmount,
+      note: r.note,
+      actor: json(db, r.actor),
+    })),
+  );
   await upsert(db, "purchase_requests", ["request_no"], changed(before.purchaseRequests, after.purchaseRequests, (r) => r.requestNo).map((r) => requestRow(db, r)));
   await upsert(db, "audit_log", ["id"], changed(before.auditLog, after.auditLog, (e) => e.id).map((e) => auditRow(db, e)));
 
@@ -814,6 +877,8 @@ export async function saveStore(db: Db, before: Store, after: Store) {
     ...removed(before.manualJournals, after.manualJournals, (j) => j.entryNo),
     ...removed(before.quotations, after.quotations, (q) => q.quoteNo),
     ...removed(before.purchaseRequests, after.purchaseRequests, (r) => r.requestNo),
+    ...removed(before.arReminders, after.arReminders, (r) => r.id),
+    ...removed(before.stockCounts, after.stockCounts, (c) => c.countNo),
   ];
   if (lost.length) throw new Error(`Refusing to delete records not covered by a delete rule: ${lost.slice(0, 5).join(", ")}`);
 }
@@ -851,11 +916,15 @@ export async function insertStore(db: Db, s: Store) {
     bankLines: [],
     quotations: [],
     purchaseRequests: [],
+    arReminders: [],
+    stockCounts: [],
   };
   await saveStore(db, empty, s);
 }
 
 export const ALL_TABLES = [
+  "stock_counts",
+  "ar_reminders",
   "purchase_requests",
   "quotations",
   "bank_lines",

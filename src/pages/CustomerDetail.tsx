@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Lock, Banknote, FileBadge } from "lucide-react";
+import { ArrowLeft, Pencil, Lock, Banknote, FileBadge, FileText } from "lucide-react";
+import { CustomerDocumentsModal } from "../components/CustomerDocuments";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -42,6 +43,7 @@ export default function CustomerDetail() {
   const customer = customers.find((c) => c.customerId === customerId);
   const [editing, setEditing] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [statementOpen, setStatementOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("transfer");
@@ -111,6 +113,7 @@ export default function CustomerDetail() {
     { key: "branch", label: t("tax.branch"), type: "text", placeholder: "00000" },
     { key: "addressTh", label: `${t("tax.address")} (ไทย)`, type: "text" },
     { key: "addressEn", label: `${t("tax.address")} (English)`, type: "text" },
+    { key: "email", label: t("customerDetail.accountsEmail"), type: "text", placeholder: "accounts@customer.co.th" },
   ];
 
   const handleSaveProfile = async (v: Record<string, FieldValue>) => {
@@ -119,6 +122,7 @@ export default function CustomerDetail() {
       taxId: String(v.taxId).replace(/[\s-]/g, ""),
       branch: String(v.branch),
       address: { th: String(v.addressTh), en: String(v.addressEn) },
+      email: String(v.email ?? ""),
     });
     if (await runAction(result, `${t("common.save")}: ${customer.customerId}`)) setEditingProfile(false);
   };
@@ -310,7 +314,22 @@ export default function CustomerDetail() {
           )}
         </Card>
 
-        <Card wide title={t("ar.openItems")}>
+        <Card
+          wide
+          title={t("ar.openItems")}
+          action={
+            canViewSensitive && (
+              <button
+                onClick={() => setStatementOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                data-testid="customer-statement"
+              >
+                <FileText size={13} />
+                {t("collect.statement")}
+              </button>
+            )
+          }
+        >
           {!canViewSensitive ? (
             <Masked>{t("common.restrictedTooltip")}</Masked>
           ) : openItems.length === 0 ? (
@@ -480,10 +499,12 @@ export default function CustomerDetail() {
           branch: customer.branch,
           addressTh: customer.address.th,
           addressEn: customer.address.en,
+          email: customer.email ?? "",
         }}
         onClose={() => setEditingProfile(false)}
         onSave={handleSaveProfile}
       />
+      {statementOpen && <CustomerDocumentsModal customer={customer} onClose={() => setStatementOpen(false)} />}
     </div>
   );
 }

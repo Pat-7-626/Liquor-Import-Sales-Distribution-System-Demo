@@ -21,6 +21,17 @@ export const config = {
   uploadDir: process.env.UPLOAD_DIR ?? "./uploads",
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB ?? 10) * 1024 * 1024,
   secureCookies: (process.env.SECURE_COOKIES ?? (production ? "true" : "false")) === "true",
+  /** Outgoing email. No host = emailing documents is off. */
+  smtp: {
+    host: process.env.SMTP_HOST ?? "",
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: (process.env.SMTP_SECURE ?? "false") === "true",
+    user: process.env.SMTP_USER ?? "",
+    pass: process.env.SMTP_PASS ?? "",
+    from: process.env.SMTP_FROM || "LISD System <erp@localhost>",
+    /** Where caught mail can be read when SMTP points at the local Mailpit (shown in the app). */
+    catchAllUrl: process.env.MAIL_CATCHALL_URL ?? "",
+  },
   migrationsDir: process.env.MIGRATIONS_DIR ?? new URL("../sql", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
 };
 

@@ -342,7 +342,10 @@ function QuotationPrint({ quote: q, onClose }: { quote: Quotation; onClose: () =
   const customer = customers.find((c) => c.customerId === q.customerId);
   const { base, vat } = splitVat(q.netValue, taxSettings.vatPercent);
   return (
-    <PrintFrame onClose={onClose}>
+    <PrintFrame
+      onClose={onClose}
+      email={{ to: customer?.email, subject: `ใบเสนอราคา / Quotation ${q.quoteNo}`, document: `quotation ${q.quoteNo}`, filename: q.quoteNo, entityType: "quotation", entityId: q.quoteNo }}
+    >
       <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 print:flex-row">
         <div className="min-w-0 flex-1">
           <SellerBlock />

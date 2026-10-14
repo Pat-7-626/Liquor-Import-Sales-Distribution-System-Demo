@@ -36,7 +36,18 @@ export function ArDocumentPrintModal({ doc, onClose }: { doc: ArDocument | null;
   const title = TITLES[doc.type];
 
   return (
-    <PrintFrame onClose={onClose} extra={<CopySwitch value={copy} onChange={setCopy} />}>
+    <PrintFrame
+      onClose={onClose}
+      extra={<CopySwitch value={copy} onChange={setCopy} />}
+      email={{
+        to: customer?.email,
+        subject: `${title.th} / ${title.en} ${doc.docNo}`,
+        document: `${title.en.toLowerCase()} ${doc.docNo}`,
+        filename: doc.docNo,
+        entityType: "customer",
+        entityId: doc.customerId,
+      }}
+    >
       <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 print:flex-row">
         <div className="min-w-0 flex-1">
           <SellerBlock />

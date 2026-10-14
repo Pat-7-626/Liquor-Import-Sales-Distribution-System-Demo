@@ -472,6 +472,8 @@ export function salesApprovalReasons(input: {
   lines: { discountPercent: number; netValue: number; quantity: number; costPrice: number }[];
   /** Value already counted in outstandingBalance for this order (when re-checking an edit). */
   alreadyBooked?: number;
+  /** How many days past due the customer's oldest unpaid invoice is (0 when nothing is overdue). */
+  overdueDays?: number;
 }): Bilingual[] {
   const reasons: Bilingual[] = [];
   if (input.lines.some((l) => l.discountPercent > input.customer.standardDiscount))
@@ -481,6 +483,8 @@ export function salesApprovalReasons(input: {
   if (projected > input.customer.creditLimit) reasons.push({ th: "เกินวงเงินเครดิตที่อนุมัติ", en: "Over approved credit limit" });
   if (input.lines.some((l) => l.quantity > 0 && l.netValue / l.quantity < l.costPrice))
     reasons.push({ th: "ราคาสุทธิต่ำกว่าต้นทุน", en: "Net price below cost" });
+  if ((input.overdueDays ?? 0) > OVERDUE_HOLD_DAYS)
+    reasons.push({ th: `มีใบแจ้งหนี้ค้างชำระเกิน ${OVERDUE_HOLD_DAYS} วัน`, en: `Invoices more than ${OVERDUE_HOLD_DAYS} days overdue` });
   return reasons;
 }
 
@@ -647,6 +651,19 @@ export function computeArOpenItems(
     credit -= applied;
   }
   return items.filter((i) => i.open > 0.005);
+}
+
+/** A customer whose oldest unpaid invoice is further past due than this is on credit hold: new orders need approval. */
+export const OVERDUE_HOLD_DAYS = 60;
+
+/** Days past due of the customer's oldest unpaid item (0 when nothing is overdue). */
+export function oldestOverdueDays(
+  customer: Pick<Customer, "customerId" | "outstandingBalance">,
+  salesOrders: SalesOrder[],
+  arDocuments: Parameters<typeof computeArOpenItems>[2],
+  today = todayIso(),
+): number {
+  return Math.max(0, ...computeArOpenItems(customer, salesOrders, arDocuments).map((i) => daysOverdue(i.dueDate, today)));
 }
 
 /** Open amounts per aging bucket (by days past due). */

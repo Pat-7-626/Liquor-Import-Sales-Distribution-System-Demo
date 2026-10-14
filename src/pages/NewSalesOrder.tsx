@@ -13,6 +13,8 @@ import {
   computeChannelPrice,
   computeSalesNetValue,
   salesApprovalReasons,
+  oldestOverdueDays,
+  OVERDUE_HOLD_DAYS,
   joinReasons,
   quantityByLot,
   sumLines,
@@ -47,7 +49,7 @@ export default function NewSalesOrder() {
   const runAction = useRunAction();
   const navigate = useNavigate();
   const { can } = useRole();
-  const { products, customers, inventory, priceLists, taxSettings, salesOrders, createSalesOrder } = useData();
+  const { products, customers, inventory, priceLists, taxSettings, salesOrders, arDocuments, createSalesOrder } = useData();
   // Units other orders awaiting approval have already claimed — not available to this order.
   const held = useMemo(() => heldByLot(salesOrders), [salesOrders]);
   const freeIn = (lot: { lotBatch: string; quantityRemaining: number }) => lot.quantityRemaining - (held.get(lot.lotBatch) ?? 0);
@@ -124,9 +126,12 @@ export default function NewSalesOrder() {
 
   // FR-22/28: over-standard discount, over-credit-limit, or below-cost orders don't block submission —
   // they route to the Approvals queue instead of booking immediately. Same rule the server applies.
+  // Roles without price access get zeroed figures, so for them this is 0 — the server applies the real rule.
+  const overdueDays = customer ? oldestOverdueDays(customer, salesOrders, arDocuments) : 0;
+  const onHold = overdueDays > OVERDUE_HOLD_DAYS;
   const approvalReasons =
     customer && filled.length > 0
-      ? salesApprovalReasons({ customer, lines: filled.map((l) => ({ ...l, costPrice: l.product!.costPrice })) })
+      ? salesApprovalReasons({ customer, lines: filled.map((l) => ({ ...l, costPrice: l.product!.costPrice })), overdueDays })
       : [];
   const needsApproval = approvalReasons.length > 0;
   const approvalReason = joinReasons(approvalReasons);
@@ -439,6 +444,10 @@ export default function NewSalesOrder() {
                   <CheckItem
                     status={creditExceeds ? "pending" : "ok"}
                     label={creditExceeds ? t("newSalesOrder.checklistCreditPending") : t("newSalesOrder.checklistCredit")}
+                  />
+                  <CheckItem
+                    status={onHold ? "pending" : "ok"}
+                    label={onHold ? t("newSalesOrder.checklistOverdueHold").replace("{n}", String(overdueDays)) : t("newSalesOrder.checklistOverdue")}
                   />
                   <CheckItem status={filled.length === 0 ? "pending" : stockOk ? "ok" : "bad"} label={t("newSalesOrder.checklistStock")} />
                   <CheckItem

@@ -15,6 +15,7 @@ import { migrate, sql } from "./db.ts";
 import { maskAudit, maskStore } from "./mask.ts";
 import { auditFromRow, loadStore } from "./repo.ts";
 import { registerQueryRoutes } from "./queries.ts";
+import { registerMailRoutes } from "./mail.ts";
 import { resetDemoData, seedIfEmpty } from "./seed.ts";
 import { registerUserRoutes } from "./users.ts";
 import { buildJournal, trialBalance } from "../../src/domain/ledger.ts";
@@ -164,6 +165,7 @@ app.post("/api/auth/switch", async (req, reply) => {
 registerUserRoutes(app);
 
 registerQueryRoutes(app);
+registerMailRoutes(app);
 
 /** The books as derived from the records: trial balance plus the checks that tie it to the operational data. */
 app.get("/api/accounting/trial-balance", async (req, reply) => {

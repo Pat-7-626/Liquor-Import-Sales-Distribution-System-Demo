@@ -51,6 +51,17 @@ docker compose up -d                                         # start everything 
 
 Uploaded documents: `docker compose run --rm -v "$PWD/backups:/backups" api sh -c "tar -xzf /backups/lisd-uploads-….tar.gz -C /data"`.
 
+### Email
+
+Invoices, credit notes, receipts, quotations, statements, reminder letters, payment vouchers and
+withholding certificates have an **Email** button next to Print. The email body is the document as it
+prints, with the same page attached (`.html`, opens in any browser to print or save as PDF), and the
+sending is recorded on the record's history.
+
+Out of the box every email goes to **Mailpit**, a catch-all mailbox in the stack — read them at
+<http://localhost:8025>; nothing reaches real people. To send for real, set `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `.env` and set `MAIL_CATCHALL_URL=` (empty).
+
 ### HTTPS on a real domain
 
 Point the domain's DNS at the server, then in `.env` set `DOMAIN=erp.example.com` and
@@ -71,6 +82,8 @@ certificate automatically and forwards to the app.
 | `API_PORT` | `3000` | Port the API is published on, for this machine only (used by `npm run dev`). |
 | `BACKUP_EVERY_HOURS` / `BACKUP_KEEP_DAYS` | `24` / `14` | Backup schedule and retention. |
 | `DOMAIN` | — | Domain for the optional HTTPS front end. |
+| `SMTP_*`, `MAIL_CATCHALL_URL` | local Mailpit | Outgoing email (see Email above). |
+| `MAIL_UI_PORT` | `8025` | Port of the Mailpit mailbox, for this machine only. |
 
 ### Users and access
 
@@ -117,7 +130,7 @@ browser ──► web (nginx: built React app, proxies /api) ──► api (Node
   cookies (12 hours).
 - **Documents.** Uploaded PDFs/images (10 MB max) are stored on the `uploads` volume and served only to
   signed-in users.
-- **Schema** — `server/sql/001_init.sql` onwards (`008_finance.sql` is the latest). New migrations are
+- **Schema** — `server/sql/001_init.sql` onwards (`009_reminders_counts.sql` is the latest). New migrations are
   added as the next number; they run once, in order, at API start.
 
 | Endpoint | |
@@ -129,10 +142,11 @@ browser ──► web (nginx: built React app, proxies /api) ──► api (Node
 | `GET /api/audit`, `GET /api/stock-movements` | The audit log and stock ledger, filtered and a page at a time (`offset`, `limit`, filters) |
 | `GET /api/stock-movements/monthly` | Units in/out per month |
 | `GET /api/accounting/journal`, `/trial-balance` | The books, derived on the server (roles with price access only) |
-| `POST /api/commands/:name` | Any write (51 commands — see `server/src/commands.ts`) |
+| `POST /api/commands/:name` | Any write (56 commands — see `server/src/commands.ts`) |
 | `POST /api/import-orders/:orderNo/documents` | Upload a document (multipart `kind`, `file`) |
 | `GET /api/files/:id` | Download a document |
 | `POST /api/admin/reset` | Demo mode only: reload the demo data |
+| `POST /api/email`, `GET /api/email/status` | Email a document (roles with price access); whether email is set up |
 | `GET /api/health` | Health check |
 
 ## Develop the web app with hot reload
@@ -167,6 +181,9 @@ npm run test:api          # API only (~1 minute)
 npm run test:e2e          # browser suites only
 ```
 
+**CI** (`.github/workflows/ci.yml`): every push and pull request typechecks, lints and builds, then runs the
+API suite against the real Docker stack; the browser suites run nightly and on demand.
+
 **The suites reset the demo data.** The browser suites use an installed Chrome or Edge (set `CHROME_PATH`
 if it's somewhere unusual); screenshots go to `tests/output/`.
 
@@ -189,7 +206,7 @@ needs are included — no manufacturing, service, or payroll.
 | --- | --- | --- | --- |
 | **Sales** | Quotations · Sales Orders · Receipts & Credit Notes · AR Aging | Customers · Price Lists | |
 | **Purchasing & Import** | Purchase Requests · Import Orders · Goods Receipts · Supplier Invoices & Payments | Suppliers · Licenses · Exchange Rates | |
-| **Inventory** | Stock Levels (by lot) · Stock Movements · Stock Alerts · Lot Trace | Products · Warehouses · Reorder Policies | |
+| **Inventory** | Stock Levels (by lot) · Stock Movements · Stock Counts · Stock Alerts · Lot Trace | Products · Warehouses · Reorder Policies | |
 | **Tax** | | Tax & Duty Rates · Company Profile | VAT Return (ภ.พ.30) · Withholding Tax (ภ.ง.ด.3/53) |
 | **Accounting** | Expenses · Manual Journals · Bank Reconciliation · Month-end Close · Journal | | Trial Balance · Profit & Loss · Balance Sheet |
 
@@ -217,6 +234,17 @@ How they connect:
   payment issues a receipt; marking an order Returned or Damaged issues a credit note; changing the value
   of an already-invoiced order issues a credit or debit note against the original tax invoice rather than
   rewriting it. Each invoice keeps the VAT rate it was issued at, so a later rate change never alters it.
+- **Collections** (on AR Aging): customers with overdue invoices, longest first, with the last reminder
+  sent. Each has a printable/emailable **statement of account** (opening balance, every invoice, note and
+  payment in the period with a running balance, closing balance = what they owe, and an aging summary) and
+  **reminder letters** in three levels (friendly, firm with 7 days, final notice), each recorded on the
+  customer's history. The statement is also on the customer page.
+- **Credit hold:** a customer whose oldest unpaid invoice is more than 60 days past due can still order,
+  but the order goes to a supervisor (the new-order screen says so before saving).
+- **Stock Counts:** start a count for a warehouse (it records what every lot should hold at that moment),
+  print a blind count sheet, enter what was counted, and post — every lot that differs is adjusted in one
+  go, the value goes to Inventory adjustments in the books, and sales made during the count aren't
+  mistaken for losses.
 - **AR Aging** splits what each customer owes into Not yet due / 1–30 / 31–60 / 61–90 / 90+ days past
   due. Every invoice gets a due date from the customer's payment terms (Net N days) when it is issued;
   payments settle the oldest-due items first, so each customer's open items always add up to their
@@ -359,6 +387,8 @@ prevented it, and returns a reason (shown as a red toast) instead of quietly doi
 | Withholding needs the payee's valid tax ID; a month's tax is remitted once, after the month ends | expenses, tax |
 | A statement line matches one book entry of the same amount; re-imported lines are skipped | bank |
 | A quotation converts once, before it expires, only with enough free stock | quotations |
+| Orders for a customer with invoices over 60 days overdue need approval (credit hold) | sales orders |
+| One open count per warehouse; a count posts only when every lot is counted; differences are against the start of the count | stock counts |
 | One open purchase request per product; the requester can't approve it; only approved requests are ordered | purchase requests |
 
 Who can do what:
@@ -368,9 +398,9 @@ Who can do what:
 | Senior Manager | product prices, customer credit terms, open customers, price lists, company profile, exchange rates, supplier invoices & payments, expenses, journals, bank reconciliation, month-end close, users |
 | Order Officer | create/edit import orders, attach documents, products, suppliers, reorder policies, purchase requests |
 | Documentation Officer | attach documents, record customs clearance, add/renew licenses |
-| Warehouse Officer | receive goods, adjust stock, update delivery status, warehouses, reorder policies, purchase requests |
+| Warehouse Officer | receive goods, adjust stock, stock counts, update delivery status, warehouses, reorder policies, purchase requests |
 | Tax Officer | record customs clearance, tax & duty rates, exchange rates, expenses & withholding tax |
-| Sales Officer | quotations, create/edit sales orders, record payments, open customers (credit terms start at 0) |
+| Sales Officer | quotations, create/edit sales orders, record payments, statements and payment reminders, open customers (credit terms start at 0) |
 | Distribution Officer | update delivery status |
 | Supervisor | everything above except managing users (they can view them) and closing months, plus approve/reject orders and purchase requests |
 
@@ -380,6 +410,10 @@ Who can do what:
 - There's no payroll or fixed-asset register: salaries and depreciation are entered as expenses or
   journals. Withholding forms are produced as printable certificates and spreadsheet attachments, not
   the Revenue Department's e-filing format. Bank statements are imported from CSV (no direct bank feed).
+- Emailed documents are HTML (body and attachment), not PDF — a PDF would need a headless browser on the
+  server. Thai e-Tax Invoice (XML) isn't produced.
+- The demo licenses have fixed expiry dates, so as the calendar moves
+  on, more demo customers show as expired; renew them on the Licenses page (or reset the demo later).
 - The audit log and stock ledger — the records that grow without bound — are read a page at a time; the
   rest of the data still comes in one `GET /api/state`, and each command reloads the data it works on.
   That is simple and fast at this business's scale; a very large customer or order history would need the

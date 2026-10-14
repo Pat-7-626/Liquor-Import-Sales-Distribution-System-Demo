@@ -78,7 +78,7 @@ function InWords({ amount }: { amount: number }) {
 export function ExpenseVoucher({ expense: x, onClose }: { expense: Expense; onClose: () => void }) {
   const account = ACCOUNTS.find((a) => a.code === x.account);
   return (
-    <PrintFrame onClose={onClose}>
+    <PrintFrame onClose={onClose} email={{ subject: `ใบสำคัญจ่าย / Payment voucher ${x.docNo}`, document: `payment voucher ${x.docNo}`, filename: x.docNo, entityType: "expense", entityId: x.docNo }}>
       <DocHeader
         title={{ th: "ใบสำคัญจ่าย", en: "Payment Voucher" }}
         meta={[
@@ -120,7 +120,10 @@ export function SupplierPaymentVoucher({ payment: p, onClose }: { payment: ApDoc
   const inv = apDocuments.find((d) => d.docNo === p.appliesTo);
   const supplier = suppliers.find((s) => s.supplierId === p.supplierId);
   return (
-    <PrintFrame onClose={onClose}>
+    <PrintFrame
+      onClose={onClose}
+      email={{ to: supplier?.contactEmail, subject: `Payment advice ${p.docNo}`, document: `payment voucher ${p.docNo}`, filename: p.docNo, entityType: "payable", entityId: p.appliesTo ?? p.docNo }}
+    >
       <DocHeader
         title={{ th: "ใบสำคัญจ่าย", en: "Payment Voucher" }}
         meta={[
@@ -181,7 +184,10 @@ export function WithholdingCertificate({ expense: x, onClose }: { expense: Expen
   const income = INCOME_TYPE[x.account] ?? { th: `ค่าบริการ (40(8)) — ${x.description}`, en: `Services (s.40(8)) — ${x.description}` };
   const form = x.payeeType === "individual" ? "ภ.ง.ด.3" : "ภ.ง.ด.53";
   return (
-    <PrintFrame onClose={onClose}>
+    <PrintFrame
+      onClose={onClose}
+      email={{ subject: `หนังสือรับรองการหักภาษี ณ ที่จ่าย / Withholding tax certificate ${x.docNo}`, document: `withholding certificate ${x.docNo}`, filename: `WHT-${x.docNo}`, entityType: "expense", entityId: x.docNo }}
+    >
       <div className="mb-4 text-center">
         <h2 className="font-display text-2xl font-semibold">หนังสือรับรองการหักภาษี ณ ที่จ่าย</h2>
         <p className="text-sm uppercase tracking-wide text-gray-500">Withholding Tax Certificate · ตามมาตรา 50 ทวิ แห่งประมวลรัษฎากร</p>

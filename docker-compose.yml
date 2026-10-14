@@ -37,6 +37,15 @@ services:
       ALLOW_GUEST: ${ALLOW_GUEST:-}
       # Cookies are sent over plain HTTP on localhost; set to true behind HTTPS.
       SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      # Outgoing email. By default everything goes to the local Mailpit mailbox (http://localhost:8025);
+      # set SMTP_HOST etc. in .env to send for real.
+      SMTP_HOST: ${SMTP_HOST:-mail}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      MAIL_CATCHALL_URL: ${MAIL_CATCHALL_URL-http://localhost:8025}
     # Reachable from this machine only, so `npm run dev` (Vite on :5173) can use the running API.
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"
@@ -56,6 +65,13 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  # Catch-all mailbox for emailed documents while SMTP isn't set up: read them at http://localhost:8025.
+  mail:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAIL_UI_PORT:-8025}:8025"
 
   # Daily database + document backups into ./backups (kept BACKUP_KEEP_DAYS days). Restore: see README.
   backup:
