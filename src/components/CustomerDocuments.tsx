@@ -5,7 +5,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { customerStatement, firstOfMonth } from "../domain/finance";
 import { AGING_BUCKETS, addDays, agingTotals, computeArOpenItems, daysOverdue, todayIso } from "../lib/business";
 import { englishBahtText, thaiBahtText } from "../lib/amountInWords";
-import { Both, BuyerBlock, DocDate, DocMeta, PrintFrame, SellerBlock, Signatures } from "./TaxDocument";
+import { Both, BuyerBlock, DocDate, DocTh, DocumentHeader, PrintFrame, Signatures } from "./TaxDocument";
 
 const money = (n: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -116,74 +116,69 @@ export function CustomerDocumentsModal({
         ) : null
       }
     >
-      <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 print:flex-row">
-        <div className="min-w-0 flex-1">
-          <SellerBlock />
-        </div>
-        <div className="shrink-0 sm:text-right print:text-right">
-          <h2 className="font-display text-2xl font-semibold text-gray-900">{tab === "statement" ? "ใบแจ้งยอดบัญชี" : letter.title.th}</h2>
-          <p className="text-sm uppercase tracking-wide text-gray-500">{tab === "statement" ? "Statement of Account" : letter.title.en}</p>
-          <div className="mt-3 flex justify-end">
-            <DocMeta
-              rows={[
-                { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={today} /> },
-                ...(tab === "statement" ? [{ label: { th: "งวด", en: "Period" }, value: <span data-testid="statement-period">{`${from} – ${to}`}</span> }] : []),
-                { label: { th: "รหัสลูกค้า", en: "Customer ID" }, value: customer.customerId },
-              ]}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="mb-5">
-        <BuyerBlock customer={customer} fallbackName={customer.name} />
-      </div>
+      <DocumentHeader
+        title={tab === "statement" ? { th: "ใบแจ้งยอดบัญชี", en: "Statement of Account" } : letter.title}
+        meta={[
+          { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={today} /> },
+          ...(tab === "statement"
+            ? [
+                {
+                  label: { th: "ตั้งแต่วันที่", en: "From" },
+                  value: (
+                    <span data-testid="statement-period">
+                      <DocDate iso={from} />
+                    </span>
+                  ),
+                },
+                { label: { th: "ถึงวันที่", en: "To" }, value: <DocDate iso={to} /> },
+              ]
+            : []),
+          { label: { th: "รหัสลูกค้า", en: "Customer ID" }, value: customer.customerId },
+        ]}
+        party={<BuyerBlock customer={customer} fallbackName={customer.name} />}
+      />
 
       {tab === "statement" ? (
         <>
           <table className="mb-4 w-full text-sm" data-testid="statement-table">
-            <thead className="border-b border-gray-900 text-xs text-gray-600">
-              <tr>
-                <th className="py-2 text-left">
-                  <Both th="วันที่" en="Date" />
-                </th>
-                <th className="py-2 text-left">
-                  <Both th="เอกสาร" en="Document" />
-                </th>
-                <th className="py-2 text-right">
-                  <Both th="ยอดหนี้" en="Charges" />
-                </th>
-                <th className="py-2 text-right">
-                  <Both th="ชำระ/ลดหนี้" en="Credits" />
-                </th>
-                <th className="py-2 text-right">
-                  <Both th="คงเหลือ" en="Balance" />
-                </th>
+            <thead>
+              <tr className="border-y border-gray-300 bg-gray-50">
+                <DocTh th="วันที่" en="Date" />
+                <DocTh th="เอกสาร" en="Document" />
+                <DocTh th="ยอดหนี้" en="Charges" align="right" />
+                <DocTh th="ชำระ/ลดหนี้" en="Credits" align="right" />
+                <DocTh th="คงเหลือ" en="Balance" align="right" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               <tr className="text-gray-600">
-                <td className="py-2" colSpan={4}>
+                <td className="px-2.5 py-2" colSpan={4}>
                   <Both th="ยอดยกมา" en="Balance brought forward" />
                 </td>
-                <td className="py-2 text-right tabular-nums">{money(st.opening)}</td>
+                <td className="px-2.5 py-2 text-right tabular-nums">{money(st.opening)}</td>
               </tr>
               {st.lines.map((l, i) => (
                 <tr key={i} data-testid="statement-line">
-                  <td className="whitespace-nowrap py-2 pr-3 text-gray-600">{l.date}</td>
-                  <td className="py-2">
-                    {KIND[l.kind].th} <span className="text-gray-400">/ {KIND[l.kind].en}</span> <span className="whitespace-nowrap font-medium">{l.ref}</span>
+                  <td className="whitespace-nowrap px-2.5 py-2 text-gray-600">
+                    <DocDate iso={l.date} />
+                  </td>
+                  <td className="px-2.5 py-2">
+                    <span className="whitespace-nowrap font-medium">{l.ref}</span>
+                    <span className="block text-xs text-gray-500">
+                      <Both th={KIND[l.kind].th} en={KIND[l.kind].en} />
+                    </span>
                     {l.orderNo && <span className="block text-xs text-gray-400">{l.orderNo}</span>}
                   </td>
-                  <td className="py-2 text-right tabular-nums">{l.debit ? money(l.debit) : ""}</td>
-                  <td className="py-2 text-right tabular-nums">{l.credit ? money(l.credit) : ""}</td>
-                  <td className="py-2 text-right tabular-nums">{money(l.balance)}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">{l.debit ? money(l.debit) : ""}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">{l.credit ? money(l.credit) : ""}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">{money(l.balance)}</td>
                 </tr>
               ))}
               <tr className="border-t-2 border-gray-900 font-semibold">
-                <td className="py-2" colSpan={4}>
+                <td className="px-2.5 py-2" colSpan={4}>
                   <Both th="ยอดคงค้าง ณ วันสิ้นงวด" en="Balance at end of period" />
                 </td>
-                <td className="py-2 text-right tabular-nums" data-testid="statement-closing">
+                <td className="px-2.5 py-2 text-right tabular-nums" data-testid="statement-closing">
                   {money(st.closing)}
                 </td>
               </tr>
@@ -195,15 +190,18 @@ export function CustomerDocumentsModal({
           <div className="grid grid-cols-5 gap-2 text-center text-xs">
             {AGING_BUCKETS.map((b) => (
               <div key={b} className="rounded border border-gray-200 p-2">
-                <p className="text-gray-500">{BUCKET[b].th}</p>
-                <p className="text-[10px] text-gray-400">{BUCKET[b].en}</p>
+                <p className="text-gray-500">
+                  <Both th={BUCKET[b].th} en={BUCKET[b].en} />
+                </p>
                 <p className="mt-1 font-semibold tabular-nums">{money(aging[b])}</p>
               </div>
             ))}
           </div>
           <p className="mt-4 text-xs text-gray-500">
-            กรุณาอ้างอิงเลขที่ใบกำกับภาษีเมื่อชำระเงิน หากยอดไม่ตรงกับบันทึกของท่าน โปรดแจ้งกลับภายใน 7 วัน / Please quote invoice numbers with your payment, and let us know
-            within 7 days if this doesn't agree with your records.
+            <Both
+              th="กรุณาอ้างอิงเลขที่ใบกำกับภาษีเมื่อชำระเงิน หากยอดไม่ตรงกับบันทึกของท่าน โปรดแจ้งกลับภายใน 7 วัน"
+              en="Please quote invoice numbers with your payment, and let us know within 7 days if this doesn't agree with your records."
+            />
           </p>
         </>
       ) : (
@@ -211,45 +209,43 @@ export function CustomerDocumentsModal({
           <p className="mb-2 text-sm leading-relaxed">{letter.body.th}</p>
           <p className="mb-4 text-sm leading-relaxed text-gray-600">{letter.body.en}</p>
           <table className="mb-4 w-full text-sm" data-testid="reminder-table">
-            <thead className="border-b border-gray-900 text-xs text-gray-600">
-              <tr>
-                <th className="py-2 text-left">
-                  <Both th="เอกสาร" en="Document" />
-                </th>
-                <th className="py-2 text-left">
-                  <Both th="ครบกำหนด" en="Due" />
-                </th>
-                <th className="py-2 text-right">
-                  <Both th="เกินกำหนด (วัน)" en="Days overdue" />
-                </th>
-                <th className="py-2 text-right">
-                  <Both th="ยอดค้าง" en="Unpaid" />
-                </th>
+            <thead>
+              <tr className="border-y border-gray-300 bg-gray-50">
+                <DocTh th="เอกสาร" en="Document" />
+                <DocTh th="ครบกำหนด" en="Due" />
+                <DocTh th="เกินกำหนด (วัน)" en="Days overdue" align="right" />
+                <DocTh th="ยอดค้าง" en="Unpaid" align="right" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {overdue.map((i) => (
                 <tr key={i.ref}>
-                  <td className="py-2">
+                  <td className="px-2.5 py-2">
                     {i.ref}
                     {i.orderNo && <span className="block text-xs text-gray-400">{i.orderNo}</span>}
                   </td>
-                  <td className="whitespace-nowrap py-2">{i.dueDate}</td>
-                  <td className="py-2 text-right tabular-nums">{daysOverdue(i.dueDate, today)}</td>
-                  <td className="py-2 text-right tabular-nums">{money(i.open)}</td>
+                  <td className="whitespace-nowrap px-2.5 py-2">
+                    <DocDate iso={i.dueDate} />
+                  </td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">{daysOverdue(i.dueDate, today)}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">{money(i.open)}</td>
                 </tr>
               ))}
               <tr className="border-t-2 border-gray-900 font-semibold">
-                <td className="py-2" colSpan={3}>
+                <td className="px-2.5 py-2" colSpan={3}>
                   <Both th="รวมยอดค้างชำระเกินกำหนด" en="Total overdue" />
                 </td>
-                <td className="py-2 text-right tabular-nums">{money(overdueTotal)}</td>
+                <td className="px-2.5 py-2 text-right tabular-nums">{money(overdueTotal)}</td>
               </tr>
             </tbody>
           </table>
-          <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
-            ({thaiBahtText(overdueTotal)})<span className="block text-xs text-gray-500">({englishBahtText(overdueTotal)})</span>
-          </p>
+          <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
+            <p className="text-xs font-medium text-gray-500">
+              <Both th="จำนวนเงิน (ตัวอักษร)" en="Amount in words" />
+            </p>
+            <p className="mt-0.5 font-medium">({thaiBahtText(overdueTotal)})</p>
+            <p className="text-gray-600">({englishBahtText(overdueTotal)})</p>
+          </div>
           <Signatures left={{ th: "ฝ่ายบัญชีลูกหนี้", en: "Accounts receivable" }} right={{ th: "ผู้มีอำนาจลงนาม", en: "Authorised signatory" }} />
         </>
       )}

@@ -7,7 +7,7 @@ import { formatNumber } from "../lib/format";
 import { splitVat } from "../lib/business";
 import { thaiBahtText, englishBahtText } from "../lib/amountInWords";
 import { useWarehouseName } from "../lib/useWarehouseName";
-import { Both, BuyerBlock, CopyStamp, CopySwitch, DocDate, DocMeta, PrintFrame, SellerBlock, Signatures } from "./TaxDocument";
+import { Both, BuyerBlock, CopyStamp, CopySwitch, DocDate, DocTh, DocumentHeader, PrintFrame, Signatures } from "./TaxDocument";
 
 type Tab = "invoice" | "deliveryNote" | "pickingList";
 
@@ -20,7 +20,6 @@ const TITLES: Record<Tab, { th: string; en: string }> = {
 /** Money on tax documents: always two decimals, Western digits. */
 const money = (n: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-const thCell = "px-2.5 py-2 text-xs font-medium text-gray-600";
 const tdCell = "px-2.5 py-2 align-top";
 
 export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder | null; onClose: () => void }) {
@@ -72,95 +71,60 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
           : undefined
       }
     >
-      {/* Header: seller left, document title and number right */}
-      <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 print:flex-row">
-        <div className="min-w-0 flex-1">
-          <SellerBlock />
-        </div>
-        <div className="shrink-0 sm:text-right print:text-right">
-          {tab === "invoice" && (
-            <div className="mb-2">
-              <CopyStamp value={copy} />
-            </div>
-          )}
-          <h2 className="font-display text-2xl font-semibold text-gray-900">{TITLES[tab].th}</h2>
-          <p className="text-sm uppercase tracking-wide text-gray-500">{TITLES[tab].en}</p>
-          {tab === "invoice" && <p className="mt-1 text-xs text-gray-500">เอกสารออกเป็นชุด / Issued as a set</p>}
-          <div className="mt-3 flex justify-end">
-            <DocMeta
-              rows={[
-                tab === "invoice"
-                  ? { label: { th: "เลขที่", en: "No." }, value: order.taxInvoiceNo }
-                  : tab === "deliveryNote"
-                    ? { label: { th: "เลขที่", en: "No." }, value: order.deliveryNoteNo }
-                    : { label: { th: "ออเดอร์", en: "Order" }, value: order.orderNo },
-                { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={docDate} /> },
-                ...(tab !== "pickingList" ? [{ label: { th: "อ้างอิงออเดอร์", en: "Order ref." }, value: order.orderNo }] : []),
-                ...(tab === "invoice" && order.dueDate
-                  ? [
-                      {
-                        label: { th: "ครบกำหนดชำระ", en: "Due date" },
-                        value: (
-                          <>
-                            <DocDate iso={order.dueDate} />
-                            {customer && <span className="block text-[11px] font-normal text-gray-400">{customer.creditTermDays} วัน / days</span>}
-                          </>
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          </div>
-        </div>
-      </div>
-
-      {tab !== "pickingList" && (
-        <div className="mb-5">
-          <BuyerBlock customer={customer} fallbackName={order.customerName} />
-        </div>
-      )}
+      <DocumentHeader
+        title={TITLES[tab]}
+        stamp={tab === "invoice" ? <CopyStamp value={copy} /> : undefined}
+        note={tab === "invoice" ? "เอกสารออกเป็นชุด / Issued as a set" : undefined}
+        meta={[
+          tab === "invoice"
+            ? { label: { th: "เลขที่", en: "No." }, value: order.taxInvoiceNo }
+            : tab === "deliveryNote"
+              ? { label: { th: "เลขที่", en: "No." }, value: order.deliveryNoteNo }
+              : { label: { th: "ออเดอร์", en: "Order" }, value: order.orderNo },
+          { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={docDate} /> },
+          ...(tab !== "pickingList" ? [{ label: { th: "อ้างอิงออเดอร์", en: "Order ref." }, value: order.orderNo }] : []),
+          // Where and when the goods go: what the driver and the pickers need.
+          ...(tab !== "invoice" && order.plannedDeliveryDate ? [{ label: { th: "วันที่นัดส่ง", en: "Delivery date" }, value: <DocDate iso={order.plannedDeliveryDate} /> }] : []),
+          ...(tab === "pickingList" ? [{ label: { th: "ลูกค้า", en: "Customer" }, value: <Both th={order.customerName.th} en={order.customerName.en} /> }] : []),
+          ...(tab === "invoice" && order.dueDate
+            ? [
+                {
+                  label: { th: "ครบกำหนดชำระ", en: "Due date" },
+                  value: (
+                    <>
+                      <DocDate iso={order.dueDate} />
+                      {customer && <span className="block text-[11px] font-normal text-gray-400">{customer.creditTermDays} วัน / days</span>}
+                    </>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+        internal={tab === "pickingList"}
+        party={
+          tab === "pickingList" ? undefined : (
+            <BuyerBlock customer={customer} fallbackName={order.customerName} role={tab === "deliveryNote" ? { th: "ส่งถึง", en: "Deliver to" } : undefined} />
+          )
+        }
+      />
 
       {/* Lines */}
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-y border-gray-300 bg-gray-50 text-left">
-            <th className={`${thCell} w-8 text-center`}>
-              ลำดับ<span className="block font-normal text-gray-400">No.</span>
-            </th>
-            {tab === "pickingList" && (
-              <th className={thCell}>
-                คลัง<span className="block font-normal text-gray-400">Warehouse</span>
-              </th>
-            )}
-            <th className={thCell}>
-              รายการ<span className="block font-normal text-gray-400">Description</span>
-            </th>
-            <th className={thCell}>
-              Lot/Batch<span className="block font-normal text-gray-400">{tab === "invoice" ? "Excise stamp" : " "}</span>
-            </th>
-            <th className={`${thCell} text-right`}>
-              จำนวน<span className="block font-normal text-gray-400">Qty</span>
-            </th>
+          <tr className="border-y border-gray-300 bg-gray-50">
+            <DocTh th="ลำดับ" en="No." align="center" className="w-10" />
+            {tab === "pickingList" && <DocTh th="คลัง" en="Warehouse" />}
+            <DocTh th="รายการ" en="Description" />
+            {tab === "invoice" ? <DocTh th="ล็อต / แสตมป์สรรพสามิต" en="Lot / Excise stamp" /> : <DocTh th="ล็อต" en="Lot/Batch" />}
+            <DocTh th="จำนวน" en="Qty" align="right" />
             {tab === "invoice" && (
               <>
-                <th className={`${thCell} text-right`}>
-                  ราคาต่อหน่วย<span className="block font-normal text-gray-400">Unit price</span>
-                </th>
-                <th className={`${thCell} text-right`}>
-                  ส่วนลด<span className="block font-normal text-gray-400">Disc.</span>
-                </th>
-                <th className={`${thCell} text-right`}>
-                  จำนวนเงิน<span className="block font-normal text-gray-400">Amount</span>
-                </th>
+                <DocTh th="ราคาต่อหน่วย" en="Unit price" align="right" />
+                <DocTh th="ส่วนลด" en="Disc." align="right" />
+                <DocTh th="จำนวนเงิน" en="Amount" align="right" />
               </>
             )}
-            {tab !== "invoice" && (
-              <th className={`${thCell} w-20 text-center`}>
-                {tab === "pickingList" ? "หยิบแล้ว" : "ตรวจรับ"}
-                <span className="block font-normal text-gray-400">{tab === "pickingList" ? "Picked" : "Checked"}</span>
-              </th>
-            )}
+            {tab !== "invoice" && (tab === "pickingList" ? <DocTh th="หยิบแล้ว" en="Picked" align="center" className="w-20" /> : <DocTh th="ตรวจรับ" en="Checked" align="center" className="w-20" />)}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
@@ -178,13 +142,10 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
                     {product && ` · ${product.packageSize} ml · ${product.abv}% ABV`}
                   </span>
                 </td>
-                <td className={tdCell}>
+                <td className={`${tdCell} whitespace-nowrap`}>
                   {l.lotBatch}
-                  {tab === "invoice" && lot?.exciseStampDate && (
-                    <span className="block text-xs text-gray-500">
-                      <DocDate iso={lot.exciseStampDate} />
-                    </span>
-                  )}
+                  {/* The excise column is always filled: a date, or a dash when the lot has no stamp date on file. */}
+                  {tab === "invoice" && <span className="block text-xs text-gray-500">{lot?.exciseStampDate ? <DocDate iso={lot.exciseStampDate} /> : "—"}</span>}
                 </td>
                 <td className={`${tdCell} text-right tabular-nums`}>{formatNumber(l.quantity, "en")}</td>
                 {tab === "invoice" ? (
@@ -210,8 +171,8 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
         </tbody>
         <tfoot>
           <tr className="border-t border-gray-300">
-            <td colSpan={tab === "pickingList" ? 4 : 3} className="px-2.5 py-2 text-right text-xs text-gray-500">
-              รวมจำนวน / Total units
+            <td colSpan={tab === "pickingList" ? 4 : 3} className="px-2.5 py-2 text-right text-xs font-medium text-gray-500">
+              <Both th="รวมจำนวน" en="Total units" />
             </td>
             <td className="px-2.5 py-2 text-right font-medium tabular-nums">{formatNumber(totalUnits, "en")}</td>
             <td colSpan={tab === "invoice" ? 3 : 1} />
@@ -222,7 +183,7 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
       {tab === "invoice" && (
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_18rem]">
           <div className="self-end rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs font-medium text-gray-500">
               <Both th="จำนวนเงินรวมทั้งสิ้น (ตัวอักษร)" en="Amount in words" />
             </p>
             <Masked>
@@ -234,7 +195,7 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
             <tbody>
               <tr>
                 <td className="py-1 text-gray-600">
-                  มูลค่าสินค้า (ไม่รวม VAT)<span className="block text-[11px] text-gray-400">Value of goods excl. VAT</span>
+                  <Both th="มูลค่าสินค้า (ไม่รวม VAT)" en="Value of goods excl. VAT" />
                 </td>
                 <td className="py-1 text-right tabular-nums">
                   <Masked>{money(base)}</Masked>
@@ -242,7 +203,7 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
               </tr>
               <tr>
                 <td className="py-1 text-gray-600">
-                  ภาษีมูลค่าเพิ่ม {vatPercent}%<span className="block text-[11px] text-gray-400">VAT {vatPercent}%</span>
+                  <Both th={`ภาษีมูลค่าเพิ่ม ${vatPercent}%`} en={`VAT ${vatPercent}%`} />
                 </td>
                 <td className="py-1 text-right tabular-nums">
                   <Masked>{money(vat)}</Masked>
@@ -250,7 +211,7 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
               </tr>
               <tr className="border-t-2 border-gray-900 font-semibold">
                 <td className="py-1.5">
-                  จำนวนเงินรวมทั้งสิ้น<span className="block text-[11px] font-normal text-gray-400">Grand total (THB)</span>
+                  <Both th="จำนวนเงินรวมทั้งสิ้น" en="Grand total (THB)" />
                 </td>
                 <td className="py-1.5 text-right tabular-nums">
                   <Masked>{money(order.netValue)}</Masked>

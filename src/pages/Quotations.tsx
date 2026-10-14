@@ -12,7 +12,7 @@ import { Dialog, DialogActions } from "../components/Dialog";
 import { TableContainer, EmptyRow, th, td } from "../components/Table";
 import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
 import { KpiTile } from "../components/charts";
-import { Both, BuyerBlock, DocDate, DocMeta, PrintFrame, SellerBlock, Signatures } from "../components/TaxDocument";
+import { Both, BuyerBlock, DocDate, DocField, DocTh, DocumentHeader, PrintFrame, Signatures } from "../components/TaxDocument";
 import { useRunAction } from "../lib/useRunAction";
 import { formatCurrency, formatDate } from "../lib/format";
 import { addDays, computeChannelPrice, computeLicenseStatus, computeSalesNetValue, splitVat, todayIso } from "../lib/business";
@@ -346,62 +346,46 @@ function QuotationPrint({ quote: q, onClose }: { quote: Quotation; onClose: () =
       onClose={onClose}
       email={{ to: customer?.email, subject: `ใบเสนอราคา / Quotation ${q.quoteNo}`, document: `quotation ${q.quoteNo}`, filename: q.quoteNo, entityType: "quotation", entityId: q.quoteNo }}
     >
-      <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 print:flex-row">
-        <div className="min-w-0 flex-1">
-          <SellerBlock />
-        </div>
-        <div className="shrink-0 sm:text-right print:text-right">
-          <h2 className="font-display text-2xl font-semibold text-gray-900">ใบเสนอราคา</h2>
-          <p className="text-sm uppercase tracking-wide text-gray-500">Quotation</p>
-          <div className="mt-3 flex justify-end">
-            <DocMeta
-              rows={[
-                { label: { th: "เลขที่", en: "No." }, value: q.quoteNo },
-                { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={q.date} /> },
-                { label: { th: "ยืนราคาถึง", en: "Valid until" }, value: <DocDate iso={q.validUntil} /> },
-              ]}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="mb-5">
-        <BuyerBlock customer={customer} fallbackName={q.customerName} />
-      </div>
-      <table className="mb-4 w-full text-sm">
-        <thead className="border-b border-gray-900 text-xs text-gray-600">
-          <tr>
-            <th className="py-2 text-left">#</th>
-            <th className="py-2 text-left">
-              <Both th="รายการ" en="Description" />
-            </th>
-            <th className="py-2 text-right">
-              <Both th="จำนวน" en="Qty" />
-            </th>
-            <th className="py-2 text-right">
-              <Both th="ราคา/หน่วย" en="Unit price" />
-            </th>
-            <th className="py-2 text-right">
-              <Both th="ส่วนลด" en="Disc." />
-            </th>
-            <th className="py-2 text-right">
-              <Both th="จำนวนเงิน" en="Amount" />
-            </th>
+      <DocumentHeader
+        title={{ th: "ใบเสนอราคา", en: "Quotation" }}
+        meta={[
+          { label: { th: "เลขที่", en: "No." }, value: q.quoteNo },
+          { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={q.date} /> },
+          { label: { th: "ยืนราคาถึง", en: "Valid until" }, value: <DocDate iso={q.validUntil} /> },
+        ]}
+        party={<BuyerBlock customer={customer} fallbackName={q.customerName} />}
+      />
+      <table className="mb-4 w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-y border-gray-300 bg-gray-50">
+            <DocTh th="ลำดับ" en="No." align="center" className="w-10" />
+            <DocTh th="รายการ" en="Description" />
+            <DocTh th="จำนวน" en="Qty" align="right" />
+            <DocTh th="ราคาต่อหน่วย" en="Unit price" align="right" />
+            <DocTh th="ส่วนลด" en="Disc." align="right" />
+            <DocTh th="จำนวนเงิน" en="Amount" align="right" />
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {q.lines.map((l, i) => (
             <tr key={i}>
-              <td className="py-2 text-gray-500">{i + 1}</td>
-              <td className="py-2">
-                {products.find((p) => p.sku === l.sku)?.name ?? l.sku}
-                <span className="block text-xs text-gray-400">{l.sku}</span>
+              <td className="px-2.5 py-2 text-center text-gray-500">{i + 1}</td>
+              <td className="px-2.5 py-2">
+                <span className="font-medium">{products.find((p) => p.sku === l.sku)?.name ?? l.sku}</span>
+                <span className="block text-xs text-gray-500">
+                  {l.sku}
+                  {(() => {
+                    const p = products.find((x) => x.sku === l.sku);
+                    return p ? ` · ${p.packageSize} ml · ${p.abv}% ABV` : "";
+                  })()}
+                </span>
               </td>
-              <td className="py-2 text-right tabular-nums">{l.quantity}</td>
-              <td className="py-2 text-right tabular-nums">
+              <td className="px-2.5 py-2 text-right tabular-nums">{l.quantity}</td>
+              <td className="px-2.5 py-2 text-right tabular-nums">
                 <Masked>{money(l.unitPrice)}</Masked>
               </td>
-              <td className="py-2 text-right tabular-nums">{l.discountPercent ? `${l.discountPercent}%` : "—"}</td>
-              <td className="py-2 text-right tabular-nums">
+              <td className="px-2.5 py-2 text-right tabular-nums">{l.discountPercent ? `${l.discountPercent}%` : "—"}</td>
+              <td className="px-2.5 py-2 text-right font-medium tabular-nums">
                 <Masked>{money(l.netValue)}</Masked>
               </td>
             </tr>
@@ -427,14 +411,22 @@ function QuotationPrint({ quote: q, onClose }: { quote: Quotation; onClose: () =
           </span>
         </div>
       </div>
-      <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+      <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
+        <p className="text-xs font-medium text-gray-500">
+          <Both th="จำนวนเงินรวมทั้งสิ้น (ตัวอักษร)" en="Amount in words" />
+        </p>
         <Masked>
-          ({thaiBahtText(q.netValue)})<span className="block text-xs text-gray-500">({englishBahtText(q.netValue)})</span>
+          <p className="mt-0.5 font-medium">({thaiBahtText(q.netValue)})</p>
+          <p className="text-gray-600">({englishBahtText(q.netValue)})</p>
         </Masked>
-      </p>
-      {q.notes && <p className="mt-3 text-sm text-gray-700">{q.notes}</p>}
-      <p className="mt-2 text-xs text-gray-500">
-        ราคานี้ยังไม่ได้สำรองสินค้า สินค้าจะจัดสรรเมื่อยืนยันการสั่งซื้อ / Stock is allocated when the order is confirmed.
+      </div>
+      {q.notes && (
+        <div className="mt-3">
+          <DocField label={{ th: "หมายเหตุ", en: "Notes" }}>{q.notes}</DocField>
+        </div>
+      )}
+      <p className="mt-3 text-xs text-gray-500">
+        <Both th="ราคารวมภาษีมูลค่าเพิ่มแล้ว · ใบเสนอราคายังไม่ได้สำรองสินค้า สินค้าจะจัดสรรเมื่อยืนยันการสั่งซื้อ" en="Prices include VAT. Stock is allocated when the order is confirmed." />
       </p>
       <Signatures left={{ th: "ผู้เสนอราคา", en: "Quoted by" }} right={{ th: "ผู้อนุมัติสั่งซื้อ (ลูกค้า)", en: "Accepted by (customer)" }} />
     </PrintFrame>

@@ -8,7 +8,7 @@ import { PageHeader } from "../components/PageHeader";
 import { NewButton } from "../components/NewButton";
 import { Dialog, DialogActions } from "../components/Dialog";
 import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
-import { Both, DocDate, DocMeta, PrintFrame, SellerBlock, Signatures } from "../components/TaxDocument";
+import { Both, DocDate, DocTh, DocumentHeader, PrintFrame, Signatures } from "../components/TaxDocument";
 import { useRunAction } from "../lib/useRunAction";
 import { formatDate, formatNumber } from "../lib/format";
 import type { StockCount } from "../data/types";
@@ -233,43 +233,29 @@ function CountSheet({ count: c, onClose }: { count: StockCount; onClose: () => v
   const wh = warehouses.find((w) => w.code === c.warehouse);
   return (
     <PrintFrame onClose={onClose}>
-      <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between print:flex-row">
-        <div className="min-w-0 flex-1">
-          <SellerBlock />
-        </div>
-        <div className="shrink-0 sm:text-right print:text-right">
-          <h2 className="font-display text-2xl font-semibold">ใบตรวจนับสินค้า</h2>
-          <p className="text-sm uppercase tracking-wide text-gray-500">Stock Count Sheet</p>
-          <div className="mt-3 flex justify-end">
-            <DocMeta
-              rows={[
-                { label: { th: "เลขที่", en: "No." }, value: c.countNo },
-                { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={c.date} /> },
-                { label: { th: "คลัง", en: "Warehouse" }, value: wh ? `${wh.name.th} / ${wh.name.en}` : c.warehouse },
-              ]}
-            />
-          </div>
-        </div>
-      </div>
+      <DocumentHeader
+        title={{ th: "ใบตรวจนับสินค้า", en: "Stock Count Sheet" }}
+        note="ไม่แสดงจำนวนตามระบบ ให้นับตามจริง / System quantities are left off — count what's there"
+        meta={[
+          { label: { th: "เลขที่", en: "No." }, value: c.countNo },
+          { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={c.date} /> },
+          { label: { th: "คลัง", en: "Warehouse" }, value: wh ? <Both th={wh.name.th} en={wh.name.en} /> : c.warehouse },
+        ]}
+        internal
+      />
       <table className="w-full border border-gray-300 text-sm">
         <thead className="bg-gray-50 text-xs text-gray-600">
           <tr>
-            <th className="border border-gray-300 px-3 py-2 text-left">#</th>
-            <th className="border border-gray-300 px-3 py-2 text-left">
-              <Both th="ล็อต" en="Lot" />
-            </th>
-            <th className="border border-gray-300 px-3 py-2 text-left">
-              <Both th="สินค้า" en="Product" />
-            </th>
-            <th className="w-32 border border-gray-300 px-3 py-2 text-right">
-              <Both th="นับได้" en="Counted" />
-            </th>
+            <DocTh th="ลำดับ" en="No." align="center" className="w-10 border border-gray-300" />
+            <DocTh th="ล็อต" en="Lot/Batch" className="border border-gray-300" />
+            <DocTh th="รายการ" en="Description" className="border border-gray-300" />
+            <DocTh th="นับได้" en="Counted" align="right" className="w-32 border border-gray-300" />
           </tr>
         </thead>
         <tbody>
           {c.lines.map((l, i) => (
             <tr key={l.lotBatch}>
-              <td className="border border-gray-300 px-3 py-3 text-gray-500">{i + 1}</td>
+              <td className="border border-gray-300 px-3 py-3 text-center text-gray-500">{i + 1}</td>
               <td className="border border-gray-300 px-3 py-3 font-medium">{l.lotBatch}</td>
               <td className="border border-gray-300 px-3 py-3">
                 {products.find((p) => p.sku === l.sku)?.name ?? l.sku}

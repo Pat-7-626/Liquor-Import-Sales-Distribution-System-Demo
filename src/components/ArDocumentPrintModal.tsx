@@ -4,7 +4,7 @@ import type { ArDocument } from "../data/types";
 import { Masked } from "./Masked";
 import { splitVat } from "../lib/business";
 import { thaiBahtText, englishBahtText } from "../lib/amountInWords";
-import { Both, BuyerBlock, CopyStamp, CopySwitch, DocDate, DocMeta, PrintFrame, SellerBlock, Signatures } from "./TaxDocument";
+import { Both, BuyerBlock, CopyStamp, CopySwitch, DocDate, DocField, DocTh, DocumentHeader, PrintFrame, Signatures } from "./TaxDocument";
 
 const money = (n: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -48,67 +48,28 @@ export function ArDocumentPrintModal({ doc, onClose }: { doc: ArDocument | null;
         entityId: doc.customerId,
       }}
     >
-      <div className="mb-5 flex flex-col gap-4 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 print:flex-row">
-        <div className="min-w-0 flex-1">
-          <SellerBlock />
-        </div>
-        <div className="shrink-0 sm:text-right print:text-right">
-          <div className="mb-2">
-            <CopyStamp value={copy} />
-          </div>
-          <h2 className="font-display text-2xl font-semibold text-gray-900">{title.th}</h2>
-          <p className="text-sm uppercase tracking-wide text-gray-500">{title.en}</p>
-          <div className="mt-3 flex justify-end">
-            <DocMeta
-              rows={[
-                { label: { th: "เลขที่", en: "No." }, value: doc.docNo },
-                { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={doc.date} /> },
-              ]}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-5">
-        <BuyerBlock customer={customer} fallbackName={{ th: doc.customerId, en: doc.customerId }} />
-      </div>
+      <DocumentHeader
+        title={title}
+        stamp={<CopyStamp value={copy} />}
+        meta={[
+          { label: { th: "เลขที่", en: "No." }, value: doc.docNo },
+          { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={doc.date} /> },
+        ]}
+        party={<BuyerBlock customer={customer} fallbackName={{ th: doc.customerId, en: doc.customerId }} />}
+      />
 
       {isNote ? (
         <>
           {/* The invoice this note corrects — required on every credit/debit note. */}
-          <div className="mb-4 grid grid-cols-1 gap-3 rounded-lg border border-gray-200 p-3 text-sm sm:grid-cols-3">
-            <div>
-              <p className="text-xs text-gray-500">
-                <Both th="อ้างอิงใบกำกับภาษีเลขที่" en="Original tax invoice" />
-              </p>
-              <p className="mt-0.5 font-medium">{order?.taxInvoiceNo ?? doc.reference}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">
-                <Both th="ลงวันที่" en="Dated" />
-              </p>
-              <p className="mt-0.5 font-medium">{order ? <DocDate iso={order.invoiceDate ?? order.orderDate} /> : "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">
-                <Both th="ออเดอร์" en="Order" />
-              </p>
-              <p className="mt-0.5 font-medium">{doc.reference}</p>
-            </div>
-            <div className="sm:col-span-3">
-              <p className="text-xs text-gray-500">
-                <Both th="เหตุผล" en="Reason" />
-              </p>
-              <p className="mt-0.5">
-                {doc.reason ? (
-                  <>
-                    {doc.reason.th} <span className="text-gray-500">/ {doc.reason.en}</span>
-                  </>
-                ) : (
-                  "—"
-                )}
-              </p>
-            </div>
+          <div className="mb-4 grid grid-cols-1 gap-3 rounded-lg border border-gray-200 p-3.5 sm:grid-cols-3 print:grid-cols-3">
+            <DocField label={{ th: "อ้างอิงใบกำกับภาษีเลขที่", en: "Original tax invoice" }}>
+              <span className="font-medium">{order?.taxInvoiceNo ?? doc.reference}</span>
+            </DocField>
+            <DocField label={{ th: "ลงวันที่", en: "Dated" }}>{order ? <DocDate iso={order.invoiceDate ?? order.orderDate} /> : "—"}</DocField>
+            <DocField label={{ th: "ออเดอร์", en: "Order" }}>{doc.reference}</DocField>
+            <DocField label={{ th: "เหตุผล", en: "Reason" }} className="sm:col-span-3 print:col-span-3">
+              {doc.reason ? <Both th={doc.reason.th} en={doc.reason.en} /> : "—"}
+            </DocField>
           </div>
 
           <table className="ml-auto w-full max-w-md text-sm">
@@ -128,35 +89,19 @@ export function ArDocumentPrintModal({ doc, onClose }: { doc: ArDocument | null;
       ) : (
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-y border-gray-300 bg-gray-50 text-left text-xs text-gray-600">
-              <th className="px-2.5 py-2 font-medium">
-                รายการ<span className="block font-normal text-gray-400">Description</span>
-              </th>
-              <th className="px-2.5 py-2 font-medium">
-                วิธีชำระ<span className="block font-normal text-gray-400">Method</span>
-              </th>
-              <th className="px-2.5 py-2 font-medium">
-                อ้างอิง<span className="block font-normal text-gray-400">Reference</span>
-              </th>
-              <th className="px-2.5 py-2 text-right font-medium">
-                จำนวนเงิน<span className="block font-normal text-gray-400">Amount</span>
-              </th>
+            <tr className="border-y border-gray-300 bg-gray-50">
+              <DocTh th="รายการ" en="Description" />
+              <DocTh th="วิธีชำระ" en="Method" />
+              <DocTh th="อ้างอิง" en="Reference" />
+              <DocTh th="จำนวนเงิน" en="Amount" align="right" />
             </tr>
           </thead>
           <tbody>
             <tr className="border-b border-gray-200">
               <td className="px-2.5 py-2.5">
-                รับชำระหนี้ค่าสินค้า <span className="text-gray-500">/ Payment on account</span>
+                <Both th="รับชำระหนี้ค่าสินค้า" en="Payment on account" />
               </td>
-              <td className="px-2.5 py-2.5">
-                {doc.method ? (
-                  <>
-                    {METHODS[doc.method].th} <span className="text-gray-500">/ {METHODS[doc.method].en}</span>
-                  </>
-                ) : (
-                  "—"
-                )}
-              </td>
+              <td className="px-2.5 py-2.5">{doc.method ? <Both th={METHODS[doc.method].th} en={METHODS[doc.method].en} /> : "—"}</td>
               <td className="px-2.5 py-2.5">{doc.reference || "—"}</td>
               <td className="px-2.5 py-2.5 text-right font-semibold tabular-nums">
                 <Masked>{money(doc.amount)}</Masked>
@@ -167,7 +112,7 @@ export function ArDocumentPrintModal({ doc, onClose }: { doc: ArDocument | null;
       )}
 
       <div className="mt-4 rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
-        <p className="text-xs text-gray-500">
+        <p className="text-xs font-medium text-gray-500">
           <Both th="จำนวนเงิน (ตัวอักษร)" en="Amount in words" />
         </p>
         <Masked>
@@ -188,8 +133,7 @@ function Row({ th, en, value, strong }: { th: string; en: string; value: number;
   return (
     <tr className={strong ? "border-t-2 border-gray-900 font-semibold" : ""}>
       <td className="py-1.5 text-gray-700">
-        {th}
-        <span className="block text-[11px] font-normal text-gray-400">{en}</span>
+        <Both th={th} en={en} />
       </td>
       <td className="py-1.5 text-right tabular-nums">
         <Masked>{money(value)}</Masked>
