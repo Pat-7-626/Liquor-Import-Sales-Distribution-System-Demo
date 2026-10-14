@@ -1,7 +1,7 @@
 /**
  * Emailing documents. The browser renders the document exactly as it prints (styles included) and posts
- * it here; the API sends it through the configured SMTP server as the email body, with the same page
- * attached as an .html file, and records the sending on the audit trail. By default the Docker stack
+ * it here; the API sends it through the configured SMTP server as the email body, attaches it as an A4
+ * PDF (or as the .html page if no PDF renderer is available), and records the sending on the audit trail. By default the Docker stack
  * points at Mailpit — a local catch-all mailbox — so nothing reaches real people until SMTP is set up.
  */
 import type { FastifyInstance } from "fastify";
@@ -11,6 +11,7 @@ import * as A from "../../src/domain/actions.ts";
 import { requireUser } from "./auth.ts";
 import { withLockedStore } from "./commands.ts";
 import { config } from "./config.ts";
+import { renderPdf } from "./pdf.ts";
 
 const ENTITY_TYPES = ["salesOrder", "customer", "quotation", "expense", "payable"] as const;
 
@@ -71,14 +72,23 @@ export function registerMailRoutes(app: FastifyInstance) {
     // The covering note goes above the document, as plain text.
     const note = m.message.trim() ? `<div style="font-family:sans-serif;font-size:14px;white-space:pre-wrap;margin:0 0 16px">${escape(m.message.trim())}</div><hr>` : "";
     const html = m.documentHtml.replace(/<body([^>]*)>/i, (tag) => `${tag}${note}`);
+    let pdf: Buffer | null = null;
+    try {
+      pdf = await renderPdf(m.documentHtml);
+    } catch (e) {
+      req.log.warn({ err: e }, "PDF rendering failed, attaching the HTML instead");
+    }
+    const attachment = pdf
+      ? { filename: `${m.filename}.pdf`, content: pdf, contentType: "application/pdf" }
+      : { filename: `${m.filename}.html`, content: m.documentHtml, contentType: "text/html; charset=utf-8" };
     try {
       await mailer().sendMail({
         from: config.smtp.from,
         to: m.to,
         subject: m.subject,
-        text: `${m.message.trim()}\n\n${m.document} — see the attached ${m.filename}.html`.trim(),
+        text: `${m.message.trim()}\n\n${m.document} — see the attached ${attachment.filename}`.trim(),
         html,
-        attachments: [{ filename: `${m.filename}.html`, content: m.documentHtml, contentType: "text/html; charset=utf-8" }],
+        attachments: [attachment],
       });
     } catch (e) {
       req.log.error(e);
@@ -86,6 +96,6 @@ export function registerMailRoutes(app: FastifyInstance) {
     }
     sent.set(user.key, [...recent, now]);
     await withLockedStore((_tx, store) => A.logEmail(store, { actor: user.name, can: user.can }, m.entityType, m.entityId, m.document, m.to));
-    return { result: { ok: true } };
+    return { result: { ok: true }, attached: pdf ? "pdf" : "html" };
   });
 }

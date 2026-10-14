@@ -55,8 +55,10 @@ Uploaded documents: `docker compose run --rm -v "$PWD/backups:/backups" api sh -
 
 Invoices, credit notes, receipts, quotations, statements, reminder letters, payment vouchers and
 withholding certificates have an **Email** button next to Print. The email body is the document as it
-prints, with the same page attached (`.html`, opens in any browser to print or save as PDF), and the
-sending is recorded on the record's history.
+prints, with an A4 **PDF** attached (rendered on the server by a headless Chromium with Thai fonts, offline —
+the document never fetches anything), and the sending is recorded on the record's history. Running the API
+outside Docker without Chromium, the page is attached as `.html` instead (set `CHROMIUM_PATH` to use a
+local Chrome).
 
 Out of the box every email goes to **Mailpit**, a catch-all mailbox in the stack — read them at
 <http://localhost:8025>; nothing reaches real people. To send for real, set `SMTP_HOST`, `SMTP_PORT`,
@@ -357,7 +359,9 @@ How they connect:
 - **Thai/English toggle**, all content bilingual.
 
 Everything is stored in PostgreSQL. In demo mode, **Reset demo data** in the sidebar reloads the original
-demo dataset.
+demo dataset. Its dates move with the calendar — license expiries, recent orders, the last three months
+of expenses and last month's bank statement — so a reset always shows the same situation (two licenses
+about to expire, a customer on credit hold, withholding due, a statement to reconcile) whenever it's run.
 
 ## Business rules
 
@@ -410,10 +414,7 @@ Who can do what:
 - There's no payroll or fixed-asset register: salaries and depreciation are entered as expenses or
   journals. Withholding forms are produced as printable certificates and spreadsheet attachments, not
   the Revenue Department's e-filing format. Bank statements are imported from CSV (no direct bank feed).
-- Emailed documents are HTML (body and attachment), not PDF — a PDF would need a headless browser on the
-  server. Thai e-Tax Invoice (XML) isn't produced.
-- The demo licenses have fixed expiry dates, so as the calendar moves
-  on, more demo customers show as expired; renew them on the Licenses page (or reset the demo later).
+- Thai e-Tax Invoice (XML) and e-Withholding files aren't produced; documents are printed or emailed as PDF.
 - The audit log and stock ledger — the records that grow without bound — are read a page at a time; the
   rest of the data still comes in one `GET /api/state`, and each command reloads the data it works on.
   That is simple and fast at this business's scale; a very large customer or order history would need the

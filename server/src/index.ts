@@ -16,6 +16,7 @@ import { maskAudit, maskStore } from "./mask.ts";
 import { auditFromRow, loadStore } from "./repo.ts";
 import { registerQueryRoutes } from "./queries.ts";
 import { registerMailRoutes } from "./mail.ts";
+import { closePdf } from "./pdf.ts";
 import { resetDemoData, seedIfEmpty } from "./seed.ts";
 import { registerUserRoutes } from "./users.ts";
 import { buildJournal, trialBalance } from "../../src/domain/ledger.ts";
@@ -295,6 +296,7 @@ await app.listen({ port: config.port, host: "0.0.0.0" });
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
     await app.close();
+    await closePdf();
     await sql.end({ timeout: 5 });
     process.exit(0);
   });

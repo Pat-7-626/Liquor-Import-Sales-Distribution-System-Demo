@@ -8,12 +8,14 @@ COPY server ./server
 RUN cd server && npm run typecheck && npm run build
 
 FROM node:22-alpine
-RUN apk add --no-cache tzdata
+# Chromium and Thai/Latin fonts render emailed documents to PDF.
+RUN apk add --no-cache tzdata chromium font-noto font-noto-thai
 ENV NODE_ENV=production \
     TZ=Asia/Bangkok \
     PORT=3000 \
     MIGRATIONS_DIR=/app/sql \
-    UPLOAD_DIR=/data/uploads
+    UPLOAD_DIR=/data/uploads \
+    CHROMIUM_PATH=/usr/bin/chromium-browser
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force

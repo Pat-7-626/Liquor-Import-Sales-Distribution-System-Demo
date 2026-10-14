@@ -242,11 +242,17 @@ check("payment logged in audit", s10.auditLog[0].action === "payment");
 await as("docOfficer");
 await go("/licenses");
 await page.locator('[data-row="LIC-SELL-2204"] button:has-text("Renew")').click();
-await page.locator('[role=dialog]:not([inert]) input[type=date]').fill("2027-12-31");
+// A year from today, so the test never renews into the past.
+const renewTo = (() => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+})();
+await page.locator('[role=dialog]:not([inert]) input[type=date]').fill(renewTo);
 await page.locator('[role=dialog]:not([inert]) button:has-text("Save")').click();
 await page.waitForTimeout(200);
 let s11 = await state();
-check("license renewal syncs customer expiry", s11.customers.find((c) => c.customerId === "CUS-0004").licenseExpiry === "2027-12-31");
+check("license renewal syncs customer expiry", s11.customers.find((c) => c.customerId === "CUS-0004").licenseExpiry === renewTo);
 
 // 10. Distribution officer can't open new-sales-order
 await as("distOfficer");
@@ -684,7 +690,7 @@ consoleProblems.length = 0;
   await as("salesOfficer");
   await go("/quotations");
   await page.click('button:has-text("New quotation")');
-  await page.selectOption("[data-testid=qt-customer]", "CUS-0001");
+  await page.selectOption("[data-testid=qt-customer]", "CUS-0004");
   check("quotation form warns when the customer's license has expired", (await page.locator("[data-testid=qt-license-warning]").count()) === 1);
   await page.selectOption("[data-testid=qt-customer]", "CUS-0003");
   await page.locator("[data-testid=qt-line] select").first().selectOption("SKU-1007");

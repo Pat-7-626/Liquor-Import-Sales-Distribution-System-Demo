@@ -37,8 +37,8 @@ import type {
   StockMovement,
 } from "../data/types";
 import { buildJournal } from "./ledger";
-import { suggestMatches } from "./finance";
-import { addDays, computeProductStatus, isBookedSale, isReversedSale, rateOn, todayIso } from "../lib/business";
+import { lastOfMonth, suggestMatches } from "./finance";
+import { addDays, computeLicenseStatus, computeProductStatus, isBookedSale, isReversedSale, rateOn, todayIso } from "../lib/business";
 import { makeId, type Store } from "./store";
 
 function buildSeedAuditLog(): AuditEntry[] {
@@ -170,9 +170,16 @@ export function seedState(): Store {
   return {
     products: seedProducts(),
     importOrders: initialImportOrders.map(withImportHistory),
-    licenses: initialLicenses,
+    licenses: initialLicenses.map((l) => {
+      const expiryDate = shiftLicenseDate(l.expiryDate);
+      return { ...l, issueDate: shiftLicenseDate(l.issueDate), expiryDate, ...computeLicenseStatus(expiryDate) };
+    }),
     // Accounts contacts (example.com never delivers; the demo mailbox catches everything anyway).
-    customers: initialCustomers.map((c) => ({ ...c, email: `accounts.${c.customerId.toLowerCase()}@example.com` })),
+    customers: initialCustomers.map((c) => ({
+      ...c,
+      licenseExpiry: c.licenseExpiry ? shiftLicenseDate(c.licenseExpiry) : c.licenseExpiry,
+      email: `accounts.${c.customerId.toLowerCase()}@example.com`,
+    })),
     salesOrders: initialSalesOrders.map(withSalesHistory).map(withCosts),
     inventory: seedInventory(),
     auditLog: buildSeedAuditLog(),
@@ -206,7 +213,24 @@ export function seedState(): Store {
   };
 }
 
-/** The demo store plus a September bank statement to reconcile (built from the books it should match). */
+/**
+ * The license data was written as of this day. Each license is moved by the days since, so the demo always
+ * tells the same story whenever it's reset: two customers' licenses about to expire, two already expired, one
+ * import license lapsed — instead of every license quietly expiring as the calendar moves on.
+ */
+const LICENSE_DATA_AS_OF = "2026-09-07";
+
+/** The three months before this one ("YYYY-MM", oldest first) — the demo's running costs and bank statement. */
+function recentMonths(): [string, string, string] {
+  const back = (m: string) => addDays(`${m}-01`, -1).slice(0, 7);
+  const m3 = back(todayIso().slice(0, 7));
+  const m2 = back(m3);
+  return [back(m2), m2, m3];
+}
+const licenseShiftDays = () => Math.round((Date.parse(`${todayIso()}T00:00:00`) - Date.parse(`${LICENSE_DATA_AS_OF}T00:00:00`)) / 86_400_000);
+const shiftLicenseDate = (iso: string) => addDays(iso, licenseShiftDays());
+
+/** The demo store plus last month's bank statement to reconcile (built from the books it should match). */
 export function seedStateWithStatement(): Store {
   const s = seedState();
   const lines = seedBankStatement(s);
@@ -411,7 +435,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  * transport 1%, professional services 3%; electricity has VAT but no withholding.
  */
 function seedExpenses(): Expense[] {
-  const months = ["2026-07", "2026-08", "2026-09"];
+  const months = recentMonths();
   const plan: Omit<Expense, "docNo" | "date" | "vat" | "whtAmount" | "paid" | "reference" | "actor">[] = [
     { payee: "บริษัท สาทร พร็อพเพอร์ตี้ จำกัด", payeeTaxId: "0105545012345", payeeType: "company", account: "6200", description: "ค่าเช่าคลังสินค้าและสำนักงาน / Warehouse & office rent", amount: 85000, whtRate: 5, method: "transfer" },
     { payee: "บริษัท ด่วนไว โลจิสติกส์ จำกัด", payeeTaxId: "0105551023451", payeeType: "company", account: "6400", description: "ค่าขนส่งสินค้าถึงลูกค้า / Delivery to customers", amount: 18000, whtRate: 1, method: "transfer" },
@@ -438,12 +462,16 @@ function seedExpenses(): Expense[] {
   return out;
 }
 
-/** Withholding for July and August remitted by the 7th of the next month; monthly bank charges. */
+/** Withholding for the first two of those months remitted by the 7th of the next month; monthly bank charges. */
 function seedJournals(): ManualJournal[] {
   const exp = seedExpenses();
   const withheld = (m: string) => r2(exp.filter((e) => e.date.startsWith(m)).reduce((s, e) => s + e.whtAmount, 0));
   const out: ManualJournal[] = [];
-  for (const [m, paidOn] of [["2026-07", "2026-08-07"], ["2026-08", "2026-09-07"]] as const) {
+  const [m1, m2, m3] = recentMonths();
+  for (const [m, paidOn] of [
+    [m1, `${m2}-07`],
+    [m2, `${m3}-07`],
+  ] as const) {
     const amt = withheld(m);
     out.push({
       entryNo: `JV-2026-${String(out.length + 1).padStart(4, "0")}`,
@@ -458,7 +486,7 @@ function seedJournals(): ManualJournal[] {
       actor: TAX_OFFICER_ACTOR,
     });
   }
-  for (const m of ["2026-07", "2026-08"]) {
+  for (const m of [m1, m2]) {
     out.push({
       entryNo: `JV-2026-${String(out.length + 1).padStart(4, "0")}`,
       date: `${m}-28`,
@@ -475,19 +503,21 @@ function seedJournals(): ManualJournal[] {
 }
 
 /**
- * September's bank statement: every bank movement the books show for the month (a day or so later, as banks
+ * Last month's bank statement: every bank movement the books show for the month (a day or so later, as banks
  * post them), plus two the books don't know about yet — a bank charge and a customer transfer.
  */
 function seedBankStatement(s: Store): BankLine[] {
-  const entries = buildJournal(s).filter((e) => e.date >= "2026-09-01" && e.date <= "2026-09-30");
+  const month = recentMonths()[2];
+  const end = lastOfMonth(`${month}-01`);
+  const entries = buildJournal(s).filter((e) => e.date >= `${month}-01` && e.date <= end);
   const lines: BankLine[] = [];
   for (const e of entries) {
     const net = r2(e.lines.filter((l) => l.account === "1110").reduce((sum, l) => sum + l.debit - l.credit, 0));
     if (net === 0) continue;
-    lines.push({ id: `bst-${lines.length + 1}`, date: addDays(e.date, e.date.endsWith("30") ? 0 : 1), description: net > 0 ? "TRANSFER IN" : "TRANSFER OUT", amount: net, reference: e.ref });
+    lines.push({ id: `bst-${lines.length + 1}`, date: e.date === end ? e.date : addDays(e.date, 1), description: net > 0 ? "TRANSFER IN" : "TRANSFER OUT", amount: net, reference: e.ref });
   }
-  lines.push({ id: `bst-${lines.length + 1}`, date: "2026-09-28", description: "BANK CHARGE", amount: -350, reference: "FEE-0926" });
-  lines.push({ id: `bst-${lines.length + 1}`, date: "2026-09-29", description: "TRANSFER IN RIVERSIDE BAR", amount: 20000, reference: "INW-77812" });
+  lines.push({ id: `bst-${lines.length + 1}`, date: addDays(end, -2), description: "BANK CHARGE", amount: -350, reference: `FEE-${month.replace("-", "")}` });
+  lines.push({ id: `bst-${lines.length + 1}`, date: addDays(end, -1), description: "TRANSFER IN RIVERSIDE BAR", amount: 20000, reference: "INW-77812" });
   return lines;
 }
 

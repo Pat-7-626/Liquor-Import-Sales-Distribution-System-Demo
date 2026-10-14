@@ -169,9 +169,9 @@ export function CustomerDocumentsModal({
               </tr>
               {st.lines.map((l, i) => (
                 <tr key={i} data-testid="statement-line">
-                  <td className="py-2 text-gray-600">{l.date}</td>
+                  <td className="whitespace-nowrap py-2 pr-3 text-gray-600">{l.date}</td>
                   <td className="py-2">
-                    {KIND[l.kind].th} <span className="text-gray-400">/ {KIND[l.kind].en}</span> <span className="font-medium">{l.ref}</span>
+                    {KIND[l.kind].th} <span className="text-gray-400">/ {KIND[l.kind].en}</span> <span className="whitespace-nowrap font-medium">{l.ref}</span>
                     {l.orderNo && <span className="block text-xs text-gray-400">{l.orderNo}</span>}
                   </td>
                   <td className="py-2 text-right tabular-nums">{l.debit ? money(l.debit) : ""}</td>
@@ -234,7 +234,7 @@ export function CustomerDocumentsModal({
                     {i.ref}
                     {i.orderNo && <span className="block text-xs text-gray-400">{i.orderNo}</span>}
                   </td>
-                  <td className="py-2">{i.dueDate}</td>
+                  <td className="whitespace-nowrap py-2">{i.dueDate}</td>
                   <td className="py-2 text-right tabular-nums">{daysOverdue(i.dueDate, today)}</td>
                   <td className="py-2 text-right tabular-nums">{money(i.open)}</td>
                 </tr>

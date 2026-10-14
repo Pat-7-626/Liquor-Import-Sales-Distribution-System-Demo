@@ -671,7 +671,7 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   const lotOf = (sku) => s0.inventory.filter((i) => i.sku === sku && i.quantityRemaining > 0).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate))[0];
 
   // Credit hold: CUS-0006 has a bill more than 60 days overdue (its license is renewed first, so that isn't why).
-  check("license renewed for the credit-hold test", (await doc.cmd("updateLicense", "LIC-SELL-2206", { expiryDate: "2027-12-31" })).json.result.ok);
+  check("license renewed for the credit-hold test", (await doc.cmd("updateLicense", "LIC-SELL-2206", { expiryDate: addDays(today, 365) })).json.result.ok);
   const v = lotOf("SKU-1007");
   const held = await so.cmd("createSalesOrder", one("CUS-0006", "SKU-1007", v.lotBatch, 1, 790, 0));
   check("a customer far behind on paying goes to approval (credit hold)", held.json.result.ok && held.json.result.order.approvalStatus === "pendingApproval" && /overdue/.test(held.json.result.order.approvalReason.en), JSON.stringify(held.json.result.order?.approvalReason));
@@ -738,12 +738,17 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   check("roles without price access can't email documents", (await wh.call("POST", "/api/email", mail)).status === 403);
   check("bad recipients are refused", (await sup.call("POST", "/api/email", { ...mail, to: ["nope"] })).status === 422);
   const sentMail = await sup.call("POST", "/api/email", mail);
-  check("a document is emailed", sentMail.status === 200 && sentMail.json.result.ok, sentMail.text.slice(0, 120));
+  check("a document is emailed, as a PDF", sentMail.status === 200 && sentMail.json.result.ok && sentMail.json.attached === "pdf", sentMail.text.slice(0, 120));
   check("…and recorded on the order's history", (await sup.call("GET", "/api/audit?entityId=SO-2026-3301&limit=50")).json.rows.some((e) => /Emailed tax invoice INV-TEST to buyer@example.com/.test(e.summary.en)));
   try {
     const box = await (await fetch("http://localhost:8025/api/v1/messages")).json();
     const m = box.messages.find((x) => x.Subject === "Tax invoice INV-TEST");
-    check("…and it arrives with the document attached", Boolean(m) && m.Attachments === 1 && m.To[0].Address === "buyer@example.com");
+    const full = m && (await (await fetch(`http://localhost:8025/api/v1/message/${m.ID}`)).json());
+    check(
+      "…and it arrives with the PDF attached",
+      Boolean(m) && m.To[0].Address === "buyer@example.com" && full?.Attachments?.[0]?.ContentType === "application/pdf" && full.Attachments[0].FileName === "INV-TEST.pdf",
+      JSON.stringify(full?.Attachments?.map((a) => a.ContentType)),
+    );
   } catch {
     check("the demo mailbox is reachable", false);
   }
