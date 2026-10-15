@@ -54,6 +54,14 @@ const ledgerOk = (st) => st.inventory.every((i) => st.stockMovements.filter((m) 
 
 // ── auth ──
 check("unauthenticated state is refused", (await fetch(`${BASE}/api/state`)).status === 401);
+check("the sign-in user list is offered (demo mode)", (await (await fetch(`${BASE}/api/users`)).json()).length > 0);
+{
+  // Five wrong passwords for a username nobody has: locked out just like a real account, so a 429 reveals nothing.
+  const ghost = `ghost-${Date.now()}`;
+  const replies = [];
+  for (let i = 0; i < 5; i++) replies.push((await session(ghost, "wrong")).status);
+  check("a made-up username locks after the same number of tries as a real one", replies.slice(0, 4).every((c) => c === 401) && replies[4] === 429, replies.join(","));
+}
 check("wrong password refused", (await session("somchai", "nope")).status === 401);
 const sup = await session("somchai");
 check("supervisor signs in", sup.status === 200 && sup.cookie.startsWith("lisd_session="));
@@ -235,6 +243,16 @@ check("uploaded file downloadable", file.status === 200 && file.text.startsWith(
 const exe = new FormData();
 exe.append("file", new Blob(["MZ"], { type: "application/x-msdownload" }), "evil.exe");
 check("non-PDF/image upload refused", (await doc.call("POST", "/api/import-orders/IMP-2026-0144/documents", exe)).status === 415);
+const fake = new FormData();
+fake.append("file", new Blob(["<html><script>alert(1)</script></html>"], { type: "application/pdf" }), "not-a.pdf");
+check("a file whose content isn't what it claims is refused", (await doc.call("POST", "/api/import-orders/IMP-2026-0144/documents", fake)).status === 415);
+{
+  // The supplier's invoice shows prices: import paperwork roles and price roles get it; warehouse staff and guests don't.
+  const whView = await session("whOfficer");
+  check("warehouse staff don't receive the supplier's invoice", !(await whView.call("GET", "/api/state")).json.importOrders.find((o) => o.orderNo === "IMP-2026-0144").documents?.some((d) => d.kind === "invoice"));
+  check("…and can't download it", (await whView.call("GET", attached.url)).status === 403);
+  check("price roles can", (await sup.call("GET", attached.url)).status === 200);
+}
 const rm = await doc.cmd("removeDocument", "IMP-2026-0144", attached.id);
 check("document removed, file gone", rm.json.result.ok && (await doc.call("GET", attached.url)).status === 404);
 

@@ -395,7 +395,8 @@ export function PrintFrame<T extends string>({
  * the bottom — so a long invoice's second page still says what it is. Table headings repeat by themselves.
  */
 function pageCss(runningTitle?: string): string {
-  const quoted = (s: string) => `"${s.replace(/["\\]/g, "")}"`;
+  // Only characters that can't close the string or the rule (document numbers and names never need them).
+  const quoted = (s: string) => `"${s.replace(/["\\{}<>;\n\r]/g, "")}"`;
   return `@media print {
   @page {
     size: A4;

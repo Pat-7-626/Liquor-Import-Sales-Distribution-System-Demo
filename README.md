@@ -66,8 +66,9 @@ Out of the box every email goes to **Mailpit**, a catch-all mailbox in the stack
 
 ### HTTPS on a real domain
 
-Point the domain's DNS at the server, then in `.env` set `DOMAIN=erp.example.com` and
-`SECURE_COOKIES=true`, and start with `docker compose --profile https up -d`. Caddy obtains and renews the
+Point the domain's DNS at the server, then in `.env` set `DOMAIN=erp.example.com`,
+`SECURE_COOKIES=true` and `TRUST_PROXY_HOPS=2` (Caddy and nginx both sit in front of the API), and start
+with `docker compose --profile https up -d`. Caddy obtains and renews the
 certificate automatically and forwards to the app.
 
 ### Settings (`.env`)
@@ -129,7 +130,14 @@ browser ──► web (nginx: built React app, proxies /api) ──► api (Node
   discounts, credit figures, tax amounts, or money in the audit trail — the API zeroes them before
   sending.
 - **Sign-in.** Users and scrypt password hashes are in the `users` table; sessions are signed httpOnly
-  cookies (12 hours).
+  cookies (12 hours). Outside demo mode nobody gets a list of usernames: the sign-in page asks for one.
+  Five wrong passwords lock an account (a made-up username "locks" the same way, so the answer reveals
+  nothing), and each address is limited to 100 failed sign-ins per 15 minutes — counted on the address
+  our own proxy saw (`TRUST_PROXY_HOPS`), not on a header a client could write.
+- **Hardening.** The app is served with a content security policy, no framing, and no MIME sniffing.
+  Uploaded documents must really be the PDF or image they claim to be. The supplier's invoice attached to
+  an import order is a price document: only roles with price access or that handle import paperwork
+  receive or download it. Emailed documents are rendered to PDF offline, with scripts off.
 - **Documents.** Uploaded PDFs/images (10 MB max) are stored on the `uploads` volume and served only to
   signed-in users.
 - **Schema** — `server/sql/001_init.sql` onwards (`010_company_payment_branding.sql` is the latest). New migrations are

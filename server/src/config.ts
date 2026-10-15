@@ -32,6 +32,8 @@ export const config = {
     /** Where caught mail can be read when SMTP points at the local Mailpit (shown in the app). */
     catchAllUrl: process.env.MAIL_CATCHALL_URL ?? "",
   },
+  /** How many proxies sit in front of the API (nginx = 1; Caddy + nginx = 2). Their X-Forwarded-For is trusted, nothing else. */
+  trustProxyHops: Number(process.env.TRUST_PROXY_HOPS || 1),
   migrationsDir: process.env.MIGRATIONS_DIR ?? new URL("../sql", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
 };
 

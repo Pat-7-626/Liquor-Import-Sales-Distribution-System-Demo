@@ -21,7 +21,9 @@ import { resetDemoData, seedIfEmpty } from "./seed.ts";
 import { registerUserRoutes } from "./users.ts";
 import { buildJournal, trialBalance } from "../../src/domain/ledger.ts";
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" }, bodyLimit: 1024 * 1024, trustProxy: true });
+// trustProxy is a hop count, not "true": with "true" the left-most X-Forwarded-For entry — which any client
+// can write — would be taken as the caller's address, and the per-address sign-in limit could be dodged.
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" }, bodyLimit: 1024 * 1024, trustProxy: (_address: string, hop: number) => hop < config.trustProxyHops });
 await app.register(cookie);
 await app.register(multipart, { limits: { fileSize: config.maxUploadBytes, files: 1 } });
 
@@ -37,10 +39,13 @@ async function stateFor(user: SessionUser) {
     store: await loadStore(tx, { light: true }),
     recent: (await tx`select * from audit_log order by ts desc, id limit ${RECENT_ACTIVITY}`).map(auditFromRow),
   }));
-  const { stockMovements: _m, auditLog: _a, ...rest } = user.canViewSensitive ? store : maskStore(store);
+  const { stockMovements: _m, auditLog: _a, ...rest } = user.canViewSensitive ? store : maskStore(store, { keepSupplierInvoices: handlesImportPaperwork(user) });
   return { ...rest, recentActivity: user.canViewSensitive ? recent : recent.map(maskAudit) };
 }
 const RECENT_ACTIVITY = 20;
+
+/** Supplier invoices carry prices, but the people who file import paperwork and clear customs need them. */
+const handlesImportPaperwork = (u: SessionUser) => u.canViewSensitive || u.can("manageImportDocuments") || u.can("recordCustomsClearance");
 
 const publicUser = (u: SessionUser) => ({ key: u.key, role: u.role, name: u.name, mustChangePassword: u.mustChangePassword });
 
@@ -51,9 +56,12 @@ app.get("/api/health", async () => {
   return { ok: true };
 });
 
-/** Sign-in list (names and roles only; disabled accounts left out). */
+/**
+ * Sign-in list (names and roles only; disabled accounts left out) — demo mode only. For real use, nobody
+ * gets a list of usernames before signing in: the sign-in page asks for the username instead.
+ */
 app.get("/api/users", async () =>
-  sql<{ key: string; role: string; name: Bilingual }[]>`select key, role, name from users where role <> 'guest' and active order by key`,
+  config.demoMode ? sql<{ key: string; role: string; name: Bilingual }[]>`select key, role, name from users where role <> 'guest' and active order by key` : [],
 );
 
 /** What the sign-in page may offer before anyone is signed in. */
@@ -91,6 +99,15 @@ const TOO_MANY = (minutes: number) => ({
   },
 });
 
+const unknownKeys = new Map<string, number[]>();
+function unknownKeyFailures(key: string): number[] {
+  const since = Date.now() - LOCK_MINUTES * 60_000;
+  const list = (unknownKeys.get(key) ?? []).filter((t) => t > since);
+  if (unknownKeys.size > 10_000) unknownKeys.clear();
+  unknownKeys.set(key, list);
+  return list;
+}
+
 app.post("/api/auth/login", async (req, reply) => {
   const body = z.object({ key: z.string().max(64), password: z.string().max(200) }).safeParse(req.body);
   if (!body.success) return reply.code(400).send({ error: { th: "ข้อมูลไม่ครบ", en: "Missing username or password" } });
@@ -116,6 +133,13 @@ app.post("/api/auth/login", async (req, reply) => {
   const ok = row ? await verifyPassword(body.data.password, row.password_hash) : await verifyPassword(body.data.password, "scrypt$AAAAAAAAAAAAAAAAAAAAAA==$AAAA");
   if (!row || !ok || !row.active) {
     recentIpFailures(ip).push(Date.now());
+    // A made-up username "locks" after the same number of tries as a real one, so the 429 doesn't
+    // reveal which usernames exist.
+    if (!row) {
+      const tries = unknownKeyFailures(body.data.key);
+      tries.push(Date.now());
+      if (tries.length >= MAX_FAILURES) return reply.code(429).send(TOO_MANY(LOCK_MINUTES));
+    }
     if (row) {
       const [after] = await sql<{ failed_logins: number }[]>`
         update users set
@@ -218,6 +242,17 @@ app.post<{ Params: { name: string } }>("/api/commands/:name", async (req, reply)
 // ───────────────────────────── documents ─────────────────────────────
 
 const ALLOWED_MIME = /^(application\/pdf|image\/(png|jpeg|webp|gif))$/;
+
+/** Magic numbers for the accepted types. */
+function contentMatches(mime: string, b: Buffer): boolean {
+  const starts = (sig: number[], at = 0) => sig.every((x, i) => b[at + i] === x);
+  if (mime === "application/pdf") return b.subarray(0, 5).toString("latin1") === "%PDF-";
+  if (mime === "image/png") return starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (mime === "image/jpeg") return starts([0xff, 0xd8, 0xff]);
+  if (mime === "image/gif") return b.subarray(0, 4).toString("latin1") === "GIF8";
+  if (mime === "image/webp") return b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP";
+  return false;
+}
 const DOC_KINDS = ["invoice", "packingList", "billOfLading", "importLicense", "other"] as const;
 
 /** FR-06: attach an original document to an import order (multipart: kind, file). */
@@ -234,6 +269,9 @@ app.post<{ Params: { orderNo: string } }>("/api/import-orders/:orderNo/documents
     return reply.code(415).send({ result: { ok: false, error: { th: "รองรับเฉพาะ PDF และรูปภาพ", en: "Only PDF and image files are accepted" } } });
 
   const buffer = await part.toBuffer(); // throws past the size limit → 413
+  // The declared type is the browser's word for it; the file's first bytes must agree.
+  if (!contentMatches(part.mimetype, buffer))
+    return reply.code(415).send({ result: { ok: false, error: { th: "เนื้อหาไฟล์ไม่ตรงกับชนิดไฟล์", en: "The file's content doesn't match its type" } } });
   const fileId = randomUUID();
   const path = join(config.uploadDir, fileId);
   await mkdir(config.uploadDir, { recursive: true });
@@ -257,6 +295,11 @@ app.get<{ Params: { id: string } }>("/api/files/:id", async (req, reply) => {
   if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return reply.code(404).send();
   const [file] = await sql<{ name: string; mime: string; path: string }[]>`select name, mime, path from files where id = ${req.params.id}`;
   if (!file) return reply.code(404).send();
+  // A supplier's invoice shows what we pay — the same rule as every other price (NFR-03).
+  if (!handlesImportPaperwork(user)) {
+    const [doc] = await sql<{ kind: string }[]>`select kind from import_order_documents where url = ${`/api/files/${req.params.id}`}`;
+    if (!doc || doc.kind === "invoice") return reply.code(403).send();
+  }
   reply.header("Content-Type", file.mime);
   reply.header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
   reply.header("X-Content-Type-Options", "nosniff");

@@ -37,6 +37,8 @@ services:
       ALLOW_GUEST: ${ALLOW_GUEST:-}
       # Cookies are sent over plain HTTP on localhost; set to true behind HTTPS.
       SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      # Proxies in front of the API whose X-Forwarded-For is trusted: 1 (nginx); 2 with the HTTPS profile (Caddy + nginx).
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       # Outgoing email. By default everything goes to the local Mailpit mailbox (http://localhost:8025);
       # set SMTP_HOST etc. in .env to send for real.
       SMTP_HOST: ${SMTP_HOST:-mail}

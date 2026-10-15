@@ -15,7 +15,8 @@ export const maskAudit = (e: AuditEntry): AuditEntry => (e.sensitive ? { ...e, s
  * Quantities, statuses, dates, names, and channel selling prices (shown to everyone, like the
  * suggested price) are not restricted.
  */
-export function maskStore(s: Store): Store {
+/** `keepSupplierInvoices`: the role handles import paperwork (documents, customs) and needs the supplier's invoice. */
+export function maskStore(s: Store, opts: { keepSupplierInvoices?: boolean } = {}): Store {
   return {
     ...s,
     products: s.products.map((p) => ({ ...p, costPrice: 0 })),
@@ -35,6 +36,8 @@ export function maskStore(s: Store): Store {
       totalValue: 0,
       lineItems: o.lineItems?.map((l) => ({ ...l, unitPrice: 0 })),
       tax: o.tax ? { ...o.tax, importDuty: 0, exciseTax: 0, vat: 0, totalTax: 0 } : o.tax,
+      // The supplier's invoice is a price document; packing lists, bills of lading and licenses are not.
+      documents: opts.keepSupplierInvoices ? o.documents : o.documents?.filter((d) => d.kind !== "invoice"),
       // Validation notes quote the reference cost price ("deviates from ฿1,850") — scrub amounts.
       note: o.note ? { th: scrubMoney(o.note.th), en: scrubMoney(o.note.en) } : o.note,
     })),

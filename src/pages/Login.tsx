@@ -73,14 +73,28 @@ export default function Login({
           {unreachable && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{t("auth.serverUnreachable")}</p>}
           <label className="block">
             <FieldLabel>{t("auth.user")}</FieldLabel>
-            <select value={key} onChange={(e) => setKey(e.target.value)} required className={selectClass}>
-              <option value="">{t("auth.chooseUser")}</option>
-              {identities.map((i) => (
-                <option key={i.key} value={i.key}>
-                  {i.name[lang]}
-                </option>
-              ))}
-            </select>
+            {/* The list of users is offered in demo mode only; otherwise people type their username. */}
+            {identities.length > 0 ? (
+              <select value={key} onChange={(e) => setKey(e.target.value)} required className={selectClass}>
+                <option value="">{t("auth.chooseUser")}</option>
+                {identities.map((i) => (
+                  <option key={i.key} value={i.key}>
+                    {i.name[lang]}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={key}
+                onChange={(e) => setKey(e.target.value.trim())}
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                className={inputClass}
+                data-testid="login-username"
+              />
+            )}
           </label>
           <label className="block">
             <FieldLabel>{t("auth.password")}</FieldLabel>
