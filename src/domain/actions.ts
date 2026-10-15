@@ -1458,7 +1458,12 @@ export function updateCustomerProfile(s: Store, ctx: Ctx, customerId: string, pa
 }
 
 /** The seller details printed on every tax invoice, receipt, and credit/debit note. */
-export function updateCompanyProfile(s: Store, ctx: Ctx, patch: Pick<CompanyProfile, "name" | "taxId" | "branch" | "address" | "phone" | "email">): ActionResult {
+export function updateCompanyProfile(
+  s: Store,
+  ctx: Ctx,
+  patch: Pick<CompanyProfile, "name" | "taxId" | "branch" | "address" | "phone" | "email"> &
+    Partial<Pick<CompanyProfile, "bankName" | "bankBranch" | "bankAccountName" | "bankAccountNo" | "promptPayId">>,
+): ActionResult {
   const { company, setCompany, pushAudit, allowed } = bind(s, ctx);
 
   if (!allowed("manageCompany")) return DENIED;
@@ -1466,6 +1471,11 @@ export function updateCompanyProfile(s: Store, ctx: Ctx, patch: Pick<CompanyProf
   const legal = checkLegalDetails(patch);
   if (!legal.ok) return legal;
   if (patch.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.email.trim())) return fail("อีเมลไม่ถูกต้อง", "Email isn't valid");
+  const promptPay = (patch.promptPayId ?? company.promptPayId ?? "").replace(/[\s-]/g, "");
+  if (promptPay && !(/^0\d{9}$/.test(promptPay) || isValidThaiTaxId(promptPay)))
+    return fail("PromptPay ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขประจำตัวผู้เสียภาษี 13 หลัก", "PromptPay must be a 10-digit mobile number or a 13-digit tax ID");
+  const accountNo = (patch.bankAccountNo ?? company.bankAccountNo ?? "").trim();
+  if (accountNo && !/^[\d -]{6,30}$/.test(accountNo)) return fail("เลขที่บัญชีไม่ถูกต้อง", "The account number isn't valid");
   // Opening balances and the closed-through date are set by their own actions, never by this form.
   const clean: CompanyProfile = {
     ...company,
@@ -1475,6 +1485,11 @@ export function updateCompanyProfile(s: Store, ctx: Ctx, patch: Pick<CompanyProf
     address: { th: patch.address.th.trim(), en: patch.address.en.trim() },
     phone: patch.phone.trim(),
     email: patch.email.trim(),
+    bankName: (patch.bankName ?? company.bankName ?? "").trim(),
+    bankBranch: (patch.bankBranch ?? company.bankBranch ?? "").trim(),
+    bankAccountName: (patch.bankAccountName ?? company.bankAccountName ?? "").trim(),
+    bankAccountNo: accountNo,
+    promptPayId: promptPay,
   };
   const changes = describeChanges(
     { ...company, name: company.name.en, address: company.address.en },
@@ -1486,6 +1501,41 @@ export function updateCompanyProfile(s: Store, ctx: Ctx, patch: Pick<CompanyProf
   return OK;
 }
 
+
+/** Logo, authorised signature or company stamp: a small image, or "" to remove it. */
+export function setCompanyImage(s: Store, ctx: Ctx, kind: "logo" | "signature" | "stamp", dataUrl: string): ActionResult {
+  const { company, setCompany, pushAudit, allowed } = bind(s, ctx);
+
+  if (!allowed("manageCompany")) return DENIED;
+  if (dataUrl && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) return fail("ต้องเป็นรูป PNG, JPEG หรือ WebP", "It must be a PNG, JPEG or WebP image");
+  if (dataUrl.length > 400_000) return fail("รูปใหญ่เกินไป (ไม่เกิน 300 KB)", "The image is too large (300 KB at most)");
+  setCompany({ ...company, [kind]: dataUrl });
+  const label = { logo: { th: "โลโก้", en: "logo" }, signature: { th: "ลายเซ็นผู้มีอำนาจ", en: "authorised signature" }, stamp: { th: "ตราประทับ", en: "company stamp" } }[kind];
+  pushAudit({
+    entityType: "company",
+    entityId: "COMPANY",
+    action: "updated",
+    summary: dataUrl ? { th: `เปลี่ยน${label.th}`, en: `Changed the ${label.en}` } : { th: `ลบ${label.th}`, en: `Removed the ${label.en}` },
+  });
+  return OK;
+}
+
+/** Whether documents the company issues carry the signature and stamp images. */
+export function setPrintSignature(s: Store, ctx: Ctx, on: boolean): ActionResult {
+  const { company, setCompany, pushAudit, allowed } = bind(s, ctx);
+
+  if (!allowed("manageCompany")) return DENIED;
+  if (on && (!company.signature || !company.stamp)) return fail("อัปโหลดลายเซ็นและตราประทับก่อน", "Upload the signature and the stamp first");
+  if (Boolean(company.printSignature) === on) return OK;
+  setCompany({ ...company, printSignature: on });
+  pushAudit({
+    entityType: "company",
+    entityId: "COMPANY",
+    action: "updated",
+    summary: on ? { th: "พิมพ์ลายเซ็นและตราประทับบนเอกสาร", en: "Documents now carry the signature and stamp" } : { th: "เลิกพิมพ์ลายเซ็นและตราประทับ", en: "Documents no longer carry the signature and stamp" },
+  });
+  return OK;
+}
 
 // ───────────────────────────── exchange rates ─────────────────────────────
 

@@ -618,4 +618,17 @@ export interface CompanyProfile {
   openingBank: number;
   /** Accounting months up to and including this date are closed: nothing can be dated into them. */
   closedThrough?: string;
+  /** Where customers pay — printed on invoices, statements and reminders. */
+  bankName?: string;
+  bankBranch?: string;
+  bankAccountName?: string;
+  bankAccountNo?: string;
+  /** PromptPay ID (13-digit tax ID or a mobile number) — a payment QR code is printed when set. */
+  promptPayId?: string;
+  /** Images as data URLs (PNG/JPEG/WebP), so documents render the same printed, emailed or offline. */
+  logo?: string;
+  signature?: string;
+  stamp?: string;
+  /** Print the authorised signature and company stamp on documents the company issues. */
+  printSignature?: boolean;
 }

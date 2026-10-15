@@ -345,6 +345,7 @@ function QuotationPrint({ quote: q, onClose }: { quote: Quotation; onClose: () =
     <PrintFrame
       onClose={onClose}
       email={{ to: customer?.email, subject: `ใบเสนอราคา / Quotation ${q.quoteNo}`, document: `quotation ${q.quoteNo}`, filename: q.quoteNo, entityType: "quotation", entityId: q.quoteNo }}
+      runningTitle={`ใบเสนอราคา / Quotation ${q.quoteNo}`}
     >
       <DocumentHeader
         title={{ th: "ใบเสนอราคา", en: "Quotation" }}
@@ -428,7 +429,7 @@ function QuotationPrint({ quote: q, onClose }: { quote: Quotation; onClose: () =
       <p className="mt-3 text-xs text-gray-500">
         <Both th="ราคารวมภาษีมูลค่าเพิ่มแล้ว · ใบเสนอราคายังไม่ได้สำรองสินค้า สินค้าจะจัดสรรเมื่อยืนยันการสั่งซื้อ" en="Prices include VAT. Stock is allocated when the order is confirmed." />
       </p>
-      <Signatures left={{ th: "ผู้เสนอราคา", en: "Quoted by" }} right={{ th: "ผู้อนุมัติสั่งซื้อ (ลูกค้า)", en: "Accepted by (customer)" }} />
+      <Signatures left={{ th: "ผู้เสนอราคา", en: "Quoted by" }} right={{ th: "ผู้อนุมัติสั่งซื้อ (ลูกค้า)", en: "Accepted by (customer)" }} signed="left" signedDate={q.date} />
     </PrintFrame>
   );
 }

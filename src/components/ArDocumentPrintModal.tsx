@@ -4,7 +4,7 @@ import type { ArDocument } from "../data/types";
 import { Masked } from "./Masked";
 import { splitVat } from "../lib/business";
 import { thaiBahtText, englishBahtText } from "../lib/amountInWords";
-import { Both, BuyerBlock, CopyStamp, CopySwitch, DocDate, DocField, DocTh, DocumentHeader, PrintFrame, Signatures } from "./TaxDocument";
+import { Both, BuyerBlock, Copies, CopyStamp, CopySwitch, DocDate, DocField, DocTh, DocumentHeader, PrintFrame, Signatures, type CopyMode } from "./TaxDocument";
 
 const money = (n: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -23,7 +23,7 @@ const METHODS = {
 /** A receipt, credit note or debit note as printed for the customer. Opening balances aren't documents to print. */
 export function ArDocumentPrintModal({ doc, onClose }: { doc: ArDocument | null; onClose: () => void }) {
   const { customers, salesOrders, taxSettings } = useData();
-  const [copy, setCopy] = useState<"original" | "copy">("original");
+  const [copy, setCopy] = useState<CopyMode>("original");
   if (!doc || doc.type === "openingBalance") return null;
 
   const customer = customers.find((c) => c.customerId === doc.customerId);
@@ -47,10 +47,15 @@ export function ArDocumentPrintModal({ doc, onClose }: { doc: ArDocument | null;
         entityType: "customer",
         entityId: doc.customerId,
       }}
+      runningTitle={`${title.th} / ${title.en} ${doc.docNo}`}
     >
+      <Copies
+        mode={copy}
+        render={(c) => (
+          <>
       <DocumentHeader
         title={title}
-        stamp={<CopyStamp value={copy} />}
+        stamp={<CopyStamp value={c} />}
         meta={[
           { label: { th: "เลขที่", en: "No." }, value: doc.docNo },
           { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={doc.date} /> },
@@ -121,9 +126,19 @@ export function ArDocumentPrintModal({ doc, onClose }: { doc: ArDocument | null;
         </Masked>
       </div>
 
+      {!isNote && (
+        <p className="mt-4 text-sm text-gray-700">
+          <Both th="ได้รับเงินตามรายการข้างต้นไว้ถูกต้องครบถ้วนแล้ว" en="Received the above payment in full, with thanks." />
+        </p>
+      )}
       <Signatures
         left={isNote ? { th: "ผู้รับเอกสาร", en: "Received by" } : { th: "ผู้จ่ายเงิน", en: "Paid by" }}
         right={isNote ? { th: "ผู้มีอำนาจลงนาม", en: "Authorised signature" } : { th: "ผู้รับเงิน", en: "Collected by" }}
+        signed="right"
+        signedDate={doc.date}
+      />
+          </>
+        )}
       />
     </PrintFrame>
   );

@@ -21,6 +21,7 @@ import {
   revenueExVat,
 } from "../lib/business";
 import type { ChannelCode } from "../data/types";
+import { both } from "../i18n/translations";
 
 
 interface ExportSectionProps {
@@ -202,7 +203,7 @@ export default function Reports() {
         onExport={() =>
           exportToExcel(
             "sales-by-sku",
-            [t("salesOrders.col.sku"), t("products.col.name"), t("reports.colOrders"), t("reports.colQty"), t("reports.colNetValue")],
+            [both("salesOrders.col.sku"), both("products.col.name"), both("reports.colOrders"), both("reports.colQty"), both("reports.colNetValue")],
             bySku.map((r) => [r.sku, r.productName, r.orders, r.qty, maskIfRestricted(r.netValue, canViewSensitive)]),
           )
         }
@@ -239,7 +240,7 @@ export default function Reports() {
         onExport={() =>
           exportToExcel(
             "sales-by-channel",
-            [t("customers.col.channelType"), t("reports.colOrders"), t("reports.colNetValue"), t("reports.colAvgDiscount")],
+            [both("customers.col.channelType"), both("reports.colOrders"), both("reports.colNetValue"), both("reports.colAvgDiscount")],
             byChannel.map((r) => [
               t(`lookup.channel.${r.channel}`),
               r.orders,
@@ -281,7 +282,7 @@ export default function Reports() {
         onExport={() =>
           exportToExcel(
             "sales-by-customer",
-            [t("salesOrders.col.customerName"), t("reports.colOrders"), t("reports.colNetValue"), t("customers.col.outstandingBalance")],
+            [both("salesOrders.col.customerName"), both("reports.colOrders"), both("reports.colNetValue"), both("customers.col.outstandingBalance")],
             byCustomer.map((r) => [r.name, r.orders, maskIfRestricted(r.netValue, canViewSensitive), maskIfRestricted(r.outstanding, canViewSensitive)]),
           )
         }
@@ -326,7 +327,7 @@ export default function Reports() {
         onExport={() =>
           exportToExcel(
             "inventory-by-pipeline-status",
-            [t("common.status"), t("reports.colOrderCount"), t("reports.colStockValue")],
+            [both("common.status"), both("reports.colOrderCount"), both("reports.colStockValue")],
             byPipelineStatus.map((r) => [
               r.key === "inTransit" ? t("reports.pipelineInTransit") : t("reports.pipelineAvailable"),
               r.count,
@@ -365,7 +366,7 @@ export default function Reports() {
         onExport={() =>
           exportToExcel(
             "inventory-by-status",
-            [t("common.status"), t("reports.colLots"), t("reports.colQtyOnHand"), t("reports.colStockValue")],
+            [both("common.status"), both("reports.colLots"), both("reports.colQtyOnHand"), both("reports.colStockValue")],
             byInventoryStatus.map((r) => [t(`status.${r.status}`), r.lots, r.qty, maskIfRestricted(r.value, canViewSensitive)]),
           )
         }
@@ -400,7 +401,7 @@ export default function Reports() {
         onExport={() =>
           exportToExcel(
             "tax-sales-reconciliation",
-            [t("reports.colMonth"), t("reports.colSalesNetValue"), t("importOrderDetail.importDuty"), t("importOrderDetail.exciseTax"), t("importOrderDetail.vat"), t("importOrderDetail.totalTax")],
+            [both("reports.colMonth"), both("reports.colSalesNetValue"), both("importOrderDetail.importDuty"), both("importOrderDetail.exciseTax"), both("importOrderDetail.vat"), both("importOrderDetail.totalTax")],
             byMonth.map((r) => [
               r.month,
               maskIfRestricted(r.salesNetValue, canViewSensitive),

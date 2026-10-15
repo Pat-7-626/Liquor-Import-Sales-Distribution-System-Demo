@@ -19,6 +19,7 @@ import { useRunAction } from "../lib/useRunAction";
 import { NewButton } from "../components/NewButton";
 import type { Bilingual, LicenseCategory } from "../data/types";
 import { addDays, todayIso } from "../lib/business";
+import { both } from "../i18n/translations";
 
 const OUR_COMPANY: Bilingual = { th: "บริษัท เรา จำกัด", en: "Our Company Co., Ltd." };
 const LICENSE_TYPES: { key: string; category: LicenseCategory; type: Bilingual }[] = [
@@ -83,7 +84,7 @@ export default function Licenses() {
   const handleExport = () => {
     exportToExcel(
       "licenses",
-      [t("licenses.col.licenseNo"), t("licenses.col.type"), t("licenses.col.holder"), t("licenses.col.category"), t("licenses.col.expiryDate"), t("licenses.col.daysRemaining"), t("licenses.col.status")],
+      [both("licenses.col.licenseNo"), both("licenses.col.type"), both("licenses.col.holder"), both("licenses.col.category"), both("licenses.col.expiryDate"), both("licenses.col.daysRemaining"), both("licenses.col.status")],
       filtered.map((l) => [l.licenseNo, bi(l.type), bi(l.holder), t(`common.${l.category}`), l.expiryDate, l.daysRemaining, t(`status.${l.status}`)]),
     );
   };

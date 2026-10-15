@@ -23,6 +23,7 @@ import { ACCOUNTS, EXPENSE_ACCOUNTS, SYSTEM_ACCOUNTS, bankAmount, profitAndLoss,
 import { MATCH_WINDOW_DAYS, WHT_RATES, firstOfMonth, lastOfMonth, reconcile, withholdingByMonth } from "../domain/finance";
 import type { BankLineInput, ExpenseInput } from "../state/DataContext";
 import type { BankLine, Expense, PaymentMethod } from "../data/types";
+import { both } from "../i18n/translations";
 
 const METHODS: PaymentMethod[] = ["transfer", "cheque", "cash"];
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -124,7 +125,7 @@ export function Expenses() {
           onClick={() =>
             exportToExcel(
               "expenses",
-              [t("fin.docNo"), t("erp.date"), t("fin.payee"), t("tax.taxId"), t("gl.account"), t("fin.description"), t("fin.amount"), t("vat.vat"), t("fin.wht"), t("fin.paid")],
+              [both("fin.docNo"), both("erp.date"), both("fin.payee"), both("tax.taxId"), both("gl.account"), both("fin.description"), both("fin.amount"), both("vat.vat"), both("fin.wht"), both("fin.paid")],
               shown.map((x) => [x.docNo, x.date, x.payee, x.payeeTaxId, `${x.account} ${accountName(x.account)}`, x.description, x.amount, x.vat, x.whtAmount, x.paid]),
             )
           }
@@ -341,10 +342,11 @@ export function Withholding() {
   const exportMonth = (month: string, payeeType: Expense["payeeType"]) =>
     exportToExcel(
       `${payeeType === "individual" ? "pnd3" : "pnd53"}-${month}`,
-      [t("fin.seq"), t("fin.payee"), t("tax.taxId"), t("erp.date"), t("fin.description"), t("fin.whtRate"), t("fin.amount"), t("fin.wht")],
+      [both("fin.seq"), both("fin.payee"), both("tax.taxId"), both("erp.date"), both("fin.description"), both("fin.whtRate"), both("fin.amount"), both("fin.wht")],
       expenses
         .filter((x) => x.date.startsWith(month) && x.whtAmount > 0 && x.payeeType === payeeType)
-        .sort((a, b) => a.date.localeCompare(b.date))
+        // The same order the certificates number their "line no. on the return".
+        .sort((a, b) => a.date.localeCompare(b.date) || a.docNo.localeCompare(b.docNo))
         .map((x, i) => [i + 1, x.payee, x.payeeTaxId, x.date, x.description, `${x.whtRate}%`, x.amount, x.whtAmount]),
     );
 

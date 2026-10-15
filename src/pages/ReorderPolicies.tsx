@@ -11,6 +11,7 @@ import { formatNumber } from "../lib/format";
 import { computeInboundBySku } from "../lib/business";
 import { exportToExcel } from "../lib/export";
 import { useRunAction } from "../lib/useRunAction";
+import { both } from "../i18n/translations";
 
 export default function ReorderPolicies() {
   const { t, lang } = useLanguage();
@@ -69,7 +70,7 @@ export default function ReorderPolicies() {
         onExport={() =>
           exportToExcel(
             "reorder-policies",
-            [t("products.col.sku"), t("products.col.name"), t("erp.reorderPoint"), t("erp.reorderQty"), t("erp.preferredSupplier")],
+            [both("products.col.sku"), both("products.col.name"), both("erp.reorderPoint"), both("erp.reorderQty"), both("erp.preferredSupplier")],
             filtered.map((r) => [r.product.sku, r.product.name, r.policy?.reorderPoint ?? "", r.policy?.reorderQty ?? "", r.policy?.preferredSupplierId ?? ""]),
           )
         }

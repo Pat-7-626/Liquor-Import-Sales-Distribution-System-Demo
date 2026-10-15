@@ -19,6 +19,7 @@ import { formatCurrency } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { formatPercent } from "../lib/analytics";
 import { AGING_BUCKETS, OVERDUE_HOLD_DAYS, agingTotals, computeArOpenItems, daysOverdue, todayIso, type AgingBucket } from "../lib/business";
+import { both } from "../i18n/translations";
 
 /** Ordinal ramp: on time → most overdue. */
 const BUCKET_COLORS: Record<AgingBucket, string> = {
@@ -72,7 +73,7 @@ export default function ArAging() {
   const handleExport = () =>
     exportToExcel(
       "ar-aging",
-      [t("customers.col.customerId"), t("salesOrders.col.customerName"), t("ar.creditTermDays"), ...AGING_BUCKETS.map(bucketLabel), t("ar.totalOpen")],
+      [both("customers.col.customerId"), both("salesOrders.col.customerName"), both("ar.creditTermDays"), ...AGING_BUCKETS.map(bucketLabel), both("ar.totalOpen")],
       rows.map((r) => [r.c.customerId, bi(r.c.name), r.c.creditTermDays, ...AGING_BUCKETS.map((b) => r.buckets[b]), r.total]),
     );
 

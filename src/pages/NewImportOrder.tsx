@@ -24,6 +24,7 @@ import {
 } from "../lib/business";
 import { useRunAction } from "../lib/useRunAction";
 import type { ImportLogistics, Supplier } from "../data/types";
+import { both } from "../i18n/translations";
 
 interface DraftLine {
   id: string;
@@ -235,13 +236,13 @@ export default function NewImportOrder() {
     exportToExcel(
       "import-order-template",
       [
-        t("newImportOrder.lineSku"),
-        t("products.col.name"),
-        t("newImportOrder.lineAbv"),
-        t("products.col.packageSize"),
-        t("newImportOrder.lineQty"),
-        t("products.col.hsCode"),
-        t("newImportOrder.lineUnitPrice"),
+        both("newImportOrder.lineSku"),
+        both("products.col.name"),
+        both("newImportOrder.lineAbv"),
+        both("products.col.packageSize"),
+        both("newImportOrder.lineQty"),
+        both("products.col.hsCode"),
+        both("newImportOrder.lineUnitPrice"),
       ],
       [["SKU-1001", "Golden Barrel Single Malt 12Y", 43, 700, 100, "2208.30", 1850]],
     );

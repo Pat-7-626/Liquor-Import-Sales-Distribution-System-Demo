@@ -12,6 +12,7 @@ import { formatCurrency, formatDate, maskIfRestricted } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { useRole } from "../state/RoleContext";
 import { ArDocumentPrintModal } from "../components/ArDocumentPrintModal";
+import { both } from "../i18n/translations";
 
 /** + raises what the customer owes, − lowers it. */
 const raisesBalance = (type: string) => type === "debitNote" || type === "openingBalance";
@@ -81,7 +82,7 @@ export default function ArDocuments() {
         onExport={() =>
           exportToExcel(
             "receipts-credit-notes",
-            [t("erp.docNo"), t("erp.date"), t("erp.docType"), t("customers.col.customerId"), t("salesOrders.col.customerName"), t("erp.amount"), t("erp.paymentMethod"), t("erp.reference"), t("auditTrail.col.actor")],
+            [both("erp.docNo"), both("erp.date"), both("erp.docType"), both("customers.col.customerId"), both("salesOrders.col.customerName"), both("erp.amount"), both("erp.paymentMethod"), both("erp.reference"), both("auditTrail.col.actor")],
             filtered.map((d) => [
               d.docNo,
               d.date,

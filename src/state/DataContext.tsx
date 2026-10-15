@@ -90,7 +90,11 @@ interface DataContextValue extends ClientState {
     patch: { creditLimit: number; standardDiscount: number; channelType: ChannelCode; creditTermDays: number },
   ) => Result;
   updateCustomerProfile: (customerId: string, profile: CustomerProfileInput) => Result;
-  updateCompanyProfile: (profile: CompanyProfile) => Result;
+  /** The text details only; images and opening balances have their own commands. */
+  updateCompanyProfile: (
+    profile: Pick<CompanyProfile, "name" | "taxId" | "branch" | "address" | "phone" | "email"> &
+      Partial<Pick<CompanyProfile, "bankName" | "bankBranch" | "bankAccountName" | "bankAccountNo" | "promptPayId">>,
+  ) => Result;
   /** `appliesTo`: the order whose invoice is being paid (otherwise the oldest invoices are settled first). */
   recordPayment: (customerId: string, amount: number, method: PaymentMethod, reference: string, appliesTo?: string | null) => Result;
   saveExchangeRate: (rate: ExchangeRate) => Result;
@@ -117,6 +121,8 @@ interface DataContextValue extends ClientState {
   removeDocument: (orderNo: string, docId: string) => Result;
 
   setOpeningBalances: (openingDate: string, openingBank: number) => Result;
+  setCompanyImage: (kind: "logo" | "signature" | "stamp", dataUrl: string) => Result;
+  setPrintSignature: (on: boolean) => Result;
   closePeriod: (through: string) => Result;
   reopenPeriod: (reason: string) => Result;
   recordExpense: (input: ExpenseInput) => Result<{ docNo?: string }>;
@@ -243,6 +249,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       attachDocument,
       removeDocument: c("removeDocument"),
       setOpeningBalances: c("setOpeningBalances"),
+      setCompanyImage: c("setCompanyImage"),
+      setPrintSignature: c("setPrintSignature"),
       closePeriod: c("closePeriod"),
       reopenPeriod: c("reopenPeriod"),
       recordExpense: c("recordExpense"),

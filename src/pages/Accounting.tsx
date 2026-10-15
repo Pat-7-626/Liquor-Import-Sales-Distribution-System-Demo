@@ -15,6 +15,7 @@ import { addDays, todayIso } from "../lib/business";
 import { SERIES, formatCompact, monthLabel } from "../lib/analytics";
 import { useLedger } from "../lib/useLedger";
 import { ACCOUNTS, balanceSheet, profitAndLoss, trialBalance, type JournalEntry } from "../domain/ledger";
+import { both } from "../i18n/translations";
 
 // ───────────────────────────── shared ─────────────────────────────
 
@@ -254,7 +255,7 @@ export function Journal() {
           onClick={() =>
             exportToExcel(
               "journal",
-              [t("erp.date"), t("gl.source"), t("gl.reference"), t("gl.memo"), t("gl.account"), t("gl.debit"), t("gl.credit")],
+              [both("erp.date"), both("gl.source"), both("gl.reference"), both("gl.memo"), both("gl.account"), both("gl.debit"), both("gl.credit")],
               shown.flatMap((e) => e.lines.map((l) => [e.date, t(`gl.src.${e.source}`), e.ref, bi(e.memo), `${l.account} ${name(l.account)}`, l.debit || "", l.credit || ""])),
             )
           }
@@ -512,7 +513,7 @@ export function VatReturn() {
           onClick={() =>
             exportToExcel(
               `vat-${month}`,
-              [t("vat.report"), t("erp.date"), t("gl.reference"), t("vat.party"), t("tax.taxId"), t("tax.branch"), t("vat.base"), t("vat.vat")],
+              [both("vat.report"), both("erp.date"), both("gl.reference"), both("vat.party"), both("tax.taxId"), both("tax.branch"), both("vat.base"), both("vat.vat")],
               [
                 ...outputRows.map((r) => [t("vat.outputReport"), r.e.date, r.e.ref, r.c ? bi(r.c.name) : "", r.c?.taxId ?? "", r.c?.branch ?? "", Math.round(r.base * 100) / 100, Math.round(r.vat * 100) / 100]),
                 ...inputRows.map((r) => [

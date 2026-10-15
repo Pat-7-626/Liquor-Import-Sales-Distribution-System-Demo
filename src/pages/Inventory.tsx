@@ -15,6 +15,7 @@ import { computeInventoryAge } from "../lib/business";
 import { exportToExcel } from "../lib/export";
 import { useRunAction } from "../lib/useRunAction";
 import { useWarehouseName } from "../lib/useWarehouseName";
+import { both } from "../i18n/translations";
 
 const STATUS_OPTIONS = ["normal", "agingStart", "agingLong"];
 /** Lots at or below this quantity are flagged so they get re-ordered or cleared. */
@@ -91,7 +92,7 @@ export default function Inventory() {
   const handleExport = () => {
     exportToExcel(
       "inventory",
-      [t("inventory.col.sku"), t("inventory.col.productName"), t("inventory.col.lotBatch"), t("inventory.col.receivedDate"), t("inventory.col.quantityRemaining"), t("inventory.col.ageDays"), t("inventory.col.status"), t("inventory.col.warehouse"), t("importOrderDetail.exciseStampDate")],
+      [both("inventory.col.sku"), both("inventory.col.productName"), both("inventory.col.lotBatch"), both("inventory.col.receivedDate"), both("inventory.col.quantityRemaining"), both("inventory.col.ageDays"), both("inventory.col.status"), both("inventory.col.warehouse"), both("importOrderDetail.exciseStampDate")],
       filtered.map((i) => [i.sku, i.productName, i.lotBatch, i.receivedDate, i.quantityRemaining, i.ageDays, t(`status.${i.status}`), warehouseName(i.warehouse), i.exciseStampDate ?? ""]),
     );
   };

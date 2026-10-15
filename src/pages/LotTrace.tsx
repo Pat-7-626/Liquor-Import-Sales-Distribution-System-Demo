@@ -15,6 +15,7 @@ import { exportToExcel } from "../lib/export";
 import { useWarehouseName } from "../lib/useWarehouseName";
 import { query, useApi } from "../lib/useApi";
 import type { StockMovement } from "../data/types";
+import { both } from "../i18n/translations";
 
 export default function LotTrace() {
   const { t, lang } = useLanguage();
@@ -54,7 +55,7 @@ export default function LotTrace() {
   const exportRecallList = () =>
     exportToExcel(
       `recall-${lotBatch}`,
-      [t("salesOrders.col.orderNo"), t("erp.orderDate"), t("customers.col.customerId"), t("salesOrders.col.customerName"), t("salesOrders.col.quantity"), t("salesOrders.col.deliveryStatus")],
+      [both("salesOrders.col.orderNo"), both("erp.orderDate"), both("customers.col.customerId"), both("salesOrders.col.customerName"), both("salesOrders.col.quantity"), both("salesOrders.col.deliveryStatus")],
       shipments.map((o) => [o.orderNo, o.orderDate, o.customerId, bi(o.customerName), o.quantity, t(`status.${o.deliveryStatus}`)]),
     );
 

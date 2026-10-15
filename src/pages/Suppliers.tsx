@@ -15,6 +15,7 @@ import { formatCurrency } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { useRunAction } from "../lib/useRunAction";
 import { nextOrderNumber } from "../lib/business";
+import { both } from "../i18n/translations";
 
 const COUNTRIES: CountryCode[] = ["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan"];
 const OPEN_STATUSES = new Set(["staging", "pendingApproval", "approved", "customsCleared", "issueDetected"]);
@@ -110,7 +111,7 @@ export default function Suppliers() {
         onExport={() =>
           exportToExcel(
             "suppliers",
-            [t("erp.supplierId"), t("erp.supplierName"), t("importOrders.col.country"), t("importOrderDetail.origin"), t("importOrders.col.incoterms"), t("importOrderDetail.currency"), t("importOrderDetail.paymentTerms"), t("erp.contactEmail"), t("common.status")],
+            [both("erp.supplierId"), both("erp.supplierName"), both("importOrders.col.country"), both("importOrderDetail.origin"), both("importOrders.col.incoterms"), both("importOrderDetail.currency"), both("importOrderDetail.paymentTerms"), both("erp.contactEmail"), both("common.status")],
             filtered.map((r) => [r.supplierId, r.name, t(`lookup.country.${r.country}`), r.origin, r.defaultIncoterms, r.currency, r.paymentTerms, r.contactEmail, r.active ? t("erp.active") : t("erp.inactive")]),
           )
         }

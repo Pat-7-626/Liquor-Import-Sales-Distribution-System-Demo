@@ -12,6 +12,7 @@ import { exportToExcel } from "../lib/export";
 import { useWarehouseName } from "../lib/useWarehouseName";
 import { query, useApi } from "../lib/useApi";
 import type { StockMovement } from "../data/types";
+import { both } from "../i18n/translations";
 
 const NO_MOVES: StockMovement[] = [];
 
@@ -120,7 +121,7 @@ export default function GoodsReceipts() {
         onExport={() =>
           exportToExcel(
             "goods-receipts",
-            [t("erp.date"), t("importOrders.col.orderNo"), t("importOrders.col.supplier"), t("inventory.col.warehouse"), t("importOrderDetail.orderedQty"), t("importOrderDetail.receivedQty"), t("reports.colLots")],
+            [both("erp.date"), both("importOrders.col.orderNo"), both("importOrders.col.supplier"), both("inventory.col.warehouse"), both("importOrderDetail.orderedQty"), both("importOrderDetail.receivedQty"), both("reports.colLots")],
             filtered.map((r) => [r.receivedDate, r.order.orderNo, r.order.supplier, r.warehouse ? warehouseName(r.warehouse) : "", r.ordered, r.received, r.lots.join(" ")]),
           )
         }

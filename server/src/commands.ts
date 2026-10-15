@@ -33,7 +33,19 @@ const COMMANDS = {
   },
   updateCompanyProfile: {
     args: z.tuple([
-      z.object({ name: bi, taxId: z.string().max(20), branch: z.string().max(10), address: bi, phone: str, email: str }),
+      z.object({
+        name: bi,
+        taxId: z.string().max(20),
+        branch: z.string().max(10),
+        address: bi,
+        phone: str,
+        email: str,
+        bankName: z.string().max(100).optional(),
+        bankBranch: z.string().max(100).optional(),
+        bankAccountName: z.string().max(150).optional(),
+        bankAccountNo: z.string().max(30).optional(),
+        promptPayId: z.string().max(20).optional(),
+      }),
     ]),
     run: A.updateCompanyProfile,
   },
@@ -49,6 +61,8 @@ const COMMANDS = {
   },
   scheduleDelivery: { args: z.tuple([id, date]), run: A.scheduleDelivery },
   setOpeningBalances: { args: z.tuple([date, num]), run: A.setOpeningBalances },
+  setCompanyImage: { args: z.tuple([z.enum(["logo", "signature", "stamp"]), z.string().max(400_000)]), run: A.setCompanyImage },
+  setPrintSignature: { args: z.tuple([z.boolean()]), run: A.setPrintSignature },
   closePeriod: { args: z.tuple([date]), run: A.closePeriod },
   reopenPeriod: { args: z.tuple([z.string().trim().max(200)]), run: A.reopenPeriod },
   recordExpense: {

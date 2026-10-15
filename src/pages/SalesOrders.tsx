@@ -25,6 +25,7 @@ import { ViewSwitcher, useViewMode } from "../components/ViewSwitcher";
 import { KanbanBoard, BoardCard } from "../components/KanbanBoard";
 import { CalendarView, CalendarLegend, type CalendarEvent, type EventTone } from "../components/CalendarView";
 import type { SalesOrder } from "../data/types";
+import { both } from "../i18n/translations";
 
 const STATUS_FILTER_OPTIONS = ["pendingApproval", "rejected", ...DELIVERY_STATUS_OPTIONS];
 const VIEWS = ["table", "board", "calendar"] as const;
@@ -86,24 +87,24 @@ export default function SalesOrders() {
     exportToExcel(
       "sales-orders",
       [
-        t("salesOrders.col.orderNo"),
-        t("erp.orderDate"),
-        t("salesOrders.col.customerName"),
-        t("salesOrders.col.line"),
-        t("salesOrders.col.sku"),
-        t("products.col.name"),
-        t("salesOrders.col.lotBatch"),
-        t("salesOrders.col.quantity"),
-        t("salesOrders.col.unitPrice"),
-        t("salesOrders.col.discountPercent"),
-        t("salesOrders.col.lineValue"),
-        t("salesOrders.col.netValue"),
-        t("ar.invoiceDate"),
-        t("ar.dueDate"),
-        t("salesOrders.col.deliveryStatus"),
-        t("salesOrders.col.taxInvoiceNo"),
-        t("salesOrders.col.deliveryNoteNo"),
-        t("salesOrders.col.approver"),
+        both("salesOrders.col.orderNo"),
+        both("erp.orderDate"),
+        both("salesOrders.col.customerName"),
+        both("salesOrders.col.line"),
+        both("salesOrders.col.sku"),
+        both("products.col.name"),
+        both("salesOrders.col.lotBatch"),
+        both("salesOrders.col.quantity"),
+        both("salesOrders.col.unitPrice"),
+        both("salesOrders.col.discountPercent"),
+        both("salesOrders.col.lineValue"),
+        both("salesOrders.col.netValue"),
+        both("ar.invoiceDate"),
+        both("ar.dueDate"),
+        both("salesOrders.col.deliveryStatus"),
+        both("salesOrders.col.taxInvoiceNo"),
+        both("salesOrders.col.deliveryNoteNo"),
+        both("salesOrders.col.approver"),
       ],
       // One row per order line, so the sheet can be pivoted by product or lot.
       filtered.flatMap((o) =>

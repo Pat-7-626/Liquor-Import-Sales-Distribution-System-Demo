@@ -16,6 +16,7 @@ import { TableContainer, EmptyRow, th, td } from "../components/Table";
 import { selectClass, inputClass } from "../components/FormKit";
 import { exportToExcel } from "../lib/export";
 import { useRole } from "../state/RoleContext";
+import { both } from "../i18n/translations";
 
 const ACTION_TONE: Record<AuditAction, string> = {
   created: "bg-blue-50 text-blue-700 ring-blue-600/20",
@@ -131,7 +132,7 @@ export default function AuditTrail() {
     const all = await api<AuditPage>(query("/api/audit", { ...filters, offset: 0, limit: 5000 }));
     exportToExcel(
       "audit-trail",
-      [t("auditTrail.col.timestamp"), t("auditTrail.col.entity"), t("common.status"), t("auditTrail.col.action"), t("auditTrail.col.actor"), t("auditTrail.col.summary")],
+      [both("auditTrail.col.timestamp"), both("auditTrail.col.entity"), both("common.status"), both("auditTrail.col.action"), both("auditTrail.col.actor"), both("auditTrail.col.summary")],
       all.rows.map((e) => [e.timestamp, e.entityId, t(`auditTrail.entityType.${e.entityType}`), t(`auditTrail.action.${e.action}`), bi(e.actor), summaryOf(e)]),
     );
   };

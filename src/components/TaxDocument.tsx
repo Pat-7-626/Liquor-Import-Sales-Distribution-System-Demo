@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { promptPayPayload } from "../lib/promptpay";
 import { EmailButton, type EmailSpec } from "./EmailDocument";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
@@ -192,7 +193,9 @@ export function DocumentHeader({
   return (
     <div className="mb-5">
       <div className="mb-4 flex flex-col gap-3 border-b-2 border-gray-900 pb-4 sm:flex-row sm:items-end sm:justify-between print:flex-row print:items-end">
-        <div>
+        <div className="flex items-end gap-4">
+          {company.logo && <img src={company.logo} alt="" className="max-h-16 max-w-[9rem] object-contain" data-testid="doc-logo" />}
+          <div>
           {stamp && <div className="mb-2">{stamp}</div>}
           <h2 className="font-display text-2xl font-semibold leading-tight text-gray-900">{title.th}</h2>
           <p className="text-sm uppercase tracking-wide text-gray-500">{title.en}</p>
@@ -202,6 +205,7 @@ export function DocumentHeader({
               <Both th={company.name.th} en={company.name.en} />
             </p>
           )}
+          </div>
         </div>
         <DocMeta rows={meta} />
       </div>
@@ -215,18 +219,89 @@ export function DocumentHeader({
   );
 }
 
-export function Signatures({ left, right }: { left: Bilingual; right: Bilingual }) {
+/**
+ * Signature lines. `signed` is the company's side: when Company Profile says so, its authorised signature
+ * (and stamp — on `stamp`'s side if given) is printed there.
+ */
+export function Signatures({ left, right, signed, stamp, signedDate }: { left: Bilingual; right: Bilingual; signed?: "left" | "right"; stamp?: "left" | "right"; signedDate?: string }) {
+  const { company } = useData();
+  const sign = Boolean(company.printSignature && company.signature);
+  const stampSide = stamp ?? signed;
   return (
-    <div className="mt-12 grid grid-cols-2 gap-10 text-center text-sm text-gray-600">
-      {[left, right].map((s, i) => (
-        <div key={i}>
-          <div className="border-t border-gray-400 pt-2">
-            {s.th}
-            <span className="block text-xs text-gray-400">{s.en}</span>
+    <div className="mt-10 grid grid-cols-2 gap-10 text-center text-sm text-gray-600" style={{ breakInside: "avoid" }}>
+      {([["left", left], ["right", right]] as const).map(([side, s]) => (
+        <div key={side} className="relative">
+          <div className="flex h-16 items-end justify-center">
+            {sign && signed === side && <img src={company.signature} alt="" className="max-h-16 max-w-[70%] object-contain" data-testid="doc-signature" />}
           </div>
-          <p className="mt-3 text-xs text-gray-400">วันที่ / Date ____ / ____ / ______</p>
+          {sign && company.stamp && stampSide === side && (
+            <img src={company.stamp} alt="" className="pointer-events-none absolute right-2 top-0 h-20 w-20 object-contain opacity-90" data-testid="doc-stamp" />
+          )}
+          <div className="border-t border-gray-400 pt-2">
+            <Both th={s.th} en={s.en} />
+          </div>
+          <p className="mt-3 text-xs text-gray-400">
+            {sign && signed === side && signedDate ? <DocDate iso={signedDate} /> : "วันที่ / Date ____ / ____ / ______"}
+          </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** A PromptPay QR code as an image (rendered once, embedded, so it also prints and goes into the PDF). */
+function PromptPayQr({ payload }: { payload: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    import("qrcode")
+      .then((q) => q.toString(payload, { type: "svg", margin: 1, errorCorrectionLevel: "M" }))
+      .then((svg) => !cancelled && setSrc(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`));
+    return () => {
+      cancelled = true;
+    };
+  }, [payload]);
+  return src ? <img src={src} alt="PromptPay QR" className="h-28 w-28" data-testid="promptpay-qr" /> : <div className="h-28 w-28 rounded bg-gray-100" />;
+}
+
+/**
+ * How to pay us: the bank account, and a PromptPay QR with the amount filled in. Shown on documents that
+ * ask for payment; nothing is shown until the details are set in Company Profile.
+ */
+export function PaymentBlock({ amount }: { amount: number }) {
+  const { company } = useData();
+  const payload = company.promptPayId ? promptPayPayload(company.promptPayId, amount > 0 ? Math.round(amount * 100) / 100 : undefined) : null;
+  const bank = company.bankAccountNo;
+  if (!bank && !payload) return null;
+  return (
+    <div className="mt-4 flex flex-col gap-4 rounded-lg border border-gray-200 p-3.5 sm:flex-row sm:items-center print:flex-row print:items-center" style={{ breakInside: "avoid" }} data-testid="payment-block">
+      <div className="flex-1">
+        <p className="mb-2 text-xs font-medium text-gray-500">
+          <Both th="การชำระเงิน" en="How to pay" />
+        </p>
+        {bank && (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <DocField label={{ th: "ธนาคาร", en: "Bank" }}>{company.bankName || "—"}</DocField>
+            <DocField label={{ th: "สาขา", en: "Branch" }}>{company.bankBranch || "—"}</DocField>
+            <DocField label={{ th: "ชื่อบัญชี", en: "Account name" }}>{company.bankAccountName || "—"}</DocField>
+            <DocField label={{ th: "เลขที่บัญชี", en: "Account no." }}>
+              <span className="font-medium tabular-nums">{bank}</span>
+            </DocField>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-gray-500">
+          <Both th="กรุณาอ้างอิงเลขที่เอกสารเมื่อโอนเงิน" en="Please quote the document number with your transfer." />
+        </p>
+      </div>
+      {payload && (
+        <div className="flex shrink-0 flex-col items-center text-center">
+          <PromptPayQr payload={payload} />
+          <p className="mt-1 text-xs font-medium text-gray-600">
+            <Both th="สแกนจ่ายด้วยพร้อมเพย์" en="Scan to pay (PromptPay)" />
+          </p>
+          {amount > 0 && <p className="text-xs tabular-nums text-gray-500">฿{new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -252,6 +327,7 @@ export function PrintFrame<T extends string>({
   onClose,
   extra,
   email,
+  runningTitle,
   children,
 }: {
   tabs?: { key: T; label: string }[];
@@ -261,6 +337,8 @@ export function PrintFrame<T extends string>({
   extra?: ReactNode;
   /** Offers "Email" when sending is set up and the viewer may see the document's figures. */
   email?: EmailSpec;
+  /** e.g. "ใบกำกับภาษี INV-2026-8801" — printed at the top of every page, with "page n of N" at the bottom. */
+  runningTitle?: string;
   children: ReactNode;
 }) {
   const { t } = useLanguage();
@@ -303,6 +381,7 @@ export function PrintFrame<T extends string>({
           </div>
         </div>
         <div ref={content} className="flex-1 overflow-y-auto px-8 py-8 text-gray-900 print:overflow-visible print:px-0 print:py-0">
+          <style>{pageCss(runningTitle)}</style>
           {children}
         </div>
       </div>
@@ -311,20 +390,60 @@ export function PrintFrame<T extends string>({
   );
 }
 
-/** Original / copy switch — a tax invoice is issued as an original for the buyer and a copy kept by the seller. */
-export function CopySwitch({ value, onChange }: { value: "original" | "copy"; onChange: (v: "original" | "copy") => void }) {
+/**
+ * Printed page furniture: the document's title and number at the top of every page, and "page n of N" at
+ * the bottom — so a long invoice's second page still says what it is. Table headings repeat by themselves.
+ */
+function pageCss(runningTitle?: string): string {
+  const quoted = (s: string) => `"${s.replace(/["\\]/g, "")}"`;
+  return `@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm 16mm;
+    ${runningTitle ? `@top-right { content: ${quoted(runningTitle)}; font-size: 8pt; color: #8a8378; }` : ""}
+    @bottom-right { content: "หน้า " counter(page) " / " counter(pages) "  ·  Page " counter(page) " of " counter(pages); font-size: 8pt; color: #8a8378; }
+  }
+  /* Slightly smaller type on paper: an A4 page is narrower than the screen, and long invoices fit more lines. */
+  html { font-size: 13px; }
+  thead { display: table-header-group; }
+  /* Totals print once, after the last line — not at the foot of every page. */
+  tfoot { display: table-row-group; }
+  tr { break-inside: avoid; }
+}`;
+}
+
+export type CopyMode = "original" | "copy" | "both";
+
+/**
+ * Original / copy switch — a tax invoice is issued as an original for the buyer and a copy kept by the
+ * seller. "Both" prints the two in one go, each on its own pages.
+ */
+export function CopySwitch({ value, onChange }: { value: CopyMode; onChange: (v: CopyMode) => void }) {
   return (
     <div className="flex rounded-lg border border-gray-300 p-0.5 text-xs font-medium">
-      {(["original", "copy"] as const).map((v) => (
+      {(["original", "copy", "both"] as const).map((v) => (
         <button
           key={v}
           onClick={() => onChange(v)}
           className={`rounded-md px-2.5 py-1 ${value === v ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+          data-testid={`copy-${v}`}
         >
-          {v === "original" ? "ต้นฉบับ / Original" : "สำเนา / Copy"}
+          {v === "original" ? "ต้นฉบับ / Original" : v === "copy" ? "สำเนา / Copy" : "ทั้งสองฉบับ / Both"}
         </button>
       ))}
     </div>
+  );
+}
+
+/** Renders a document once, or — for "both" — as the original, a page break, then the copy. */
+export function Copies({ mode, render }: { mode: CopyMode; render: (copy: "original" | "copy") => ReactNode }) {
+  if (mode !== "both") return <>{render(mode)}</>;
+  return (
+    <>
+      {render("original")}
+      <div className="my-10 border-t-2 border-dashed border-gray-300 print:my-0 print:border-0" style={{ breakAfter: "page" }} data-testid="copy-break" />
+      {render("copy")}
+    </>
   );
 }
 

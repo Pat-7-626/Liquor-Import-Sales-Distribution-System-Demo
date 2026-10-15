@@ -12,6 +12,7 @@ import { formatCurrency } from "../lib/format";
 import { computeChannelPrice } from "../lib/business";
 import { exportToExcel } from "../lib/export";
 import { useRunAction } from "../lib/useRunAction";
+import { both } from "../i18n/translations";
 
 export default function PriceLists() {
   const { t, lang } = useLanguage();
@@ -39,7 +40,7 @@ export default function PriceLists() {
   const handleExport = () =>
     exportToExcel(
       "price-lists",
-      [t("products.col.sku"), t("products.col.name"), t("products.col.suggestedPrice"), ...priceLists.map((l) => t(`lookup.channel.${l.channel}`))],
+      [both("products.col.sku"), both("products.col.name"), both("products.col.suggestedPrice"), ...priceLists.map((l) => both(`lookup.channel.${l.channel}`))],
       products.map((p) => [p.sku, p.name, p.suggestedPrice, ...priceLists.map((l) => computeChannelPrice(p, l.channel, priceLists))]),
     );
 

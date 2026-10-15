@@ -20,6 +20,7 @@ import { KanbanBoard, BoardCard } from "../components/KanbanBoard";
 import { CalendarView, CalendarLegend, type CalendarEvent, type EventTone } from "../components/CalendarView";
 import type { ImportOrder } from "../data/types";
 import { useRunAction } from "../lib/useRunAction";
+import { both } from "../i18n/translations";
 
 const STATUS_OPTIONS = [
   "staging",
@@ -87,7 +88,7 @@ export default function ImportOrders() {
   const handleExport = () => {
     exportToExcel(
       "import-orders",
-      [t("importOrders.col.orderNo"), t("importOrders.col.supplier"), t("importOrders.col.country"), t("importOrders.col.incoterms"), t("importOrders.col.orderDate"), t("importOrders.col.etaDate"), t("importOrders.col.totalValue"), t("importOrders.col.status"), t("importOrders.col.approver")],
+      [both("importOrders.col.orderNo"), both("importOrders.col.supplier"), both("importOrders.col.country"), both("importOrders.col.incoterms"), both("importOrders.col.orderDate"), both("importOrders.col.etaDate"), both("importOrders.col.totalValue"), both("importOrders.col.status"), both("importOrders.col.approver")],
       filtered.map((o) => [o.orderNo, o.supplier, t(`lookup.country.${o.country}`), o.incoterms, o.orderDate, o.etaDate, maskIfRestricted(o.totalValue, canViewSensitive), t(`status.${o.status}`), o.approver ? bi(o.approver) : ""]),
     );
   };

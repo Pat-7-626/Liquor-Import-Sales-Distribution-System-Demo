@@ -13,4 +13,10 @@ export const company: CompanyProfile = {
   email: "accounts@ourcompany.example",
   openingDate: "2026-04-30",
   openingBank: 4_000_000,
+  // Illustrative bank account; the PromptPay ID is the company's tax ID.
+  bankName: "ธนาคารกสิกรไทย / Kasikornbank",
+  bankBranch: "สาทร / Sathorn",
+  bankAccountName: "บริษัท เรา จำกัด / Our Company Co., Ltd.",
+  bankAccountNo: "123-4-56789-0",
+  promptPayId: "0105556001188",
 };

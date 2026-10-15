@@ -132,7 +132,7 @@ browser ──► web (nginx: built React app, proxies /api) ──► api (Node
   cookies (12 hours).
 - **Documents.** Uploaded PDFs/images (10 MB max) are stored on the `uploads` volume and served only to
   signed-in users.
-- **Schema** — `server/sql/001_init.sql` onwards (`009_reminders_counts.sql` is the latest). New migrations are
+- **Schema** — `server/sql/001_init.sql` onwards (`010_company_payment_branding.sql` is the latest). New migrations are
   added as the next number; they run once, in order, at API start.
 
 | Endpoint | |
@@ -144,7 +144,7 @@ browser ──► web (nginx: built React app, proxies /api) ──► api (Node
 | `GET /api/audit`, `GET /api/stock-movements` | The audit log and stock ledger, filtered and a page at a time (`offset`, `limit`, filters) |
 | `GET /api/stock-movements/monthly` | Units in/out per month |
 | `GET /api/accounting/journal`, `/trial-balance` | The books, derived on the server (roles with price access only) |
-| `POST /api/commands/:name` | Any write (56 commands — see `server/src/commands.ts`) |
+| `POST /api/commands/:name` | Any write (58 commands — see `server/src/commands.ts`) |
 | `POST /api/import-orders/:orderNo/documents` | Upload a document (multipart `kind`, `file`) |
 | `GET /api/files/:id` | Download a document |
 | `POST /api/admin/reset` | Demo mode only: reload the demo data |
@@ -251,7 +251,20 @@ How they connect:
   due. Every invoice gets a due date from the customer's payment terms (Net N days) when it is issued;
   payments settle the oldest-due items first, so each customer's open items always add up to their
   outstanding balance. The customer page shows the same open items.
+- **Printed documents** share one layout: title and number/dates at the top, seller and buyer side by side in
+  identical boxes, every label in Thai with English beneath. Invoices, statements and reminder letters show
+  **how to pay** — the bank account and a **PromptPay QR code** with the amount filled in. Long documents
+  repeat their column headings and carry the document's title and "page n of N" on every page; totals
+  print once at the end. A tax invoice, receipt or credit/debit note can print **original and copy
+  together**. The company's **logo** goes on every document and, when switched on, its **authorised
+  signature and stamp** on the documents it issues (roles without price access never receive the
+  signature image). The **withholding certificate** follows the Revenue Department's 50 ทวิ layout: tax
+  IDs in boxes, the payee's line number on the month's ภ.ง.ด.3/53, the return-type and payment-type
+  checkboxes, the income rows, and copies 1 and 2.
+- **Spreadsheet exports** are Excel workbooks (.xlsx): Thai-and-English headings, amounts as numbers with
+  separators, dates as dates, IDs as text (tax IDs keep their leading zero), frozen heading row.
 - **Company Profile** holds the seller's name, address, tax ID, and branch printed on every tax document,
+  the bank account and PromptPay ID, the logo, signature and stamp,
   and the **opening balances**: the day the books start and the cash in the bank that day (fixed once a
   month has been closed).
 - **Exchange Rates** keep baht-per-unit for each currency with history. An import order is priced in its

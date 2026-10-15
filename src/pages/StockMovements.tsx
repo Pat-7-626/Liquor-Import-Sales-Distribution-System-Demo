@@ -16,6 +16,7 @@ import { inputClass, selectClass } from "../components/FormKit";
 import { formatNumber } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { useWarehouseName } from "../lib/useWarehouseName";
+import { both } from "../i18n/translations";
 
 const MOVEMENT_TYPES: StockMovementType[] = ["receipt", "sale", "return", "adjustment"];
 const PAGE = 100;
@@ -85,7 +86,7 @@ export default function StockMovements() {
           const all = await api<MovementPage>(query("/api/stock-movements", { ...filters, offset: 0, limit: 5000 }));
           exportToExcel(
             "stock-movements",
-            [t("auditTrail.col.timestamp"), t("erp.movementType"), t("products.col.sku"), t("products.col.name"), t("inventory.col.lotBatch"), t("inventory.col.warehouse"), t("erp.quantity"), t("erp.reference"), t("auditTrail.col.actor")],
+            [both("auditTrail.col.timestamp"), both("erp.movementType"), both("products.col.sku"), both("products.col.name"), both("inventory.col.lotBatch"), both("inventory.col.warehouse"), both("erp.quantity"), both("erp.reference"), both("auditTrail.col.actor")],
             all.rows.map((m) => [m.timestamp, t(`erp.movement.${m.type}`), m.sku, products.find((p) => p.sku === m.sku)?.name ?? "", m.lotBatch, warehouseName(m.warehouse), m.quantity, m.reference, bi(m.actor)]),
           );
         }}

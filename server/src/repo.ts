@@ -342,6 +342,15 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
       openingDate: (co?.opening_date as string) ?? "2026-04-30",
       openingBank: (co?.opening_bank as number) ?? 0,
       ...(co?.closed_through ? { closedThrough: co.closed_through as string } : {}),
+      bankName: (co?.bank_name as string) ?? "",
+      bankBranch: (co?.bank_branch as string) ?? "",
+      bankAccountName: (co?.bank_account_name as string) ?? "",
+      bankAccountNo: (co?.bank_account_no as string) ?? "",
+      promptPayId: (co?.promptpay_id as string) ?? "",
+      logo: (co?.logo as string) ?? "",
+      signature: (co?.signature as string) ?? "",
+      stamp: (co?.stamp as string) ?? "",
+      printSignature: Boolean(co?.print_signature),
     },
     expenses: expenseRows.map(
       (r): Expense => ({
@@ -765,6 +774,15 @@ export async function saveStore(db: Db, before: Store, after: Store) {
         opening_date: c.openingDate,
         opening_bank: c.openingBank,
         closed_through: c.closedThrough ?? null,
+        bank_name: c.bankName ?? "",
+        bank_branch: c.bankBranch ?? "",
+        bank_account_name: c.bankAccountName ?? "",
+        bank_account_no: c.bankAccountNo ?? "",
+        promptpay_id: c.promptPayId ?? "",
+        logo: c.logo ?? "",
+        signature: c.signature ?? "",
+        stamp: c.stamp ?? "",
+        print_signature: Boolean(c.printSignature),
       },
     ]);
   }

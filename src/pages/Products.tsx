@@ -17,6 +17,7 @@ import { NewButton } from "../components/NewButton";
 import { CsvImportDialog } from "../components/CsvImport";
 import type { NewProductInput } from "../state/DataContext";
 import type { CategoryCode, UnitCode } from "../data/types";
+import { both } from "../i18n/translations";
 
 const CATEGORIES: CategoryCode[] = ["whisky", "tequila", "redWine", "whiteWine", "vodka", "gin", "liqueur", "rum", "beer"];
 const UNITS: UnitCode[] = ["bottle", "pack"];
@@ -68,7 +69,7 @@ export default function Products() {
   const handleExport = () => {
     exportToExcel(
       "products",
-      [t("products.col.sku"), t("products.col.name"), t("products.col.category"), t("products.col.hsCode"), t("products.col.abv"), t("products.col.packageSize"), t("products.col.unit"), t("products.col.costPrice"), t("products.col.suggestedPrice"), t("products.col.stockAvailable"), t("products.col.status")],
+      [both("products.col.sku"), both("products.col.name"), both("products.col.category"), both("products.col.hsCode"), both("products.col.abv"), both("products.col.packageSize"), both("products.col.unit"), both("products.col.costPrice"), both("products.col.suggestedPrice"), both("products.col.stockAvailable"), both("products.col.status")],
       filtered.map((p) => [p.sku, p.name, t(`lookup.category.${p.category}`), p.hsCode, p.abv, p.packageSize, t(`lookup.unit.${p.unit}`), maskIfRestricted(p.costPrice, canViewSensitive), p.suggestedPrice, p.stockAvailable, t(`status.${p.status}`)]),
     );
   };

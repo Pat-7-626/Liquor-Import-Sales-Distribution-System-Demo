@@ -615,7 +615,9 @@ consoleProblems.length = 0;
   await page.locator('#print-modal-root button[aria-label="Close"]').click();
   await page.click(`[data-testid=cert-${ex.docNo}]`);
   const cert = await page.locator("#print-modal-root").innerText();
-  check("withholding certificate (50 Tawi) prints with both tax IDs", cert.includes("หนังสือรับรองการหักภาษี ณ ที่จ่าย") && cert.includes("0105545012345") && cert.includes(st1.company.taxId));
+  // Tax IDs sit one digit per box on the official form.
+  const boxes = (await page.locator("#print-modal-root [data-testid=taxid-boxes]").allInnerTexts()).map((t) => t.replace(/\D/g, ""));
+  check("withholding certificate (50 Tawi) prints with both tax IDs", cert.includes("หนังสือรับรองการหักภาษี ณ ที่จ่าย") && boxes.includes("0105545012345") && boxes.includes(st1.company.taxId), boxes.join(","));
   await page.locator('#print-modal-root button[aria-label="Close"]').click();
 
   // Remit last month's withholding.
@@ -799,6 +801,56 @@ consoleProblems.length = 0;
   check("posting the count adjusts the lot that was short", after.stockCounts.find((c) => c.countNo === sc.countNo).status === "posted" && after.inventory.find((i) => i.lotBatch === sc.lines[0].lotBatch).quantityRemaining === sc.lines[0].expected - 1);
 
   check("no console errors on collections and counts", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
+}
+
+// ── Documents: payment details, logo, signature, copies, the official 50 ทวิ, spreadsheet exports ──
+{
+  await admin.post("/api/admin/reset");
+  consoleProblems.length = 0;
+
+  // Upload a logo, signature and stamp from Company Profile and switch printing on.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  await as("manager");
+  await go("/company");
+  check("company profile has the payment details", (await page.locator("[data-testid=payment-details]").count()) === 1);
+  for (const kind of ["logo", "signature", "stamp"]) {
+    await page.setInputFiles(`[data-testid=upload-${kind}]`, { name: `${kind}.png`, mimeType: "image/png", buffer: png });
+    await page.waitForTimeout(500);
+  }
+  // The box follows the saved setting, so it changes once the server has confirmed.
+  await page.click("[data-testid=print-signature]");
+  await page.waitForTimeout(600);
+  const coNow = (await state()).company;
+  check("logo, signature and stamp uploaded from the screen", Boolean(coNow.logo && coNow.signature && coNow.stamp && coNow.printSignature));
+
+  // The tax invoice now shows the logo, how to pay (with a PromptPay QR), and is signed.
+  await go("/sales-orders/SO-2026-3301");
+  await page.locator('main button:has-text("Documents")').first().click();
+  await page.waitForTimeout(800);
+  const doc = page.locator("#print-modal-root");
+  check("invoice carries the logo", (await doc.locator("[data-testid=doc-logo]").count()) === 1);
+  check("…how to pay, with a PromptPay QR code", (await doc.locator("[data-testid=payment-block]").count()) === 1 && (await doc.locator("[data-testid=promptpay-qr]").count()) === 1);
+  check("…and the authorised signature and stamp", (await doc.locator("[data-testid=doc-signature]").count()) === 1 && (await doc.locator("[data-testid=doc-stamp]").count()) === 1);
+  await page.click("[data-testid=copy-both]");
+  await page.waitForTimeout(300);
+  check("original and copy print together", (await doc.locator("[data-testid=copy-break]").count()) === 1 && (await doc.locator('text="สำเนา / COPY"').count()) === 1 && (await doc.locator('text="ต้นฉบับ / ORIGINAL"').count()) === 1);
+  await doc.locator('button[aria-label="Close"]').click();
+
+  // The withholding certificate in the official layout, both copies.
+  await go("/expenses");
+  await page.locator("[data-testid^=cert-]").first().click();
+  await page.waitForTimeout(400);
+  check("50 ทวิ is in the official layout: tax IDs in boxes, income row 5, two copies", (await doc.locator("[data-testid=taxid-boxes]").count()) === 4 && (await doc.locator("[data-testid=income-row-5]").count()) === 2);
+  await doc.locator('button[aria-label="Close"]').click();
+
+  // Spreadsheet exports are real .xlsx files.
+  await go("/customers");
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.locator('main button:has-text("Export")').first().click()]);
+  const path = await dl.path();
+  const head = (await import("node:fs")).readFileSync(path).subarray(0, 2).toString();
+  check("exports download as Excel workbooks", dl.suggestedFilename().endsWith(".xlsx") && head === "PK", dl.suggestedFilename());
+
+  check("no console errors on documents and exports", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
 }
 
 // ── Users & Access ──

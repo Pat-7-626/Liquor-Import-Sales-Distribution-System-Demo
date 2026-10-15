@@ -20,6 +20,7 @@ import { useRunAction } from "../lib/useRunAction";
 import { NewButton } from "../components/NewButton";
 import { CsvImportDialog } from "../components/CsvImport";
 import type { NewCustomerInput } from "../state/DataContext";
+import { both } from "../i18n/translations";
 
 const STATUS_OPTIONS = ["normal", "nearLimit", "overLimit", "noLicense"];
 
@@ -93,7 +94,7 @@ export default function Customers() {
   const handleExport = () => {
     exportToExcel(
       "customers",
-      [t("customers.col.customerId"), t("customers.col.name"), t("customers.col.channelType"), t("customers.col.licenseNo"), t("customers.col.creditLimit"), t("customers.col.outstandingBalance"), t("customers.col.creditRemaining"), t("customers.col.standardDiscount"), t("customers.col.creditStatus")],
+      [both("customers.col.customerId"), both("customers.col.name"), both("customers.col.channelType"), both("customers.col.licenseNo"), both("customers.col.creditLimit"), both("customers.col.outstandingBalance"), both("customers.col.creditRemaining"), both("customers.col.standardDiscount"), both("customers.col.creditStatus")],
       filtered.map((c) => [
         c.customerId,
         bi(c.name),

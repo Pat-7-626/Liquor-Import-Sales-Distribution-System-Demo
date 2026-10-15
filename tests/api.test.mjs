@@ -754,6 +754,32 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   }
 }
 
+// ── payment details, logo / signature / stamp ──
+{
+  await sup.call("POST", "/api/admin/reset");
+  const mgr = await session("manager");
+  const co = (await mgr.call("GET", "/api/state")).json.company;
+  check("seeded company has bank details and a PromptPay ID", Boolean(co.bankAccountNo) && /^\d{13}$/.test(co.promptPayId));
+  const base = { name: co.name, taxId: co.taxId, branch: co.branch, address: co.address, phone: co.phone, email: co.email };
+  check("a malformed PromptPay ID is refused", !(await mgr.cmd("updateCompanyProfile", { ...base, promptPayId: "12345" })).json.result.ok);
+  const mobile = await mgr.cmd("updateCompanyProfile", { ...base, promptPayId: "081-234-5678", bankAccountNo: "987-6-54321-0" });
+  check("PromptPay can be a mobile number", mobile.json.result.ok && mobile.json.state.company.promptPayId === "0812345678" && mobile.json.state.company.bankAccountNo === "987-6-54321-0");
+  check("bank details are optional in a profile update (left as they were)", (await mgr.cmd("updateCompanyProfile", base)).json.result.ok && (await mgr.call("GET", "/api/state")).json.company.bankAccountNo === "987-6-54321-0");
+
+  // A 1×1 transparent PNG.
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  check("only images are accepted", !(await mgr.cmd("setCompanyImage", "logo", "data:text/html;base64,PHNjcmlwdD4=")).json.result.ok);
+  check("printing the signature needs a signature and a stamp first", !(await mgr.cmd("setPrintSignature", true)).json.result.ok);
+  check("warehouse staff can't change the company's images", !(await wh.cmd("setCompanyImage", "logo", png)).json.result.ok);
+  for (const kind of ["logo", "signature", "stamp"]) await mgr.cmd("setCompanyImage", kind, png);
+  check("logo, signature and stamp are saved", (await mgr.call("GET", "/api/state")).json.company.signature === png);
+  check("…then the signature can be switched on", (await mgr.cmd("setPrintSignature", true)).json.result.ok);
+  const whCo = (await wh.call("GET", "/api/state")).json.company;
+  check("roles without price access get the logo but never the signature or stamp", whCo.logo === png && whCo.signature === "" && whCo.stamp === "");
+  check("removing an image works", (await mgr.cmd("setCompanyImage", "logo", "")).json.result.ok && (await mgr.call("GET", "/api/state")).json.company.logo === "");
+  check("image changes are on the audit trail", (await mgr.call("GET", "/api/audit?entityType=company&limit=50")).json.rows.some((e) => /signature/.test(e.summary.en)));
+}
+
 // ── user management ──
 {
   const mgr = await session("manager");

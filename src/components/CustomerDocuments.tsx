@@ -5,7 +5,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { customerStatement, firstOfMonth } from "../domain/finance";
 import { AGING_BUCKETS, addDays, agingTotals, computeArOpenItems, daysOverdue, todayIso } from "../lib/business";
 import { englishBahtText, thaiBahtText } from "../lib/amountInWords";
-import { Both, BuyerBlock, DocDate, DocTh, DocumentHeader, PrintFrame, Signatures } from "./TaxDocument";
+import { Both, BuyerBlock, DocDate, DocTh, DocumentHeader, PaymentBlock, PrintFrame, Signatures } from "./TaxDocument";
 
 const money = (n: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -106,6 +106,7 @@ export function CustomerDocumentsModal({
       onTab={setTab}
       onClose={onClose}
       email={email}
+      runningTitle={`${tab === "statement" ? "ใบแจ้งยอดบัญชี / Statement of Account" : `${letter.title.th} / ${letter.title.en}`} ${customer.customerId}`}
       extra={
         tab === "statement" ? (
           <span className="flex items-center gap-1 text-xs text-gray-500">
@@ -197,6 +198,7 @@ export function CustomerDocumentsModal({
               </div>
             ))}
           </div>
+          {st.closing > 0 && <PaymentBlock amount={st.closing} />}
           <p className="mt-4 text-xs text-gray-500">
             <Both
               th="กรุณาอ้างอิงเลขที่ใบกำกับภาษีเมื่อชำระเงิน หากยอดไม่ตรงกับบันทึกของท่าน โปรดแจ้งกลับภายใน 7 วัน"
@@ -246,7 +248,8 @@ export function CustomerDocumentsModal({
             <p className="mt-0.5 font-medium">({thaiBahtText(overdueTotal)})</p>
             <p className="text-gray-600">({englishBahtText(overdueTotal)})</p>
           </div>
-          <Signatures left={{ th: "ฝ่ายบัญชีลูกหนี้", en: "Accounts receivable" }} right={{ th: "ผู้มีอำนาจลงนาม", en: "Authorised signatory" }} />
+          {overdueTotal > 0 && <PaymentBlock amount={overdueTotal} />}
+          <Signatures left={{ th: "ฝ่ายบัญชีลูกหนี้", en: "Accounts receivable" }} right={{ th: "ผู้มีอำนาจลงนาม", en: "Authorised signatory" }} signed="right" signedDate={today} />
         </>
       )}
     </PrintFrame>

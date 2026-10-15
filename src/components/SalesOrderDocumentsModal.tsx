@@ -7,7 +7,7 @@ import { formatNumber } from "../lib/format";
 import { splitVat } from "../lib/business";
 import { thaiBahtText, englishBahtText } from "../lib/amountInWords";
 import { useWarehouseName } from "../lib/useWarehouseName";
-import { Both, BuyerBlock, CopyStamp, CopySwitch, DocDate, DocTh, DocumentHeader, PrintFrame, Signatures } from "./TaxDocument";
+import { Both, BuyerBlock, Copies, CopyStamp, CopySwitch, DocDate, DocField, DocTh, DocumentHeader, PaymentBlock, PrintFrame, Signatures, type CopyMode } from "./TaxDocument";
 
 type Tab = "invoice" | "deliveryNote" | "pickingList";
 
@@ -27,7 +27,7 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
   const { products, customers, inventory, taxSettings } = useData();
   const warehouseName = useWarehouseName();
   const [tab, setTab] = useState<Tab>("invoice");
-  const [copy, setCopy] = useState<"original" | "copy">("original");
+  const [copy, setCopy] = useState<CopyMode>("original");
 
   if (!order) return null;
 
@@ -70,10 +70,15 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
             }
           : undefined
       }
+      runningTitle={`${TITLES[tab].th} / ${TITLES[tab].en} ${tab === "invoice" ? order.taxInvoiceNo : tab === "deliveryNote" ? order.deliveryNoteNo : order.orderNo}`}
     >
+      <Copies
+        mode={tab === "invoice" ? copy : "original"}
+        render={(c) => (
+          <>
       <DocumentHeader
         title={TITLES[tab]}
-        stamp={tab === "invoice" ? <CopyStamp value={copy} /> : undefined}
+        stamp={tab === "invoice" ? <CopyStamp value={c} /> : undefined}
         note={tab === "invoice" ? "เอกสารออกเป็นชุด / Issued as a set" : undefined}
         meta={[
           tab === "invoice"
@@ -222,6 +227,8 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
         </div>
       )}
 
+      {tab === "invoice" && <PaymentBlock amount={order.netValue} />}
+
       {tab === "invoice" && (
         <>
           <p className="mt-5 text-xs leading-relaxed text-gray-500">
@@ -230,17 +237,34 @@ export function SalesOrderDocumentsModal({ order, onClose }: { order: SalesOrder
               Prices include VAT. Lot/Batch and excise-stamp dates are shown for traceability from import to sale.
             </span>
           </p>
-          <Signatures left={{ th: "ผู้รับสินค้า", en: "Received by" }} right={{ th: "ผู้มีอำนาจลงนาม", en: "Authorised signature" }} />
+          <Signatures left={{ th: "ผู้รับสินค้า", en: "Received by" }} right={{ th: "ผู้มีอำนาจลงนาม", en: "Authorised signature" }} signed="right" signedDate={docDate} />
         </>
       )}
 
       {tab === "deliveryNote" && (
-        <Signatures left={{ th: "ผู้ส่งสินค้า", en: "Delivered by" }} right={{ th: "ผู้รับสินค้า (ได้รับสินค้าครบถ้วนในสภาพดี)", en: "Received in good order by" }} />
+        <>
+          {/* Filled in by hand at dispatch. */}
+          <div className="mt-6 grid grid-cols-3 gap-4" style={{ breakInside: "avoid" }}>
+            {[
+              { th: "ทะเบียนรถ", en: "Vehicle reg." },
+              { th: "พนักงานขับรถ", en: "Driver" },
+              { th: "เวลาออกจากคลัง", en: "Left warehouse at" },
+            ].map((f) => (
+              <DocField key={f.en} label={f}>
+                <span className="block h-6 border-b border-dotted border-gray-400" />
+              </DocField>
+            ))}
+          </div>
+          <Signatures left={{ th: "ผู้ส่งสินค้า", en: "Delivered by" }} right={{ th: "ผู้รับสินค้า (ได้รับสินค้าครบถ้วนในสภาพดี)", en: "Received in good order by" }} />
+        </>
       )}
 
       {tab === "pickingList" && (
         <Signatures left={{ th: "ผู้จัดสินค้า", en: "Picked by" }} right={{ th: "ผู้ตรวจสอบ", en: "Checked by" }} />
       )}
+          </>
+        )}
+      />
     </PrintFrame>
   );
 }

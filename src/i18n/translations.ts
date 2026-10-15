@@ -1671,6 +1671,37 @@ const dict = {
     previewNote: { th: "แสดงข้อมูลที่บันทึกแล้ว", en: "Shows the saved details" },
     savedToast: { th: "บันทึกข้อมูลบริษัทแล้ว", en: "Company profile saved" },
     sectionOpening: { th: "ยอดยกมา", en: "Opening balances" },
+    sectionPayment: { th: "การรับชำระเงิน", en: "How customers pay" },
+    paymentHint: {
+      th: "พิมพ์บนใบกำกับภาษี ใบแจ้งยอด และหนังสือทวงถาม พร้อม QR พร้อมเพย์ที่ระบุยอดเงิน",
+      en: "Printed on tax invoices, statements and reminders, with a PromptPay QR code for the amount due",
+    },
+    bankName: { th: "ธนาคาร", en: "Bank" },
+    bankBranch: { th: "สาขา", en: "Branch" },
+    bankAccountName: { th: "ชื่อบัญชี", en: "Account name" },
+    bankAccountNo: { th: "เลขที่บัญชี", en: "Account number" },
+    promptPayId: { th: "พร้อมเพย์", en: "PromptPay ID" },
+    promptPayHint: { th: "เลขประจำตัวผู้เสียภาษี 13 หลัก หรือเบอร์มือถือ — เว้นว่างถ้าไม่ใช้", en: "13-digit tax ID or a mobile number — leave empty for no QR code" },
+    sectionBranding: { th: "โลโก้ ลายเซ็น และตราประทับ", en: "Logo, signature and stamp" },
+    brandingHint: {
+      th: "โลโก้แสดงบนเอกสารทุกฉบับ ลายเซ็นและตราประทับแสดงบนเอกสารที่บริษัทออกเมื่อเปิดใช้ (รูปถูกย่อเหลือไม่เกิน 600 พิกเซล)",
+      en: "The logo goes on every document; the signature and stamp on documents the company issues, when switched on (images are shrunk to 600 px)",
+    },
+    image: {
+      logo: { th: "โลโก้", en: "Logo" },
+      signature: { th: "ลายเซ็นผู้มีอำนาจ", en: "Authorised signature" },
+      stamp: { th: "ตราประทับ", en: "Company stamp" },
+    },
+    noImage: { th: "ยังไม่มีรูป", en: "No image" },
+    uploadImage: { th: "อัปโหลด", en: "Upload" },
+    replaceImage: { th: "เปลี่ยน", en: "Replace" },
+    imageSaved: { th: "บันทึกรูปแล้ว", en: "Image saved" },
+    imageRemoved: { th: "ลบรูปแล้ว", en: "Image removed" },
+    printSignature: { th: "พิมพ์ลายเซ็นและตราประทับบนเอกสาร", en: "Print the signature and stamp on documents" },
+    printSignatureHint: {
+      th: "ใบกำกับภาษี ใบเสร็จ ใบลด/เพิ่มหนี้ ใบเสนอราคา หนังสือทวงถาม ใบสำคัญจ่าย และหนังสือรับรองหัก ณ ที่จ่าย",
+      en: "Tax invoices, receipts, credit/debit notes, quotations, reminders, payment vouchers and withholding certificates",
+    },
     openingHint: {
       th: "วันที่เริ่มใช้ระบบและยอดเงินฝากธนาคาร ณ วันนั้น — เป็นรายการยกมาในสมุดบัญชี",
       en: "The day the books start in this system and the cash in the bank that day — the ledger's opening entry",
@@ -2169,3 +2200,6 @@ function resolve(path: string): Entry {
 export function translate(lang: Lang, path: string): string {
   return resolve(path)[lang];
 }
+
+/** A translation key in both languages — e.g. for spreadsheet headings, which are always bilingual. */
+export const both = (key: string): { th: string; en: string } => ({ th: translate("th", key), en: translate("en", key) });

@@ -40,7 +40,8 @@ export function maskStore(s: Store): Store {
     })),
     arDocuments: s.arDocuments.map((d) => ({ ...d, amount: 0, originalValue: d.originalValue === undefined ? undefined : 0 })),
     apDocuments: s.apDocuments.map((d) => ({ ...d, amount: 0, amountThb: 0 })),
-    company: { ...s.company, openingBank: 0 },
+    // A signature image could be misused: only roles that issue priced documents receive it (and the stamp).
+    company: { ...s.company, openingBank: 0, signature: "", stamp: "" },
     expenses: s.expenses.map((x) => ({ ...x, amount: 0, vat: 0, whtAmount: 0, paid: 0 })),
     manualJournals: s.manualJournals.map((j) => ({ ...j, lines: j.lines.map((l) => ({ ...l, debit: 0, credit: 0 })) })),
     bankLines: s.bankLines.map((l) => ({ ...l, amount: 0 })),
