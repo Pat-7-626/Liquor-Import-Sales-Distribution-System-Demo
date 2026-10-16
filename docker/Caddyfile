@@ -2,5 +2,7 @@
 # Used by `docker compose --profile https up -d` with DOMAIN set in .env.
 {$DOMAIN} {
 	encode gzip
+	# Browsers remember to use HTTPS for this site (a year), so a later plain-HTTP link can't be intercepted.
+	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy web:80
 }

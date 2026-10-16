@@ -18,6 +18,7 @@ const dict = {
     cancel: { th: "ยกเลิก", en: "Cancel" },
     close: { th: "ปิด", en: "Close" },
     viewDetails: { th: "ดูรายละเอียด", en: "View details" },
+    seeAll: { th: "ดูทั้งหมด", en: "See all" },
     noResults: { th: "ไม่พบข้อมูลที่ตรงกับเงื่อนไข", en: "No records match your filters" },
     export: { th: "ส่งออก", en: "Export" },
     language: { th: "ภาษา", en: "Language" },
@@ -683,6 +684,11 @@ const dict = {
     importSectionTitle: { th: "ออเดอร์นำเข้าที่รอดำเนินการ", en: "Import orders awaiting action" },
     importEmpty: { th: "ไม่มีออเดอร์นำเข้าที่รอดำเนินการ", en: "No import orders awaiting action" },
     approveButton: { th: "อนุมัติ", en: "Approve" },
+    purchaseSectionTitle: { th: "ใบขอซื้อรออนุมัติ", en: "Purchase requests" },
+    purchaseSectionNote: {
+      th: "อนุมัติแล้ว ฝ่ายจัดซื้อจะเปิดออเดอร์นำเข้าจากคำขอ ผู้ขอไม่สามารถอนุมัติคำขอของตัวเองได้",
+      en: "Once approved, purchasing turns the request into an import order. Nobody approves their own request.",
+    },
     rejectButton: { th: "ปฏิเสธ", en: "Reject" },
     fixIssueFirst: { th: "ต้องแก้ไขปัญหาก่อนอนุมัติ", en: "Correct the flagged issue before approving" },
 

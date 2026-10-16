@@ -17,6 +17,7 @@ import { referencePurchasePrice, computeCustomsClearanceStatus, validateImportLi
 import { useRunAction } from "../lib/useRunAction";
 import { useWarehouseName } from "../lib/useWarehouseName";
 import type { DocumentKind, ImportOrderLineItem, ReceivingLine, WarehouseCode } from "../data/types";
+import { RecordLink, paths } from "../components/RecordLink";
 
 const RECEIVING_ELIGIBLE_STATUSES = new Set(["approved", "customsCleared"]);
 const DOC_KINDS: DocumentKind[] = ["invoice", "packingList", "billOfLading", "importLicense", "other"];
@@ -588,7 +589,9 @@ export default function ImportOrderDetail() {
                         <td className="px-3 py-2 font-medium whitespace-nowrap text-gray-900">{l.sku}</td>
                         <td className="px-3 py-2 text-gray-700">{l.orderedQty}</td>
                         <td className="px-3 py-2 text-gray-700">{l.receivedQty}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-700">{l.lotBatch}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-700">
+                          {l.lotBatch && l.receivedQty > 0 ? <RecordLink to={paths.lot(l.lotBatch)}>{l.lotBatch}</RecordLink> : l.lotBatch || "—"}
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap text-gray-700">{l.exciseStampDate ? formatDate(l.exciseStampDate, lang) : "—"}</td>
                       </tr>
                     ))}

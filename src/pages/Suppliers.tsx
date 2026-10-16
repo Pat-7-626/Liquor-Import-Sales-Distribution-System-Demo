@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { Pencil, Lock } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useData } from "../state/DataContext";
@@ -16,6 +15,7 @@ import { exportToExcel } from "../lib/export";
 import { useRunAction } from "../lib/useRunAction";
 import { nextOrderNumber } from "../lib/business";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 const COUNTRIES: CountryCode[] = ["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan"];
 const OPEN_STATUSES = new Set(["staging", "pendingApproval", "approved", "customsCleared", "issueDetected"]);
@@ -147,10 +147,10 @@ export default function Suppliers() {
               <td className={td}>{r.paymentTerms}</td>
               <td className={td}>
                 {r.orderCount > 0 ? (
-                  <Link to={`/import-orders?q=${encodeURIComponent(r.name)}`} className="text-indigo-600 hover:underline">
+                  <RecordLink to={`/import-orders?q=${encodeURIComponent(r.name)}`}>
                     {r.orderCount}
                     {r.openCount > 0 && <span className="text-gray-400"> ({r.openCount} {t("erp.open")})</span>}
-                  </Link>
+                  </RecordLink>
                 ) : (
                   <span className="text-gray-400">0</span>
                 )}

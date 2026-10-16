@@ -13,6 +13,7 @@ import { useWarehouseName } from "../lib/useWarehouseName";
 import { query, useApi } from "../lib/useApi";
 import type { StockMovement } from "../data/types";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 const NO_MOVES: StockMovement[] = [];
 
@@ -87,9 +88,9 @@ export default function GoodsReceipts() {
           {awaiting.map((o) => (
             <tr key={o.orderNo} className="hover:bg-gray-50/60">
               <td className={`${td} font-medium`}>
-                <Link to={`/import-orders/${o.orderNo}`} className="text-indigo-600 hover:underline">
+                <RecordLink to={`/import-orders/${o.orderNo}`}>
                   {o.orderNo}
-                </Link>
+                </RecordLink>
               </td>
               <td className={td}>{o.supplier}</td>
               <td className={td}>
@@ -145,9 +146,9 @@ export default function GoodsReceipts() {
             <tr key={r.order.orderNo} className="hover:bg-gray-50/60">
               <td className={td}>{formatDate(r.receivedDate, lang)}</td>
               <td className={`${td} font-medium`}>
-                <Link to={`/import-orders/${r.order.orderNo}`} className="text-indigo-600 hover:underline">
+                <RecordLink to={`/import-orders/${r.order.orderNo}`}>
                   {r.order.orderNo}
-                </Link>
+                </RecordLink>
               </td>
               <td className={td}>{r.order.supplier}</td>
               <td className={td}>{r.warehouse ? warehouseName(r.warehouse) : <span className="text-gray-400">—</span>}</td>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Check, X, ShieldAlert } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -13,6 +13,7 @@ import { TableContainer, EmptyRow, th, td } from "../components/Table";
 import { formatCurrency } from "../lib/format";
 import { HIGH_VALUE_APPROVAL_THRESHOLD } from "../lib/business";
 import { useRunAction } from "../lib/useRunAction";
+import { RecordLink, paths } from "../components/RecordLink";
 
 const PENDING_STATUSES = new Set(["staging", "pendingApproval", "issueDetected"]);
 
@@ -22,10 +23,12 @@ export default function Approvals() {
   const runAction = useRunAction();
   const location = useLocation();
   const highlightOrderNo = (location.state as { highlightOrderNo?: string } | null)?.highlightOrderNo;
-  const { importOrders, salesOrders, customers, approveImportOrder, rejectImportOrder, approveSalesOrder, rejectSalesOrderApproval } = useData();
+  const { importOrders, salesOrders, customers, purchaseRequests, products, approveImportOrder, rejectImportOrder, approveSalesOrder, rejectSalesOrderApproval, decidePurchaseRequest } = useData();
   const { identity, isSupervisor } = useRole();
 
-  const [rejecting, setRejecting] = useState<{ kind: "import" | "sales"; orderNo: string } | null>(null);
+  const [rejecting, setRejecting] = useState<{ kind: "import" | "sales" | "purchase"; orderNo: string } | null>(null);
+  // Purchase requests wait here too, so a supervisor has one place for every decision.
+  const pendingRequests = purchaseRequests.filter((r) => r.status === "pending");
   const [rejectReason, setRejectReason] = useState("");
 
   const pendingImportOrders = useMemo(
@@ -50,7 +53,7 @@ export default function Approvals() {
     await runAction(approveSalesOrder(orderNo), `${t("approvals.approvedToast")}: ${orderNo}`);
   };
 
-  const openReject = (kind: "import" | "sales", orderNo: string) => {
+  const openReject = (kind: "import" | "sales" | "purchase", orderNo: string) => {
     setRejecting({ kind, orderNo });
     setRejectReason("");
   };
@@ -60,7 +63,9 @@ export default function Approvals() {
     const result =
       rejecting.kind === "import"
         ? rejectImportOrder(rejecting.orderNo, rejectReason.trim())
-        : rejectSalesOrderApproval(rejecting.orderNo, rejectReason.trim());
+        : rejecting.kind === "purchase"
+          ? decidePurchaseRequest(rejecting.orderNo, false, rejectReason.trim())
+          : rejectSalesOrderApproval(rejecting.orderNo, rejectReason.trim());
     if (await runAction(result, `${t("approvals.rejectedToast")}: ${rejecting.orderNo}`)) setRejecting(null);
   };
 
@@ -111,9 +116,9 @@ export default function Approvals() {
             return (
               <tr key={o.orderNo} className={`hover:bg-gray-50/60 ${o.orderNo === highlightOrderNo ? "bg-indigo-50/40" : ""}`}>
                 <td className={`${td} font-medium text-gray-900`}>
-                  <Link to={`/import-orders/${o.orderNo}`} className="hover:underline">
+                  <RecordLink to={`/import-orders/${o.orderNo}`} className="font-normal">
                     {o.orderNo}
-                  </Link>
+                  </RecordLink>
                   {isHighValue && (
                     <span className="ml-2 inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-600">
                       {t("approvals.highValueBadge")}
@@ -185,11 +190,15 @@ export default function Approvals() {
             return (
             <tr key={order.orderNo} className={`hover:bg-gray-50/60 ${order.orderNo === highlightOrderNo ? "bg-indigo-50/40" : ""}`}>
               <td className={`${td} font-medium text-gray-900`}>
-                <Link to={`/sales-orders/${order.orderNo}`} className="hover:underline">
+                <RecordLink to={`/sales-orders/${order.orderNo}`} className="font-normal">
                   {order.orderNo}
-                </Link>
+                </RecordLink>
               </td>
-              <td className={td}>{bi(order.customerName)}</td>
+              <td className={td}>
+                <RecordLink to={paths.customer(order.customerId)} className="font-normal">
+                  {bi(order.customerName)}
+                </RecordLink>
+              </td>
               <td className={`${td} max-w-xs`}>
                 <OrderItems order={order} />
               </td>
@@ -227,6 +236,63 @@ export default function Approvals() {
                 </div>
               </td>
             </tr>
+            );
+          })}
+        </tbody>
+      </TableContainer>
+
+      <h2 className="mb-1 mt-8 text-sm font-semibold text-gray-900">{t("approvals.purchaseSectionTitle")}</h2>
+      <p className="mb-3 text-xs text-gray-500">{t("approvals.purchaseSectionNote")}</p>
+      <TableContainer>
+        <thead className="sticky top-0 z-10 bg-gray-50">
+          <tr>
+            <th className={th}>{t("pr.number")}</th>
+            <th className={th}>{t("products.col.name")}</th>
+            <th className={`${th} text-right`}>{t("erp.quantity")}</th>
+            <th className={th}>{t("pr.reason")}</th>
+            <th className={th}></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {pendingRequests.length === 0 && <EmptyRow colSpan={5} />}
+          {pendingRequests.map((r) => {
+            const own = r.requestedBy.en === identity.name.en;
+            return (
+              <tr key={r.requestNo} data-testid="approval-request" data-request={r.requestNo}>
+                <td className={td}>
+                  <RecordLink to="/purchase-requests">{r.requestNo}</RecordLink>
+                  <span className="block text-xs text-gray-500">{bi(r.requestedBy)}</span>
+                </td>
+                <td className={td}>
+                  {products.find((p) => p.sku === r.sku)?.name ?? r.sku}
+                  <span className="block text-xs text-gray-500">{r.sku}</span>
+                </td>
+                <td className={`${td} text-right tabular-nums`}>{r.quantity.toLocaleString()}</td>
+                <td className={`${td} max-w-xs whitespace-normal text-gray-600`}>{r.reason}</td>
+                <td className={td}>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => runAction(decidePurchaseRequest(r.requestNo, true, ""), `${t("pr.approvedToast")}: ${r.requestNo}`)}
+                      disabled={!isSupervisor || own}
+                      title={!isSupervisor ? t("approvals.supervisorOnlyNote") : own ? t("pr.awaitingOther") : undefined}
+                      className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                      data-testid={`approve-request-${r.requestNo}`}
+                    >
+                      <Check size={13} />
+                      {t("approvals.approveButton")}
+                    </button>
+                    <button
+                      onClick={() => openReject("purchase", r.requestNo)}
+                      disabled={!isSupervisor || own}
+                      title={!isSupervisor ? t("approvals.supervisorOnlyNote") : undefined}
+                      className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <X size={13} />
+                      {t("approvals.rejectButton")}
+                    </button>
+                  </div>
+                </td>
+              </tr>
             );
           })}
         </tbody>

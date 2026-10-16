@@ -4,6 +4,7 @@ import { BarChart3, Lock, Table2 } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useRole } from "../state/RoleContext";
 import { SERIES, MUTED_MARK, niceTicks, PERIODS, type Period } from "../lib/analytics";
+import { RecordLink } from "./RecordLink";
 
 /*
  * Chart kit — plain HTML/CSS marks (no chart library), built to the dataviz spec:
@@ -291,9 +292,9 @@ export function BarList({ items, color = SERIES[0], emptyLabel, max: maxOverride
               <div className="mb-1 flex items-baseline justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2">
                   {it.href ? (
-                    <Link to={it.href} className="truncate text-sm text-gray-800 hover:text-indigo-700 hover:underline">
+                    <RecordLink to={it.href} className="truncate text-sm">
                       {it.label}
-                    </Link>
+                    </RecordLink>
                   ) : (
                     <span className="truncate text-sm text-gray-800">{it.label}</span>
                   )}
@@ -530,9 +531,9 @@ export function Meter({
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
           {href ? (
-            <Link to={href} className="truncate text-sm text-gray-800 hover:text-indigo-700 hover:underline">
+            <RecordLink to={href} className="truncate text-sm">
               {label}
-            </Link>
+            </RecordLink>
           ) : (
             <span className="truncate text-sm text-gray-800">{label}</span>
           )}
@@ -593,9 +594,9 @@ export function PositionBars({ items, legend, markerLabel }: { items: PositionIt
               <div className="mb-1 flex items-baseline justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2">
                   {it.href ? (
-                    <Link to={it.href} className="truncate text-sm text-gray-800 hover:text-indigo-700 hover:underline">
+                    <RecordLink to={it.href} className="truncate text-sm">
                       {it.label}
-                    </Link>
+                    </RecordLink>
                   ) : (
                     <span className="truncate text-sm text-gray-800">{it.label}</span>
                   )}

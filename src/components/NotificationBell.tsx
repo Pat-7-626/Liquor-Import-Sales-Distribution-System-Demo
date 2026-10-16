@@ -34,7 +34,7 @@ function useNotices(): Notice[] {
       const sales = salesOrders.filter((o) => o.approvalStatus === "pendingApproval").length;
       const imports = importOrders.filter((o) => o.status === "pendingApproval" || o.status === "staging").length;
       push({ key: "approvals", count: sales + imports, icon: ClipboardCheck, tone: "amber", href: "/approvals", label: "notify.approvals" });
-      push({ key: "purchaseRequests", count: purchaseRequests.filter((r) => r.status === "pending").length, icon: ClipboardList, tone: "amber", href: "/purchase-requests", label: "notify.purchaseRequests" });
+      push({ key: "purchaseRequests", count: purchaseRequests.filter((r) => r.status === "pending").length, icon: ClipboardList, tone: "amber", href: "/approvals", label: "notify.purchaseRequests" });
     }
     if (can("createImportOrder"))
       push({ key: "requestsToOrder", count: purchaseRequests.filter((r) => r.status === "approved").length, icon: ClipboardList, tone: "blue", href: "/purchase-requests", label: "notify.requestsToOrder" });

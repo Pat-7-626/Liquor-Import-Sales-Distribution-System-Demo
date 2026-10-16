@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Pencil, Plus, Lock, FileText, Eye, Table2, Columns3, CalendarDays } from "lucide-react";
+import { Pencil, Plus, Lock, FileText, Table2, Columns3, CalendarDays } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -26,6 +26,7 @@ import { KanbanBoard, BoardCard } from "../components/KanbanBoard";
 import { CalendarView, CalendarLegend, type CalendarEvent, type EventTone } from "../components/CalendarView";
 import type { SalesOrder } from "../data/types";
 import { both } from "../i18n/translations";
+import { RecordLink, paths } from "../components/RecordLink";
 
 const STATUS_FILTER_OPTIONS = ["pendingApproval", "rejected", ...DELIVERY_STATUS_OPTIONS];
 const VIEWS = ["table", "board", "calendar"] as const;
@@ -220,16 +221,18 @@ export default function SalesOrders() {
           {filtered.length === 0 && <EmptyRow colSpan={12} />}
           {filtered.map((o) => (
             <tr key={o.orderNo} className={`hover:bg-gray-50/60 ${o.orderNo === highlightOrderNo ? "bg-indigo-50/40" : ""}`}>
-              <td className={`${td} font-medium text-gray-900`}>
-                {o.orderNo}
+              <td className={`${td} whitespace-nowrap`}>
+                <RecordLink to={paths.salesOrder(o.orderNo)} testid="order-link">
+                  {o.orderNo}
+                </RecordLink>
                 {o.orderNo === highlightOrderNo && <EditedPill label={t("common.new")} />}
                 {editedNos.has(o.orderNo) && <EditedPill />}
               </td>
               <td className={td}>{formatDate(o.orderDate, lang)}</td>
               <td className={td}>
-                <Link to={`/customers/${o.customerId}`} className="hover:text-indigo-600 hover:underline">
+                <RecordLink to={paths.customer(o.customerId)} className="font-normal">
                   {bi(o.customerName)}
-                </Link>
+                </RecordLink>
               </td>
               <td className={`${td} max-w-[16rem]`}>
                 <OrderItems order={o} />
@@ -254,13 +257,6 @@ export default function SalesOrders() {
               <td className={td}>{o.approver ? bi(o.approver) : <span className="text-gray-400">{t("salesOrders.none")}</span>}</td>
               <td className={td}>
                 <div className="flex items-center gap-1">
-                  <Link
-                    to={`/sales-orders/${o.orderNo}`}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
-                  >
-                    <Eye size={13} />
-                    {t("common.viewDetails")}
-                  </Link>
                   <button
                     onClick={() => setDocsOrderNo(o.orderNo)}
                     disabled={Boolean(o.approvalStatus)}

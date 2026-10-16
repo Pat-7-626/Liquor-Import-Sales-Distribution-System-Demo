@@ -5,6 +5,19 @@ import type { ActionResult } from "../lib/api";
 import type { Bilingual } from "../data/types";
 
 /** RFC 4180 CSV: quoted fields, doubled quotes, commas and line breaks inside quotes; strips a UTF-8 BOM. */
+/**
+ * A CSV file's text. Excel's "CSV UTF-8" and most systems write UTF-8; Thai banks and Excel's plain "CSV"
+ * on a Thai Windows write Windows-874 (TIS-620). Try UTF-8 strictly, and fall back to Thai.
+ */
+export async function readCsvText(file: Blob): Promise<string> {
+  const bytes = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-874").decode(bytes);
+  }
+}
+
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -86,7 +99,7 @@ export function CsvImportDialog<T>({
 
   const load = async (file: File) => {
     setFileError(null);
-    const parsed = parseCsv(await file.text());
+    const parsed = parseCsv(await readCsvText(file));
     if (parsed.length < 2) return setFileError(t("csv.empty"));
     const header = parsed[0].map((h) => h.trim());
     const missing = columns.filter((c) => c.required && !header.includes(c.key)).map((c) => c.key);

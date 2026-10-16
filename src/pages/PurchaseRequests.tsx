@@ -13,6 +13,7 @@ import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
 import { useRunAction } from "../lib/useRunAction";
 import { formatDate, formatNumber } from "../lib/format";
 import type { PurchaseRequest } from "../data/types";
+import { RecordLink } from "../components/RecordLink";
 
 const TONE: Record<PurchaseRequest["status"], string> = {
   pending: "bg-amber-50 text-amber-700 ring-amber-600/20",
@@ -96,9 +97,9 @@ export default function PurchaseRequests() {
                   <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${TONE[r.status]}`}>{t(`pr.status.${r.status}`)}</span>
                   {r.decidedBy && <span className="block pt-1 text-xs text-gray-500">{bi(r.decidedBy)}</span>}
                   {r.importOrderNo && (
-                    <Link to={`/import-orders/${r.importOrderNo}`} className="block pt-1 text-xs text-indigo-600 hover:underline">
+                    <RecordLink to={`/import-orders/${r.importOrderNo}`} className="block text-xs">
                       {r.importOrderNo}
-                    </Link>
+                    </RecordLink>
                   )}
                 </td>
                 <td className={td}>

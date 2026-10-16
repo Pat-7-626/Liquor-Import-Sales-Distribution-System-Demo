@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Pencil, Lock } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useData } from "../state/DataContext";
@@ -16,6 +16,7 @@ import { exportToExcel } from "../lib/export";
 import { useRunAction } from "../lib/useRunAction";
 import { useWarehouseName } from "../lib/useWarehouseName";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 const STATUS_OPTIONS = ["normal", "agingStart", "agingLong"];
 /** Lots at or below this quantity are flagged so they get re-ordered or cleared. */
@@ -159,9 +160,9 @@ export default function Inventory() {
                 {editedKeys.has(i.lotBatch) && <EditedPill />}
               </td>
               <td className={td}>
-                <Link to={`/lot-trace?lot=${encodeURIComponent(i.lotBatch)}`} className="text-indigo-600 hover:underline">
+                <RecordLink to={`/lot-trace?lot=${encodeURIComponent(i.lotBatch)}`}>
                   {i.lotBatch}
-                </Link>
+                </RecordLink>
               </td>
               <td className={td}>{formatDate(i.receivedDate, lang)}</td>
               <td className={`${td} ${i.quantityRemaining === 0 ? "text-gray-400" : i.quantityRemaining <= LOW_LOT_QTY ? "font-medium text-amber-600" : ""}`}>

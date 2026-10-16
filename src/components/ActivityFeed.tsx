@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { useLanguage } from "../i18n/LanguageContext";
 import { TONE_DOT, type EventTone } from "./CalendarView";
+import { RecordLink } from "./RecordLink";
 
 export interface FeedItem {
   id: string;
@@ -70,9 +70,9 @@ export function ActivityFeed({ items, emptyLabel }: { items: FeedItem[]; emptyLa
                   {it.body && <p className="mt-1.5 text-sm leading-relaxed text-gray-700">{it.body}</p>}
                   {it.reference &&
                     (it.href ? (
-                      <Link to={it.href} className="mt-1 inline-block text-xs font-medium text-indigo-600 hover:underline">
+                      <RecordLink to={it.href} className="mt-1 text-xs">
                         {it.reference}
-                      </Link>
+                      </RecordLink>
                     ) : (
                       <span className="mt-1 inline-block text-xs text-gray-500">{it.reference}</span>
                     ))}

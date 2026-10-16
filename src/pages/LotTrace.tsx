@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -16,6 +16,7 @@ import { useWarehouseName } from "../lib/useWarehouseName";
 import { query, useApi } from "../lib/useApi";
 import type { StockMovement } from "../data/types";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 export default function LotTrace() {
   const { t, lang } = useLanguage();
@@ -108,9 +109,9 @@ export default function LotTrace() {
                 <Field
                   label={t("importOrders.col.orderNo")}
                   value={
-                    <Link to={`/import-orders/${sourceOrder.orderNo}`} className="text-indigo-600 hover:underline">
+                    <RecordLink to={`/import-orders/${sourceOrder.orderNo}`}>
                       {sourceOrder.orderNo}
-                    </Link>
+                    </RecordLink>
                   }
                 />
                 <Field label={t("importOrders.col.supplier")} value={supplier?.name ?? sourceOrder.supplier} />
@@ -141,13 +142,13 @@ export default function LotTrace() {
                 {shipments.map((o) => (
                   <li key={o.orderNo} className="flex items-center justify-between gap-3 py-2 text-sm">
                     <div className="min-w-0">
-                      <Link to={`/customers/${o.customerId}`} className="font-medium text-gray-900 hover:text-indigo-600 hover:underline">
+                      <RecordLink to={`/customers/${o.customerId}`}>
                         {bi(customers.find((c) => c.customerId === o.customerId)?.name ?? o.customerName)}
-                      </Link>
+                      </RecordLink>
                       <p className="text-xs text-gray-400">
-                        <Link to={`/sales-orders/${o.orderNo}`} className="hover:underline">
+                        <RecordLink to={`/sales-orders/${o.orderNo}`} className="font-normal">
                           {o.orderNo}
-                        </Link>{" "}
+                        </RecordLink>{" "}
                         · {formatDate(o.orderDate, lang)} · × {o.quantity}
                       </p>
                     </div>

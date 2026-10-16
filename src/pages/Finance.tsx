@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { CheckCircle2, FileText, Link2, Lock, Plus, Printer, Receipt, RotateCcw, Trash2, Unlink, Upload, Wand2, XCircle } from "lucide-react";
+import { CheckCircle2, FileText, Link2, Lock, Plus, Receipt, RotateCcw, Trash2, Unlink, Upload, Wand2, XCircle } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -12,7 +11,7 @@ import { TableContainer, EmptyRow, th, td } from "../components/Table";
 import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
 import { BarList, ChartCard, KpiTile } from "../components/charts";
 import { ExpenseVoucher, WithholdingCertificate } from "../components/FinanceDocuments";
-import { parseCsv } from "../components/CsvImport";
+import { parseCsv, readCsvText } from "../components/CsvImport";
 import { useRunAction } from "../lib/useRunAction";
 import { useLedger } from "../lib/useLedger";
 import { formatCurrency, formatDate } from "../lib/format";
@@ -24,6 +23,7 @@ import { MATCH_WINDOW_DAYS, WHT_RATES, firstOfMonth, lastOfMonth, reconcile, wit
 import type { BankLineInput, ExpenseInput } from "../state/DataContext";
 import type { BankLine, Expense, PaymentMethod } from "../data/types";
 import { both } from "../i18n/translations";
+import { RecordLink, RecordButton } from "../components/RecordLink";
 
 const METHODS: PaymentMethod[] = ["transfer", "cheque", "cash"];
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -152,7 +152,9 @@ export function Expenses() {
           {shown.map((x) => (
             <tr key={x.docNo} data-testid="expense-row" data-doc={x.docNo}>
               <td className={td}>
-                <span className="font-medium text-gray-900">{x.docNo}</span>
+                <RecordButton onClick={() => setVoucher(x)} testid={`voucher-${x.docNo}`} title={t("fin.voucher")}>
+                  {x.docNo}
+                </RecordButton>
                 <span className="block text-xs text-gray-500">{formatDate(x.date, lang)}</span>
               </td>
               <td className={`${td} max-w-xs whitespace-normal`}>
@@ -169,10 +171,6 @@ export function Expenses() {
               <td className={`${td} text-right font-medium tabular-nums`}>{baht(x.paid)}</td>
               <td className={td}>
                 <div className="flex justify-end gap-1">
-                  <button className={iconBtn} onClick={() => setVoucher(x)} data-testid={`voucher-${x.docNo}`}>
-                    <Printer size={13} />
-                    {t("fin.voucher")}
-                  </button>
                   {x.whtAmount > 0 && (
                     <button className={iconBtn} onClick={() => setCertificate(x)} data-testid={`cert-${x.docNo}`}>
                       <FileText size={13} />
@@ -883,7 +881,7 @@ export function BankReconciliation() {
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
-    setPreview(parseStatement(await f.text()));
+    setPreview(parseStatement(await readCsvText(f)));
     if (file.current) file.current.value = "";
   };
   const template = () => {
@@ -999,9 +997,9 @@ export function BankReconciliation() {
                     <span>
                       <span className="text-gray-500">{formatDate(e.date, lang)}</span> ·{" "}
                       {e.href ? (
-                        <Link to={e.href} className="text-indigo-600 hover:underline">
+                        <RecordLink to={e.href}>
                           {e.ref}
-                        </Link>
+                        </RecordLink>
                       ) : (
                         e.ref
                       )}{" "}

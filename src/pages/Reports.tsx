@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
 import { Printer } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -22,6 +21,7 @@ import {
 } from "../lib/business";
 import type { ChannelCode } from "../data/types";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 
 interface ExportSectionProps {
@@ -302,9 +302,9 @@ export default function Reports() {
               <tr key={r.name} className="hover:bg-gray-50/60">
                 <td className={`${td} font-medium text-gray-900`}>
                   {r.customerId ? (
-                    <Link to={`/customers/${r.customerId}`} className="text-indigo-600 hover:underline">
+                    <RecordLink to={`/customers/${r.customerId}`}>
                       {r.name}
-                    </Link>
+                    </RecordLink>
                   ) : (
                     r.name
                   )}

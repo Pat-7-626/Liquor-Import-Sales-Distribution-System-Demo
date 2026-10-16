@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { Pencil, Lock, Table2, GanttChart } from "lucide-react";
 import { ViewSwitcher, useViewMode } from "../components/ViewSwitcher";
 import { TimelineBars } from "../components/TimelineBars";
@@ -20,6 +19,7 @@ import { NewButton } from "../components/NewButton";
 import type { Bilingual, LicenseCategory } from "../data/types";
 import { addDays, todayIso } from "../lib/business";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 const OUR_COMPANY: Bilingual = { th: "บริษัท เรา จำกัด", en: "Our Company Co., Ltd." };
 const LICENSE_TYPES: { key: string; category: LicenseCategory; type: Bilingual }[] = [
@@ -183,9 +183,9 @@ export default function Licenses() {
                 {(() => {
                   const holderCustomer = customers.find((c) => c.licenseNo === l.licenseNo);
                   return holderCustomer ? (
-                    <Link to={`/customers/${holderCustomer.customerId}`} className="hover:text-indigo-600 hover:underline">
+                    <RecordLink to={`/customers/${holderCustomer.customerId}`}>
                       {bi(l.holder)}
-                    </Link>
+                    </RecordLink>
                   ) : (
                     bi(l.holder)
                   );

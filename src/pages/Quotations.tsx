@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Plus, Printer, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, ShoppingCart, Trash2, XCircle } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -19,6 +19,7 @@ import { addDays, computeChannelPrice, computeLicenseStatus, computeSalesNetValu
 import { quotationState, type QuotationState } from "../domain/finance";
 import { thaiBahtText, englishBahtText } from "../lib/amountInWords";
 import type { Quotation } from "../data/types";
+import { RecordLink, RecordButton } from "../components/RecordLink";
 
 const STATE_TONE: Record<QuotationState, string> = {
   open: "bg-blue-50 text-blue-700 ring-blue-600/20",
@@ -92,15 +93,17 @@ export default function Quotations() {
           {shown.map(({ q, state }) => (
             <tr key={q.quoteNo} data-testid="quote-row" data-quote={q.quoteNo} data-state={state}>
               <td className={td}>
-                <span className="font-medium text-gray-900">{q.quoteNo}</span>
+                <RecordButton onClick={() => setPrinting(q)} title={t("common.print")}>
+                  {q.quoteNo}
+                </RecordButton>
                 <span className="block text-xs text-gray-500">
                   {formatDate(q.date, lang)} · {t("qt.lines").replace("{n}", String(q.lines.length))}
                 </span>
               </td>
               <td className={td}>
-                <Link to={`/customers/${q.customerId}`} className="text-indigo-600 hover:underline">
+                <RecordLink to={`/customers/${q.customerId}`}>
                   {bi(q.customerName)}
-                </Link>
+                </RecordLink>
               </td>
               <td className={td}>{formatDate(q.validUntil, lang)}</td>
               <td className={`${td} text-right tabular-nums`}>
@@ -109,17 +112,13 @@ export default function Quotations() {
               <td className={td}>
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${STATE_TONE[state]}`}>{t(`qt.state.${state}`)}</span>
                 {q.salesOrderNo && (
-                  <Link to={`/sales-orders/${q.salesOrderNo}`} className="ml-2 text-xs text-indigo-600 hover:underline">
+                  <RecordLink to={`/sales-orders/${q.salesOrderNo}`} className="ml-2 text-xs">
                     {q.salesOrderNo}
-                  </Link>
+                  </RecordLink>
                 )}
               </td>
               <td className={td}>
                 <div className="flex justify-end gap-1">
-                  <button onClick={() => setPrinting(q)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50">
-                    <Printer size={13} />
-                    {t("common.print")}
-                  </button>
                   {manage && state === "open" && (
                     <>
                       <button

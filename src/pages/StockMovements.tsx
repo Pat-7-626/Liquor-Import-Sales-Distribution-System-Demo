@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { MovementReference, MovementTypeBadge } from "../components/MovementKit";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -17,6 +16,7 @@ import { formatNumber } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { useWarehouseName } from "../lib/useWarehouseName";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 const MOVEMENT_TYPES: StockMovementType[] = ["receipt", "sale", "return", "adjustment"];
 const PAGE = 100;
@@ -124,9 +124,9 @@ export default function StockMovements() {
               </td>
               <td className={`${td} font-medium text-gray-900`}>{m.sku}</td>
               <td className={td}>
-                <Link to={`/lot-trace?lot=${encodeURIComponent(m.lotBatch)}`} className="text-indigo-600 hover:underline">
+                <RecordLink to={`/lot-trace?lot=${encodeURIComponent(m.lotBatch)}`}>
                   {m.lotBatch}
-                </Link>
+                </RecordLink>
               </td>
               <td className={td}>{warehouseName(m.warehouse)}</td>
               <td className={`${td} text-right font-medium ${m.quantity > 0 ? "text-emerald-600" : "text-rose-600"}`}>

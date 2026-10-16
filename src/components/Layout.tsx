@@ -165,7 +165,7 @@ const PENDING_STATUSES = new Set(["staging", "pendingApproval", "issueDetected"]
 
 export function Layout() {
   const { t, lang, setLang } = useLanguage();
-  const { importOrders, salesOrders, licenses, products, reorderPolicies, resetDemoData } = useData();
+  const { importOrders, salesOrders, licenses, products, reorderPolicies, purchaseRequests, resetDemoData } = useData();
   const location = useLocation();
   const [openGroups, setOpenGroups] = useState<string[]>(loadOpenGroups);
   const toggleGroup = (key: string) =>
@@ -187,7 +187,8 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pendingCount =
     importOrders.filter((o) => PENDING_STATUSES.has(o.status)).length +
-    salesOrders.filter((o) => o.approvalStatus === "pendingApproval").length;
+    salesOrders.filter((o) => o.approvalStatus === "pendingApproval").length +
+    purchaseRequests.filter((r) => r.status === "pending").length;
   /** FR-07: surface expiring/expired licenses the moment the app loads, not only when browsing to the page. */
   const expiringLicenseCount = licenses.filter((l) => {
     const status = computeLicenseStatus(l.expiryDate).status;

@@ -29,6 +29,8 @@ import {
 } from "../lib/business";
 import { useRunAction } from "../lib/useRunAction";
 import type { Customer, PaymentMethod } from "../data/types";
+import { RecordLink, RecordButton, referencePath } from "../components/RecordLink";
+import { ArDocumentPrintModal } from "../components/ArDocumentPrintModal";
 
 const PAYMENT_METHODS: PaymentMethod[] = ["transfer", "cheque", "cash"];
 
@@ -44,6 +46,7 @@ export default function CustomerDetail() {
   const [editing, setEditing] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [statementOpen, setStatementOpen] = useState(false);
+  const [printDocNo, setPrintDocNo] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("transfer");
@@ -363,9 +366,9 @@ export default function CustomerDetail() {
                         <tr key={i.ref}>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {i.orderNo ? (
-                              <Link to={`/sales-orders/${i.orderNo}`} className="font-medium text-indigo-600 hover:underline">
+                              <RecordLink to={`/sales-orders/${i.orderNo}`}>
                                 {i.ref}
-                              </Link>
+                              </RecordLink>
                             ) : (
                               <span className="font-medium text-gray-900">{i.ref}</span>
                             )}
@@ -444,13 +447,28 @@ export default function CustomerDetail() {
                 {docs.map((d) => (
                   <li key={d.docNo} className="flex items-center justify-between gap-3 py-2 text-sm">
                     <div>
-                      <p className="font-medium text-gray-900">
-                        {d.docNo} <span className="font-normal text-gray-400">· {t(`erp.arType.${d.type}`)}</span>
+                      <p>
+                        {d.type === "openingBalance" ? (
+                          <span className="font-medium text-gray-900">{d.docNo}</span>
+                        ) : (
+                          <RecordButton onClick={() => setPrintDocNo(d.docNo)} title={t("common.print")}>
+                            {d.docNo}
+                          </RecordButton>
+                        )}{" "}
+                        <span className="font-normal text-gray-400">· {t(`erp.arType.${d.type}`)}</span>
                       </p>
                       <p className="text-xs text-gray-400">
                         {formatDate(d.date, lang)}
                         {d.method ? ` · ${t(`erp.method.${d.method}`)}` : ""}
-                        {d.reference ? ` · ${d.reference}` : ""}
+                        {d.reference ? " · " : ""}
+                        {d.reference &&
+                          (referencePath(d.reference) ? (
+                            <RecordLink to={referencePath(d.reference)!} className="font-normal">
+                              {d.reference}
+                            </RecordLink>
+                          ) : (
+                            d.reference
+                          ))}
                       </p>
                     </div>
                     <span className={`font-medium ${d.type === "debitNote" || d.type === "openingBalance" ? "text-gray-900" : "text-emerald-600"}`}>
@@ -505,6 +523,7 @@ export default function CustomerDetail() {
         onSave={handleSaveProfile}
       />
       {statementOpen && <CustomerDocumentsModal customer={customer} onClose={() => setStatementOpen(false)} />}
+      <ArDocumentPrintModal doc={arDocuments.find((d) => d.docNo === printDocNo) ?? null} onClose={() => setPrintDocNo(null)} />
     </div>
   );
 }

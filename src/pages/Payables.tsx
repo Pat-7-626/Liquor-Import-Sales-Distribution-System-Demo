@@ -1,6 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { Banknote, FileInput, Lock, Printer, X } from "lucide-react";
+import { Banknote, FileInput, Lock, X } from "lucide-react";
 import { SupplierPaymentVoucher } from "../components/FinanceDocuments";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useData } from "../state/DataContext";
@@ -15,6 +14,7 @@ import { formatCurrency, formatDate, formatNumber } from "../lib/format";
 import { AGING_BUCKETS, agingBucket, daysOverdue, rateOn, todayIso, type AgingBucket } from "../lib/business";
 import { apOpenAmount } from "../domain/actions";
 import type { ApDocument, PaymentMethod } from "../data/types";
+import { RecordLink, RecordButton } from "../components/RecordLink";
 
 const BUCKET_COLORS: Record<AgingBucket, string> = { current: "#2e9a6c", "1-30": "#c48a1c", "31-60": "#c9692f", "61-90": "#b4483b", "90+": "#9b3346" };
 const METHODS: PaymentMethod[] = ["transfer", "cheque", "cash"];
@@ -95,9 +95,9 @@ export default function Payables() {
             {awaitingInvoice.map((o) => (
               <li key={o.orderNo} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                 <span>
-                  <Link to={`/import-orders/${o.orderNo}`} className="font-medium text-indigo-600 hover:underline">
+                  <RecordLink to={`/import-orders/${o.orderNo}`}>
                     {o.orderNo}
-                  </Link>{" "}
+                  </RecordLink>{" "}
                   · {o.supplier} · {t("ap.receivedOn").replace("{d}", o.receiving ? formatDate(o.receiving.receivedDate, lang) : "—")}
                 </span>
                 {manage && (
@@ -138,9 +138,9 @@ export default function Payables() {
                   <span className="font-medium text-gray-900">{i.reference}</span>
                   <span className="block text-xs text-gray-500">
                     {i.docNo} ·{" "}
-                    <Link to={`/import-orders/${i.importOrderNo}`} className="text-indigo-600 hover:underline">
+                    <RecordLink to={`/import-orders/${i.importOrderNo}`}>
                       {i.importOrderNo}
-                    </Link>{" "}
+                    </RecordLink>{" "}
                     · {formatDate(i.date, lang)}
                   </span>
                 </td>
@@ -192,18 +192,19 @@ export default function Payables() {
             <th className={th}>{t("erp.date")}</th>
             <th className={`${th} text-right`}>{t("ap.amount")}</th>
             <th className={`${th} text-right`}>{t("ap.fxDifference")}</th>
-            <th className={th}></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {payments.length === 0 && <EmptyRow colSpan={6} />}
+          {payments.length === 0 && <EmptyRow colSpan={5} />}
           {payments.map((p) => {
             const inv = apDocuments.find((d) => d.docNo === p.appliesTo);
             const fx = inv ? Math.round((p.amountThb - p.amount * inv.rate) * 100) / 100 : 0;
             return (
               <tr key={p.docNo}>
                 <td className={td}>
-                  <span className="font-medium text-gray-900">{p.docNo}</span>
+                  <RecordButton onClick={() => setVoucher(p)} testid={`voucher-${p.docNo}`} title={t("fin.voucher")}>
+                    {p.docNo}
+                  </RecordButton>
                   <span className="block text-xs text-gray-500">
                     {t("ap.onInvoice").replace("{ref}", inv?.reference ?? "—")}
                     {p.reference ? ` · ${p.reference}` : ""}
@@ -220,16 +221,6 @@ export default function Payables() {
                 </td>
                 <td className={`${td} text-right tabular-nums ${fx > 0 ? "text-rose-700" : fx < 0 ? "text-emerald-700" : "text-gray-400"}`}>
                   <Masked>{fx === 0 ? "—" : `${fx > 0 ? t("ap.loss") : t("ap.gain")} ${baht(Math.abs(fx))}`}</Masked>
-                </td>
-                <td className={td}>
-                  <button
-                    onClick={() => setVoucher(p)}
-                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
-                    data-testid={`voucher-${p.docNo}`}
-                  >
-                    <Printer size={13} />
-                    {t("fin.voucher")}
-                  </button>
                 </td>
               </tr>
             );

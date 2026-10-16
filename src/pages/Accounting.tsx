@@ -1,5 +1,4 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { CheckCircle2, Lock, XCircle } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -16,6 +15,7 @@ import { SERIES, formatCompact, monthLabel } from "../lib/analytics";
 import { useLedger } from "../lib/useLedger";
 import { ACCOUNTS, balanceSheet, profitAndLoss, trialBalance, type JournalEntry } from "../domain/ledger";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 // ───────────────────────────── shared ─────────────────────────────
 
@@ -288,9 +288,9 @@ function EntryCard({ e, name, baht, date, sourceLabel, memo }: { e: JournalEntry
           <span className="font-medium text-gray-900">{memo}</span>
         </span>
         {e.href ? (
-          <Link to={e.href} className="text-xs font-medium text-indigo-600 hover:underline">
+          <RecordLink to={e.href} className="text-xs">
             {e.ref}
-          </Link>
+          </RecordLink>
         ) : (
           <span className="text-xs text-gray-500">{e.ref}</span>
         )}

@@ -6,7 +6,6 @@ import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
 import { useRunAction } from "../lib/useRunAction";
 import { formatDate } from "../lib/format";
 import type { Customer } from "../data/types";
-import { Link } from "react-router-dom";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -20,6 +19,7 @@ import { exportToExcel } from "../lib/export";
 import { formatPercent } from "../lib/analytics";
 import { AGING_BUCKETS, OVERDUE_HOLD_DAYS, agingTotals, computeArOpenItems, daysOverdue, todayIso, type AgingBucket } from "../lib/business";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 /** Ordinal ramp: on time → most overdue. */
 const BUCKET_COLORS: Record<AgingBucket, string> = {
@@ -144,9 +144,9 @@ export default function ArAging() {
           {rows.map((r) => (
             <tr key={r.c.customerId} className="hover:bg-gray-50/60">
               <td className={td}>
-                <Link to={`/customers/${r.c.customerId}`} className="font-medium text-gray-900 hover:text-indigo-600 hover:underline">
+                <RecordLink to={`/customers/${r.c.customerId}`}>
                   {bi(r.c.name)}
-                </Link>
+                </RecordLink>
                 <span className="block text-xs text-gray-400">
                   {r.c.customerId} · {r.items.length} {t("ar.openDocs")}
                 </span>
@@ -201,9 +201,9 @@ export default function ArAging() {
             return (
               <li key={r.c.customerId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm" data-testid="collection-row" data-customer={r.c.customerId}>
                 <div>
-                  <Link to={`/customers/${r.c.customerId}`} className="font-medium text-gray-900 hover:text-indigo-600 hover:underline">
+                  <RecordLink to={`/customers/${r.c.customerId}`}>
                     {bi(r.c.name)}
-                  </Link>
+                  </RecordLink>
                   {r.oldest > OVERDUE_HOLD_DAYS && (
                     <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700" data-testid="credit-hold">
                       {t("collect.onHold")}

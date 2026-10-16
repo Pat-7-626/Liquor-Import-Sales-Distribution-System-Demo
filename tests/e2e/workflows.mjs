@@ -764,7 +764,8 @@ consoleProblems.length = 0;
   check("email form is prefilled with the customer's accounts email", /@/.test(await page.locator("[data-testid=email-to]").inputValue()));
   await page.fill("[data-testid=email-to]", "ui-test@example.com");
   await page.click("[data-testid=email-send]");
-  await page.waitForTimeout(1200);
+  // Sending includes rendering the PDF on the server (slower the first time after a restart): wait for the dialog to close.
+  await page.waitForSelector("[data-testid=email-send]", { state: "detached", timeout: 30000 }).catch(() => {});
   const box = await (await fetch("http://localhost:8025/api/v1/search?query=" + encodeURIComponent("to:ui-test@example.com"))).json().catch(() => ({ messages: [] }));
   check("statement arrives in the mailbox", (box.messages ?? []).some((m) => /Statement of account CUS-0006/.test(m.Subject)), String(box.messages?.length));
   await page.locator('#print-modal-root button[aria-label="Close"]').click();
@@ -851,6 +852,61 @@ consoleProblems.length = 0;
   check("exports download as Excel workbooks", dl.suggestedFilename().endsWith(".xlsx") && head === "PK", dl.suggestedFilename());
 
   check("no console errors on documents and exports", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
+}
+
+// ── Names and numbers are the way into a record ──
+{
+  await admin.post("/api/admin/reset");
+  consoleProblems.length = 0;
+  await as("somchai");
+  for (const path of ["/customers", "/sales-orders", "/import-orders"]) {
+    await go(path);
+    check(`${path}: no separate "View details" buttons`, (await page.locator('main :text-is("View details")').count()) === 0);
+  }
+  await go("/customers");
+  await page.locator("[data-testid=customer-link]").first().click();
+  await page.waitForURL(/\/customers\/CUS-/, { timeout: 5000 }).catch(() => {});
+  check("a customer's name opens the customer", /\/customers\/CUS-\d+$/.test(page.url()), page.url());
+  await go("/sales-orders");
+  const firstOrder = await page.locator("[data-testid=order-link]").first().innerText();
+  await page.locator("[data-testid=order-link]").first().click();
+  await page.waitForURL(/\/sales-orders\/SO-/, { timeout: 5000 }).catch(() => {});
+  check("an order number opens the order", page.url().endsWith(`/sales-orders/${firstOrder}`), page.url());
+  await go("/receipts");
+  await page.locator("[data-testid=ar-doc-link]").first().click();
+  await page.waitForTimeout(300);
+  check("a receipt or note number opens the document", (await page.locator("#print-modal-root").count()) === 1);
+  await page.locator('#print-modal-root button[aria-label="Close"]').click();
+  await go("/quotations");
+  await page.locator('[data-testid=quote-row] button:has-text("QT-")').first().click();
+  await page.waitForTimeout(300);
+  check("a quotation number opens the quotation", (await page.locator("#print-modal-root").innerText()).includes("ใบเสนอราคา"));
+  await page.locator('#print-modal-root button[aria-label="Close"]').click();
+  check("no console errors following record links", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
+}
+
+// ── Thai-encoded CSV, and purchase requests in the Approvals queue ──
+{
+  await admin.post("/api/admin/reset");
+  consoleProblems.length = 0;
+  // Thai banks (and Excel's plain "CSV" on Thai Windows) save Windows-874: Thai letters U+0E01–U+0E5B are bytes 0xA1–0xFB.
+  const tis620 = (text) => Buffer.from([...text].map((ch) => (ch.codePointAt(0) >= 0x0e01 && ch.codePointAt(0) <= 0x0e5b ? ch.codePointAt(0) - 0x0e00 + 0xa0 : ch.codePointAt(0))));
+  await as("manager");
+  await go("/accounting/bank");
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  await page.setInputFiles("[data-testid=bank-file]", { name: "kbank.csv", mimeType: "text/csv", buffer: tis620(`date,description,amount,reference\n${yesterday},โอนเงินเข้า ร้านสุขใจ,1500.00,TIS-1\n`) });
+  await page.waitForTimeout(300);
+  check("a bank statement saved in Thai Windows encoding reads correctly", (await page.locator("[data-testid=bank-preview-row]").innerText()).includes("โอนเงินเข้า ร้านสุขใจ"));
+  await page.keyboard.press("Escape");
+
+  await as("somchai");
+  await go("/approvals");
+  const req = (await state()).purchaseRequests.find((r) => r.status === "pending");
+  check("pending purchase requests are in the Approvals queue", (await page.locator(`[data-testid=approval-request][data-request="${req.requestNo}"]`).count()) === 1);
+  await page.click(`[data-testid=approve-request-${req.requestNo}]`);
+  await page.waitForTimeout(500);
+  check("…and can be approved from there", (await state()).purchaseRequests.find((r) => r.requestNo === req.requestNo).status === "approved");
+  check("no console errors on approvals and imports", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
 }
 
 // ── Users & Access ──

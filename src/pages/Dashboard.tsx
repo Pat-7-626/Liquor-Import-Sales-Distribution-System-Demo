@@ -42,6 +42,7 @@ import {
 import { OrderItems } from "../components/OrderItems";
 import { inPeriod } from "../lib/analytics";
 import { formatDate } from "../lib/format";
+import { RecordLink, paths } from "../components/RecordLink";
 
 const KPI_ICONS: Record<string, LucideIcon> = {
   leadTime: Clock,
@@ -76,7 +77,7 @@ function AttentionCard({
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         <Link to={to} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
-          {t("common.viewDetails")}
+          {t("common.seeAll")}
         </Link>
       </div>
       {isEmpty ? (
@@ -210,7 +211,7 @@ export default function Dashboard() {
             <div className="mb-2 flex items-center justify-between">
               <h4 className="text-xs font-semibold text-gray-500">{t("dashboard.importByStatus")}</h4>
               <Link to="/import-orders" className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
-                {t("common.viewDetails")}
+                {t("common.seeAll")}
               </Link>
             </div>
             <div className="max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100">
@@ -234,7 +235,7 @@ export default function Dashboard() {
             <div className="mb-2 flex items-center justify-between">
               <h4 className="text-xs font-semibold text-gray-500">{t("dashboard.salesByStatus")}</h4>
               <Link to="/sales-orders" className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
-                {t("common.viewDetails")}
+                {t("common.seeAll")}
               </Link>
             </div>
             <div className="max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100">
@@ -261,7 +262,15 @@ export default function Dashboard() {
           {attentionLicenses.map((l) => (
             <div key={l.licenseNo} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-gray-900">{bi(l.holder)}</p>
+                {(() => {
+                  // A customer's license opens that customer; our own import licenses open the license list.
+                  const holder = customers.find((c) => c.licenseNo === l.licenseNo);
+                  return (
+                    <RecordLink to={holder ? paths.customer(holder.customerId) : "/licenses"} className="block truncate text-sm">
+                      {bi(l.holder)}
+                    </RecordLink>
+                  );
+                })()}
                 <p className="truncate text-xs text-gray-400">
                   {l.licenseNo} · {formatDate(l.expiryDate, lang)}
                 </p>
@@ -275,7 +284,9 @@ export default function Dashboard() {
           {attentionStock.map((i) => (
             <div key={i.lotBatch} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-gray-900">{i.productName}</p>
+                <RecordLink to={paths.lot(i.lotBatch)} className="block truncate text-sm">
+                  {i.productName}
+                </RecordLink>
                 <p className="truncate text-xs text-gray-400">
                   {i.lotBatch} · {i.ageDays} {t("dashboard.days")}
                 </p>
@@ -361,7 +372,7 @@ export default function Dashboard() {
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900">{t("dashboard.recentActivity")}</h3>
           <Link to="/audit-trail" className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
-            {t("common.viewDetails")}
+            {t("common.seeAll")}
           </Link>
         </div>
         <ActivityFeed

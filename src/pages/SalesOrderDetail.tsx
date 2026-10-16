@@ -20,6 +20,7 @@ import { PlannedDeliveryControl } from "../components/PlannedDeliveryControl";
 import { useInvoiceStatus } from "../lib/useInvoiceStatus";
 import { formatCurrency, formatDate } from "../lib/format";
 import { salesOrderDisplayStatus, canEditSalesOrder, orderQuantity, splitVat } from "../lib/business";
+import { RecordLink } from "../components/RecordLink";
 
 export default function SalesOrderDetail() {
   const { orderNo } = useParams<{ orderNo: string }>();
@@ -134,10 +135,10 @@ export default function SalesOrderDetail() {
               label={t("salesOrders.col.customerName")}
               value={
                 customer ? (
-                  <Link to={`/customers/${customer.customerId}`} className="flex items-center gap-1 text-indigo-600 hover:underline">
+                  <RecordLink to={`/customers/${customer.customerId}`}>
                     {bi(order.customerName)}
                     <ArrowUpRight size={12} />
-                  </Link>
+                  </RecordLink>
                 ) : (
                   bi(order.customerName)
                 )
@@ -201,9 +202,9 @@ export default function SalesOrderDetail() {
                         <span className="block text-xs text-gray-400">{l.sku}</span>
                       </td>
                       <td className="px-2 py-2.5">
-                        <Link to={`/lot-trace?lot=${encodeURIComponent(l.lotBatch)}`} className="text-indigo-600 hover:underline">
+                        <RecordLink to={`/lot-trace?lot=${encodeURIComponent(l.lotBatch)}`}>
                           {l.lotBatch}
-                        </Link>
+                        </RecordLink>
                       </td>
                       <td className="px-2 py-2.5 text-right tabular-nums">
                         {l.quantity}

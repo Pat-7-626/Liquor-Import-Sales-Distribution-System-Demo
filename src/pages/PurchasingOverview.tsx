@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -10,6 +9,7 @@ import { formatCurrency, formatDate, formatNumber } from "../lib/format";
 import { computeLicenseStatus, isImportOverdue, todayIso } from "../lib/business";
 import { SERIES, formatCompact, inPeriod, monthLabel, monthRange, sumBy, type Period } from "../lib/analytics";
 import type { ImportOrderStatus } from "../data/types";
+import { RecordLink } from "../components/RecordLink";
 
 const STAGES: ImportOrderStatus[] = ["staging", "issueDetected", "pendingApproval", "approved", "customsCleared", "receivedWarehouse", "rejected"];
 const OPEN = new Set<ImportOrderStatus>(["staging", "issueDetected", "pendingApproval", "approved", "customsCleared"]);
@@ -127,9 +127,9 @@ export default function PurchasingOverview() {
                 return (
                   <li key={o.orderNo} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
-                      <Link to={`/import-orders/${o.orderNo}`} className="text-sm font-medium text-gray-900 hover:text-indigo-700 hover:underline">
+                      <RecordLink to={`/import-orders/${o.orderNo}`} className="text-sm">
                         {o.orderNo}
-                      </Link>
+                      </RecordLink>
                       <p className="truncate text-xs text-gray-500">
                         {o.supplier} · {formatDate(o.etaDate, lang)}
                       </p>

@@ -1,6 +1,6 @@
-import { Link } from "react-router-dom";
 import { useLanguage } from "../i18n/LanguageContext";
 import type { StockMovementType } from "../data/types";
+import { RecordLink } from "./RecordLink";
 
 const MOVEMENT_TONE: Record<StockMovementType, string> = {
   receipt: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
@@ -23,15 +23,15 @@ export function MovementReference({ reference }: { reference: string }) {
   const orderNo = reference.split(" ")[0];
   if (orderNo.startsWith("SO-"))
     return (
-      <Link to={`/sales-orders/${orderNo}`} className="text-indigo-600 hover:underline">
+      <RecordLink to={`/sales-orders/${orderNo}`}>
         {reference}
-      </Link>
+      </RecordLink>
     );
   if (orderNo.startsWith("IMP-"))
     return (
-      <Link to={`/import-orders/${orderNo}`} className="text-indigo-600 hover:underline">
+      <RecordLink to={`/import-orders/${orderNo}`}>
         {reference}
-      </Link>
+      </RecordLink>
     );
   return <span className="text-gray-500">{reference}</span>;
 }

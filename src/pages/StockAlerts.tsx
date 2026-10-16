@@ -10,6 +10,7 @@ import { TableContainer, th, td } from "../components/Table";
 import { formatDate, formatNumber } from "../lib/format";
 import { computeInboundBySku, computeInventoryAge } from "../lib/business";
 import { useWarehouseName } from "../lib/useWarehouseName";
+import { RecordLink } from "../components/RecordLink";
 
 const NEAR_FULL_RATIO = 0.9;
 
@@ -168,9 +169,9 @@ export default function StockAlerts() {
           {aging.map((i) => (
             <tr key={i.lotBatch} className="hover:bg-gray-50/60">
               <td className={`${td} font-medium`}>
-                <Link to={`/lot-trace?lot=${encodeURIComponent(i.lotBatch)}`} className="text-indigo-600 hover:underline">
+                <RecordLink to={`/lot-trace?lot=${encodeURIComponent(i.lotBatch)}`}>
                   {i.lotBatch}
-                </Link>
+                </RecordLink>
               </td>
               <td className={td}>{i.productName}</td>
               <td className={td}>{formatDate(i.receivedDate, lang)}</td>

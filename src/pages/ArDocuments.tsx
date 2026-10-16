@@ -1,6 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Printer } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -13,6 +11,7 @@ import { exportToExcel } from "../lib/export";
 import { useRole } from "../state/RoleContext";
 import { ArDocumentPrintModal } from "../components/ArDocumentPrintModal";
 import { both } from "../i18n/translations";
+import { RecordLink, RecordButton } from "../components/RecordLink";
 
 /** + raises what the customer owes, − lowers it. */
 const raisesBalance = (type: string) => type === "debitNote" || type === "openingBalance";
@@ -109,7 +108,6 @@ export default function ArDocuments() {
             <th className={th}>{t("erp.paymentMethod")}</th>
             <th className={th}>{t("erp.reference")}</th>
             <th className={th}>{t("auditTrail.col.actor")}</th>
-            <th className={th}></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -120,11 +118,19 @@ export default function ArDocuments() {
               </td>
             </tr>
           ) : (
-            <EmptyRow colSpan={9} />
+            <EmptyRow colSpan={8} />
           ))}
           {filtered.map((d) => (
             <tr key={d.docNo} className="hover:bg-gray-50/60">
-              <td className={`${td} font-medium text-gray-900`}>{d.docNo}</td>
+              <td className={`${td} whitespace-nowrap`}>
+                {d.type === "openingBalance" ? (
+                  <span className="font-medium text-gray-900">{d.docNo}</span>
+                ) : (
+                  <RecordButton onClick={() => setPrintDocNo(d.docNo)} title={t("common.print")} testid="ar-doc-link">
+                    {d.docNo}
+                  </RecordButton>
+                )}
+              </td>
               <td className={td}>{formatDate(d.date, lang)}</td>
               <td className={td}>
                 <span
@@ -142,9 +148,9 @@ export default function ArDocuments() {
                 </span>
               </td>
               <td className={td}>
-                <Link to={`/customers/${d.customerId}`} className="hover:text-indigo-600 hover:underline">
+                <RecordLink to={`/customers/${d.customerId}`}>
                   {customerName(d.customerId)}
-                </Link>
+                </RecordLink>
               </td>
               <td className={`${td} text-right font-medium text-gray-900`}>
                 {/* Sign shows the effect on what the customer owes. */}
@@ -153,25 +159,14 @@ export default function ArDocuments() {
               <td className={td}>{d.method ? t(`erp.method.${d.method}`) : <span className="text-gray-400">—</span>}</td>
               <td className={td}>
                 {d.reference.startsWith("SO-") ? (
-                  <Link to={`/sales-orders/${d.reference}`} className="text-indigo-600 hover:underline">
+                  <RecordLink to={`/sales-orders/${d.reference}`}>
                     {d.reference}
-                  </Link>
+                  </RecordLink>
                 ) : (
                   d.reference || <span className="text-gray-400">—</span>
                 )}
               </td>
               <td className={td}>{bi(d.actor)}</td>
-              <td className={td}>
-                {d.type !== "openingBalance" && (
-                  <button
-                    onClick={() => setPrintDocNo(d.docNo)}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
-                  >
-                    <Printer size={13} />
-                    {t("common.print")}
-                  </button>
-                )}
-              </td>
             </tr>
           ))}
         </tbody>

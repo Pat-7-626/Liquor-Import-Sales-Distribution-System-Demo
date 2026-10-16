@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Upload, Pencil, Lock, Eye, LayoutGrid, Table2 } from "lucide-react";
+import { Upload, Pencil, Lock, LayoutGrid, Table2 } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -21,6 +20,7 @@ import { NewButton } from "../components/NewButton";
 import { CsvImportDialog } from "../components/CsvImport";
 import type { NewCustomerInput } from "../state/DataContext";
 import { both } from "../i18n/translations";
+import { RecordLink, paths } from "../components/RecordLink";
 
 const STATUS_OPTIONS = ["normal", "nearLimit", "overLimit", "noLicense"];
 
@@ -159,9 +159,9 @@ export default function Customers() {
               <article key={c.customerId} className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <Link to={`/customers/${c.customerId}`} className="block truncate font-semibold text-gray-900 hover:text-indigo-600">
+                    <RecordLink to={paths.customer(c.customerId)} className="block truncate font-semibold">
                       {bi(c.name)}
-                    </Link>
+                    </RecordLink>
                     <p className="text-xs text-gray-500">
                       {c.customerId} · {t(`lookup.channel.${c.channelType}`)}
                       {editedIds.has(c.customerId) && <EditedPill />}
@@ -205,10 +205,6 @@ export default function Customers() {
                 </dl>
 
                 <div className="mt-4 flex items-center justify-end gap-1 border-t border-gray-100 pt-3">
-                  <Link to={`/customers/${c.customerId}`} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">
-                    <Eye size={13} />
-                    {t("common.viewDetails")}
-                  </Link>
                   <button
                     onClick={() => setEditingId(c.customerId)}
                     disabled={!can("editCustomerTerms")}
@@ -245,11 +241,15 @@ export default function Customers() {
           {filtered.length === 0 && <EmptyRow colSpan={10} />}
           {filtered.map((c) => (
             <tr key={c.customerId} className="hover:bg-gray-50/60">
-              <td className={`${td} font-medium text-gray-900`}>
-                {c.customerId}
+              <td className={`${td} whitespace-nowrap`}>
+                <RecordLink to={paths.customer(c.customerId)}>{c.customerId}</RecordLink>
                 {editedIds.has(c.customerId) && <EditedPill />}
               </td>
-              <td className={td}>{bi(c.name)}</td>
+              <td className={td}>
+                <RecordLink to={paths.customer(c.customerId)} className="font-normal" testid="customer-link">
+                  {bi(c.name)}
+                </RecordLink>
+              </td>
               <td className={td}>{t(`lookup.channel.${c.channelType}`)}</td>
               <td className={td}>
                 {c.licenseNo ?? <span className="text-gray-400">{t("customers.noLicenseValue")}</span>}
@@ -283,13 +283,6 @@ export default function Customers() {
               </td>
               <td className={td}>
                 <div className="flex items-center gap-1">
-                  <Link
-                    to={`/customers/${c.customerId}`}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
-                  >
-                    <Eye size={13} />
-                    {t("common.viewDetails")}
-                  </Link>
                   <button
                     onClick={() => setEditingId(c.customerId)}
                     disabled={!can("editCustomerTerms")}

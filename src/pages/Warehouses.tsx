@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { Pencil, Lock, ShieldCheck } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -12,6 +11,7 @@ import { Masked } from "../components/Masked";
 import { EditDrawer, type FieldConfig, type FieldValue } from "../components/EditDrawer";
 import { formatCurrency, formatNumber } from "../lib/format";
 import { useRunAction } from "../lib/useRunAction";
+import { RecordLink } from "../components/RecordLink";
 
 export default function Warehouses() {
   const { t, lang } = useLanguage();
@@ -118,9 +118,9 @@ export default function Warehouses() {
               </div>
 
               <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                <Link to={`/inventory?warehouse=${encodeURIComponent(w.code)}`} className="text-xs font-medium text-indigo-600 hover:underline">
+                <RecordLink to={`/inventory?warehouse=${encodeURIComponent(w.code)}`} className="text-xs">
                   {t("erp.viewStock")}
-                </Link>
+                </RecordLink>
                 <button
                   onClick={() => setEditingCode(w.code)}
                   disabled={!can("manageWarehouses")}

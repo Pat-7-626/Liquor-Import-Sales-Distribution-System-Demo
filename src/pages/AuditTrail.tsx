@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { Download, Table2, ListTree } from "lucide-react";
 import { ViewSwitcher, useViewMode } from "../components/ViewSwitcher";
 import { ActivityFeed } from "../components/ActivityFeed";
@@ -17,6 +16,7 @@ import { selectClass, inputClass } from "../components/FormKit";
 import { exportToExcel } from "../lib/export";
 import { useRole } from "../state/RoleContext";
 import { both } from "../i18n/translations";
+import { RecordLink } from "../components/RecordLink";
 
 const ACTION_TONE: Record<AuditAction, string> = {
   created: "bg-blue-50 text-blue-700 ring-blue-600/20",
@@ -241,9 +241,9 @@ export default function AuditTrail() {
                 {(() => {
                   const to = entityLink(e.entityType, e.entityId);
                   return to ? (
-                    <Link to={to} className="font-medium text-indigo-600 hover:underline">
+                    <RecordLink to={to}>
                       {e.entityId}
-                    </Link>
+                    </RecordLink>
                   ) : (
                     <span className="font-medium text-gray-900">{e.entityId}</span>
                   );

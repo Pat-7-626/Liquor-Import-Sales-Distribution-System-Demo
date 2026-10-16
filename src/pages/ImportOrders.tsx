@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { Pencil, Plus, Eye, Lock, Table2, Columns3, CalendarDays, Ship } from "lucide-react";
+import { Pencil, Plus, Lock, Table2, Columns3, CalendarDays, Ship } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -21,6 +21,7 @@ import { CalendarView, CalendarLegend, type CalendarEvent, type EventTone } from
 import type { ImportOrder } from "../data/types";
 import { useRunAction } from "../lib/useRunAction";
 import { both } from "../i18n/translations";
+import { RecordLink, paths } from "../components/RecordLink";
 
 const STATUS_OPTIONS = [
   "staging",
@@ -190,8 +191,10 @@ export default function ImportOrders() {
           {filtered.length === 0 && <EmptyRow colSpan={10} />}
           {filtered.map((o) => (
             <tr key={o.orderNo} className={`hover:bg-gray-50/60 ${o.orderNo === highlightOrderNo ? "bg-indigo-50/40" : ""}`}>
-              <td className={`${td} font-medium text-gray-900`}>
-                {o.orderNo}
+              <td className={`${td} whitespace-nowrap`}>
+                <RecordLink to={paths.importOrder(o.orderNo)} testid="order-link">
+                  {o.orderNo}
+                </RecordLink>
                 {o.orderNo === highlightOrderNo && <EditedPill label={t("common.new")} />}
                 {editedNos.has(o.orderNo) && <EditedPill />}
               </td>
@@ -219,13 +222,6 @@ export default function ImportOrders() {
               <td className={td}>{o.approver ? bi(o.approver) : <span className="text-gray-400">{t("importOrders.none")}</span>}</td>
               <td className={td}>
                 <div className="flex items-center gap-1">
-                  <Link
-                    to={`/import-orders/${o.orderNo}`}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
-                  >
-                    <Eye size={13} />
-                    {t("common.viewDetails")}
-                  </Link>
                   <button
                     onClick={() => setEditingNo(o.orderNo)}
                     disabled={!can("editImportOrder") || o.status === "receivedWarehouse"}
