@@ -70,6 +70,7 @@ import {
   isValidThaiTaxId,
   oldestOverdueDays,
   computeArOpenItems,
+  computeInventoryAge,
 } from "../lib/business";
 import type { Store } from "./store";
 import { makeId } from "./store";
@@ -2447,6 +2448,171 @@ export function decidePurchaseRequest(s: Store, ctx: Ctx, requestNo: string, app
     summary: approve
       ? { th: `อนุมัติคำขอซื้อ${why ? ` — ${why}` : ""}`, en: `Approved the purchase request${why ? ` — ${why}` : ""}` }
       : { th: `ไม่อนุมัติ — ${why}`, en: `Rejected — ${why}` },
+  });
+  return OK;
+}
+
+// ───────────────────────────── opening balances (starting data) ─────────────────────────────
+
+/** Starting data goes in before the first month is closed, by the people who set up the company. */
+function checkOpeningAllowed(s: Store, ctx: Ctx): ActionResult {
+  if (!ctx.can("manageCompany")) return DENIED;
+  if (s.company.closedThrough) return fail("ปิดงวดแล้ว จึงเพิ่มยอดยกมาไม่ได้", "Opening balances can't be added once a month has been closed");
+  return OK;
+}
+
+export interface OpeningReceivableInput {
+  customerId: string;
+  /** The customer's invoice number in the old system. */
+  reference: string;
+  date: string;
+  dueDate?: string | null;
+  amount: number;
+}
+
+/** What a customer already owed when the system started, invoice by invoice so it ages correctly. */
+export function addOpeningReceivable(s: Store, ctx: Ctx, input: OpeningReceivableInput): ActionResult {
+  const allowed = checkOpeningAllowed(s, ctx);
+  if (!allowed.ok) return allowed;
+  const { customers, arDocuments, setArDocuments, pushAudit, moveBalance, actorRef } = bind(s, ctx);
+  const customer = customers.find((c) => c.customerId === input.customerId.trim());
+  if (!customer) return fail(`ไม่พบลูกค้า ${input.customerId}`, `Customer ${input.customerId} not found`);
+  if (!isIsoDate(input.date) || input.date > todayIso()) return fail("วันที่ใบแจ้งหนี้ไม่ถูกต้อง", "The invoice date isn't valid");
+  const dueDate = input.dueDate?.trim() || addDays(input.date, customer.creditTermDays);
+  if (!isIsoDate(dueDate) || dueDate < input.date) return fail("วันครบกำหนดต้องไม่ก่อนวันที่ใบแจ้งหนี้", "The due date can't be before the invoice date");
+  if (!(input.amount > 0 && input.amount < 1e11)) return fail("จำนวนเงินต้องมากกว่า 0", "Amount must be above 0");
+  const ref = input.reference.trim();
+  if (ref && arDocuments.some((d) => d.type === "openingBalance" && d.customerId === customer.customerId && d.reference === ref))
+    return fail(`ยอดยกมา ${ref} ของลูกค้ารายนี้มีอยู่แล้ว`, `${ref} is already brought forward for this customer`);
+  const amount = round2(input.amount);
+  const docNo = nextDocNo("OB", arDocuments.map((d) => d.docNo));
+  setArDocuments((prev) => [
+    { docNo, type: "openingBalance", customerId: customer.customerId, date: input.date, dueDate, amount, reference: ref || "Brought forward", actor: actorRef.current },
+    ...prev,
+  ]);
+  moveBalance(customer.customerId, amount);
+  pushAudit({
+    entityType: "customer",
+    entityId: customer.customerId,
+    action: "created",
+    sensitive: true,
+    summary: { th: `ยอดยกมา ${docNo} ${ref} ฿${fmt(amount)} ครบกำหนด ${dueDate}`, en: `Brought forward ${docNo} ${ref} ฿${fmt(amount)}, due ${dueDate}` },
+  });
+  return OK;
+}
+
+export interface OpeningStockInput {
+  sku: string;
+  lotBatch: string;
+  warehouse: string;
+  receivedDate: string;
+  quantity: number;
+  /** Landed cost per unit; defaults to the product's cost price. */
+  unitCost?: number | null;
+  exciseStampDate?: string | null;
+}
+
+/** A lot already on the shelf when the system started, at what it cost. */
+export function addOpeningStock(s: Store, ctx: Ctx, input: OpeningStockInput): ActionResult {
+  const allowed = checkOpeningAllowed(s, ctx);
+  if (!allowed.ok) return allowed;
+  const { products, warehouses, inventory, setInventory, pushAudit, moveStock } = bind(s, ctx);
+  const product = products.find((p) => p.sku === input.sku.trim());
+  if (!product) return fail(`ไม่พบสินค้า ${input.sku}`, `Product ${input.sku} not found`);
+  const warehouse = warehouses.find((w) => w.code === input.warehouse.trim() && w.active);
+  if (!warehouse) return fail(`ไม่พบคลัง ${input.warehouse}`, `Warehouse ${input.warehouse} not found`);
+  const lotBatch = input.lotBatch.trim();
+  if (!/^[\w./-]{2,40}$/.test(lotBatch)) return fail("เลขล็อตไม่ถูกต้อง", "The lot number isn't valid");
+  if (inventory.some((i) => i.lotBatch === lotBatch)) return fail(`ล็อต ${lotBatch} มีอยู่แล้ว`, `Lot ${lotBatch} already exists`);
+  if (!isIsoDate(input.receivedDate) || input.receivedDate > todayIso()) return fail("วันที่รับเข้าไม่ถูกต้อง", "The received date isn't valid");
+  if (!isWholePositive(input.quantity) || input.quantity > 1_000_000) return fail("จำนวนต้องเป็นจำนวนเต็มมากกว่า 0", "Quantity must be a whole number above 0");
+  const unitCost = round2(input.unitCost && input.unitCost > 0 ? input.unitCost : product.costPrice);
+  if (!(unitCost > 0)) return fail("ต้องระบุต้นทุนต่อหน่วย", "Give the cost per unit");
+  const stamp = input.exciseStampDate?.trim();
+  if (stamp && !isIsoDate(stamp)) return fail("วันที่ติดแสตมป์ไม่ถูกต้อง", "The excise stamp date isn't valid");
+  // The lot starts empty; the opening receipt fills it, so the stock ledger explains every unit.
+  setInventory((prev) => [
+    {
+      sku: product.sku,
+      productName: product.name,
+      lotBatch,
+      receivedDate: input.receivedDate,
+      quantityRemaining: 0,
+      ...computeInventoryAge(input.receivedDate),
+      warehouse: warehouse.code,
+      unitCost,
+      ...(stamp ? { exciseStampDate: stamp } : {}),
+    },
+    ...prev,
+  ]);
+  moveStock(product.sku, lotBatch, input.quantity, "receipt", "OPENING");
+  pushAudit({
+    entityType: "inventory",
+    entityId: lotBatch,
+    action: "created",
+    sensitive: true,
+    summary: { th: `สต๊อกยกมา ${product.sku} × ${input.quantity} ที่ ${warehouse.code} @ ฿${fmt(unitCost)}`, en: `Opening stock ${product.sku} × ${input.quantity} in ${warehouse.code} @ ฿${fmt(unitCost)}` },
+  });
+  return OK;
+}
+
+export interface OpeningPayableInput {
+  supplierId: string;
+  /** The supplier's invoice number. */
+  reference: string;
+  date: string;
+  dueDate?: string | null;
+  currency: string;
+  amount: number;
+  /** Baht per unit of the currency it was booked at (1 for baht). */
+  rate: number;
+}
+
+/** A supplier's bill still unpaid when the system started — paid later like any other. */
+export function addOpeningPayable(s: Store, ctx: Ctx, input: OpeningPayableInput): ActionResult {
+  const allowed = checkOpeningAllowed(s, ctx);
+  if (!allowed.ok) return allowed;
+  const { suppliers, apDocuments, setApDocuments, pushAudit, actorRef } = bind(s, ctx);
+  const supplier = suppliers.find((sp) => sp.supplierId === input.supplierId.trim());
+  if (!supplier) return fail(`ไม่พบผู้ขาย ${input.supplierId}`, `Supplier ${input.supplierId} not found`);
+  const ref = input.reference.trim();
+  if (!ref) return fail("กรุณาระบุเลขที่ใบแจ้งหนี้ของผู้ขาย", "Give the supplier's invoice number");
+  if (apDocuments.some((d) => d.type === "invoice" && d.supplierId === supplier.supplierId && d.reference === ref))
+    return fail(`ใบแจ้งหนี้ ${ref} ของผู้ขายรายนี้มีอยู่แล้ว`, `Invoice ${ref} from this supplier is already recorded`);
+  if (!isIsoDate(input.date) || input.date > todayIso()) return fail("วันที่ใบแจ้งหนี้ไม่ถูกต้อง", "The invoice date isn't valid");
+  const dueDate = input.dueDate?.trim() || addDays(input.date, supplier.paymentTermDays);
+  if (!isIsoDate(dueDate) || dueDate < input.date) return fail("วันครบกำหนดต้องไม่ก่อนวันที่ใบแจ้งหนี้", "The due date can't be before the invoice date");
+  const currency = input.currency.trim().toUpperCase() || "THB";
+  if (!/^[A-Z]{3}$/.test(currency)) return fail("รหัสสกุลเงินต้องเป็นตัวอักษร 3 ตัว", "Currency must be a 3-letter code");
+  const rate = currency === "THB" ? 1 : input.rate;
+  if (!(rate > 0 && rate < 100000)) return fail("อัตราแลกเปลี่ยนไม่ถูกต้อง", "The exchange rate isn't valid");
+  if (!(input.amount > 0 && input.amount < 1e11)) return fail("จำนวนเงินต้องมากกว่า 0", "Amount must be above 0");
+  const amount = round2(input.amount);
+  const docNo = nextDocNo("AP", apDocuments.map((d) => d.docNo));
+  setApDocuments((prev) => [
+    {
+      docNo,
+      type: "invoice",
+      supplierId: supplier.supplierId,
+      // No import order: it was bought before the system — the books carry it against opening equity.
+      importOrderNo: "",
+      reference: ref,
+      date: input.date,
+      dueDate,
+      currency,
+      amount,
+      rate,
+      amountThb: round2(amount * rate),
+      actor: actorRef.current,
+    },
+    ...prev,
+  ]);
+  pushAudit({
+    entityType: "payable",
+    entityId: docNo,
+    action: "created",
+    sensitive: true,
+    summary: { th: `เจ้าหนี้ยกมา ${supplier.name} ${ref} ${currency} ${fmt(amount)}`, en: `Payable brought forward: ${supplier.name} ${ref} ${currency} ${fmt(amount)}` },
   });
   return OK;
 }

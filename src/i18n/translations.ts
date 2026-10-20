@@ -95,6 +95,7 @@ const dict = {
     bankReconciliation: { th: "กระทบยอดธนาคาร", en: "Bank Reconciliation" },
     periodClosing: { th: "ปิดงวดบัญชี", en: "Month-end Close" },
     stockCounts: { th: "ตรวจนับสต๊อก", en: "Stock Counts" },
+    openingBalances: { th: "ยอดยกมา", en: "Opening Balances" },
     overview: { th: "ภาพรวม", en: "Overview" },
     transactions: { th: "ธุรกรรม", en: "Transactions" },
     masterData: { th: "ข้อมูลหลัก", en: "Master data" },
@@ -433,6 +434,7 @@ const dict = {
   },
 
   salesOrderDetail: {
+    copyOrder: { th: "สั่งซ้ำ", en: "Copy order" },
     backToList: { th: "กลับไปหน้าออเดอร์ขาย", en: "Back to Sales Orders" },
     sectionOverview: { th: "ข้อมูลออเดอร์", en: "Order Overview" },
     viewCustomer: { th: "ดูข้อมูลลูกค้า", en: "View customer" },
@@ -1887,6 +1889,129 @@ const dict = {
       th: "นำเข้า {added} รายการ (ข้าม {skipped}) จับคู่อัตโนมัติ {matched}",
       en: "Imported {added} lines ({skipped} skipped), {matched} matched",
     },
+  },
+
+  search: {
+    open: { th: "ค้นหา", en: "Search" },
+    placeholderShort: { th: "ค้นหา…", en: "Search…" },
+    placeholder: { th: "เลขที่ออเดอร์ ใบกำกับภาษี ลูกค้า สินค้า ล็อต…", en: "Order no., invoice, customer, product, lot…" },
+    hint: { th: "พิมพ์อย่างน้อย 2 ตัวอักษร", en: "Type at least 2 characters" },
+    footer: { th: "↑↓ เลือก · Enter เปิด · Esc ปิด", en: "↑↓ to choose · Enter to open · Esc to close" },
+    salesOrders: { th: "ออเดอร์ขาย", en: "Sales orders" },
+    importOrders: { th: "ออเดอร์นำเข้า", en: "Import orders" },
+    customers: { th: "ลูกค้า", en: "Customers" },
+    lots: { th: "ล็อต", en: "Lots" },
+    products: { th: "สินค้า", en: "Products" },
+    suppliers: { th: "ผู้ขาย", en: "Suppliers" },
+    documents: { th: "เอกสาร", en: "Documents" },
+  },
+
+  shortcuts: {
+    title: { th: "คีย์ลัด", en: "Keyboard shortcuts" },
+    search: { th: "ค้นหา", en: "Search" },
+    new: { th: "สร้างรายการใหม่ในหน้านี้", en: "New item on this page" },
+    help: { th: "แสดงคีย์ลัด", en: "Show shortcuts" },
+    close: { th: "ปิดหน้าต่าง", en: "Close a window" },
+  },
+
+  account: {
+    title: { th: "บัญชีของฉัน", en: "My account" },
+  },
+
+  twoFactor: {
+    title: { th: "ยืนยันสองขั้นตอน", en: "Two-step sign-in" },
+    short: { th: "2 ขั้นตอน", en: "2-step" },
+    explain: {
+      th: "นอกจากรหัสผ่าน ระบบจะขอรหัส 6 หลักจากแอปยืนยันตัวตนในโทรศัพท์ของคุณ (เช่น Google Authenticator, Microsoft Authenticator) แม้รหัสผ่านรั่วไหล ผู้อื่นก็เข้าระบบไม่ได้",
+      en: "Besides your password, sign-in asks for the 6-digit code from an authenticator app on your phone (Google Authenticator, Microsoft Authenticator…). Even if your password leaks, nobody else can get in.",
+    },
+    isOn: { th: "เปิดการยืนยันสองขั้นตอนอยู่", en: "Two-step sign-in is on" },
+    isOff: { th: "ยังไม่ได้เปิดการยืนยันสองขั้นตอน", en: "Two-step sign-in is off" },
+    setUp: { th: "ตั้งค่าการยืนยันสองขั้นตอน", en: "Set up two-step sign-in" },
+    turnOn: { th: "เปิดใช้งาน", en: "Turn on" },
+    turnOff: { th: "ปิดการยืนยันสองขั้นตอน", en: "Turn off two-step sign-in" },
+    step1: { th: "ติดตั้งแอปยืนยันตัวตนในโทรศัพท์ (ถ้ายังไม่มี)", en: "Install an authenticator app on your phone, if you don't have one" },
+    step2: { th: "ในแอป เลือกเพิ่มบัญชี แล้วสแกน QR ด้านล่าง", en: "In the app, add an account and scan the QR code below" },
+    step3: { th: "พิมพ์รหัส 6 หลักที่แอปแสดง", en: "Type the 6-digit code the app shows" },
+    qrAlt: { th: "QR สำหรับแอปยืนยันตัวตน", en: "QR code for the authenticator app" },
+    cantScan: { th: "สแกนไม่ได้? พิมพ์รหัสนี้ในแอปแทน", en: "Can't scan? Type this key into the app instead" },
+    code: { th: "รหัส 6 หลัก", en: "6-digit code" },
+    requiredForRole: { th: "บทบาทของคุณต้องใช้การยืนยันสองขั้นตอน จึงปิดไม่ได้", en: "Your role must use two-step sign-in, so it can't be turned off" },
+    changedToast: { th: "อัปเดตการยืนยันสองขั้นตอนแล้ว", en: "Two-step sign-in updated" },
+    loginTitle: { th: "ใส่รหัสจากแอปยืนยันตัวตน", en: "Enter the code from your authenticator app" },
+    loginHint: { th: "เปิดแอปในโทรศัพท์แล้วพิมพ์รหัส 6 หลักของ LISD", en: "Open the app on your phone and type the 6-digit LISD code" },
+    verify: { th: "ยืนยัน", en: "Verify" },
+    back: { th: "กลับไปหน้าเข้าสู่ระบบ", en: "Back to sign in" },
+    lostPhone: { th: "โทรศัพท์หาย? ติดต่อผู้จัดการอาวุโสเพื่อรีเซ็ต", en: "Lost your phone? Ask a Senior Manager to reset it" },
+    forcedTitle: { th: "ตั้งค่าการยืนยันสองขั้นตอน", en: "Set up two-step sign-in" },
+    forcedBody: { th: "คุณ{name} บทบาทของคุณต้องยืนยันสองขั้นตอนทุกครั้งที่เข้าสู่ระบบ กรุณาตั้งค่าก่อนใช้งาน", en: "{name}, your role signs in with two steps. Set it up to continue." },
+    reset: { th: "รีเซ็ตการยืนยันสองขั้นตอน", en: "Reset two-step sign-in" },
+    confirmReset: {
+      th: "รีเซ็ตการยืนยันสองขั้นตอนของ {name}? ผู้ใช้จะถูกออกจากระบบ และเข้าได้ด้วยรหัสผ่านอย่างเดียวจนกว่าจะตั้งค่าใหม่",
+      en: "Reset two-step sign-in for {name}? They're signed out and sign in with just their password until they set it up again.",
+    },
+    resetToast: { th: "รีเซ็ตการยืนยันสองขั้นตอนแล้ว", en: "Two-step sign-in reset" },
+  },
+
+  summary: {
+    title: { th: "อีเมลสรุปงาน", en: "Morning email" },
+    explain: {
+      th: "ทุกเช้าเวลา {hour} ระบบจะส่งอีเมลสรุปเรื่องที่รอคุณ (เหมือนกระดิ่งแจ้งเตือน) พร้อมลิงก์ไปยังแต่ละเรื่อง วันที่ไม่มีอะไรจะไม่ส่ง",
+      en: "Each morning at {hour}, an email lists what's waiting on you — the same as the bell — with a link to each. Nothing is sent on days with nothing to do.",
+    },
+    email: { th: "อีเมลของฉัน", en: "My email" },
+    daily: { th: "ส่งสรุปงานทุกเช้า", en: "Send me the summary every morning" },
+    sendNow: { th: "ส่งให้ฉันตอนนี้", en: "Send me one now" },
+    saved: { th: "บันทึกแล้ว", en: "Saved" },
+    sent: { th: "ส่งแล้ว — ตรวจสอบกล่องจดหมาย", en: "Sent — check your inbox" },
+    noSmtp: { th: "ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์อีเมล (SMTP) จึงยังไม่มีการส่ง", en: "Email (SMTP) isn't set up yet, so nothing will be sent" },
+  },
+
+  ob: {
+    title: { th: "ยอดยกมา", en: "Opening Balances" },
+    subtitle: {
+      th: "เริ่มใช้ระบบ: ลูกหนี้คงค้าง สต๊อกคงเหลือ และเจ้าหนี้ที่ยังไม่จ่าย นำเข้าจากไฟล์ CSV — ทุกแถวผ่านกฎเดียวกับการบันทึกปกติ",
+      en: "Going live: what customers owe, stock on the shelves, and suppliers' bills still unpaid — imported from CSV, every row through the same rules as normal entry",
+    },
+    import: { th: "นำเข้าจาก CSV", en: "Import CSV" },
+    soFar: { th: "นำเข้าแล้ว {n} รายการ", en: "{n} so far" },
+    overdue: { th: "เกินกำหนด", en: "overdue" },
+    locked: { th: "ปิดงวดแล้ว — ยอดยกมาแก้ไขไม่ได้", en: "A month has been closed — opening balances are fixed" },
+    receivablesTitle: { th: "ลูกหนี้ยกมา", en: "Customer balances" },
+    receivablesHint: {
+      th: "ทีละใบแจ้งหนี้ พร้อมวันที่และวันครบกำหนด เพื่อให้อายุลูกหนี้และการทวงถามถูกต้อง",
+      en: "Invoice by invoice, with dates and due dates, so aging, statements and reminders are right from day one",
+    },
+    stockTitle: { th: "สต๊อกยกมา", en: "Stock on hand" },
+    stockHint: {
+      th: "ทีละล็อต พร้อมคลัง วันที่รับเข้า และต้นทุนต่อหน่วย (เว้นว่าง = ราคาทุนของสินค้า)",
+      en: "Lot by lot, with warehouse, received date and cost per unit (blank = the product's cost price)",
+    },
+    payablesTitle: { th: "เจ้าหนี้ยกมา", en: "Supplier bills unpaid" },
+    payablesHint: {
+      th: "ใบแจ้งหนี้ผู้ขายที่ยังไม่ได้จ่าย ในสกุลเงินของผู้ขาย พร้อมอัตราที่บันทึกไว้ — จ่ายต่อได้ที่หน้าเจ้าหนี้",
+      en: "Suppliers' invoices still unpaid, in their currency at the rate they were booked — then paid from Supplier Invoices as usual",
+    },
+    booksNote: {
+      th: "ในบัญชี ยอดยกมาทั้งหมดบันทึกคู่กับบัญชีทุนยอดยกมา (3100) — ปิดงวดแรกแล้วจะแก้ไขไม่ได้",
+      en: "In the books every opening item posts against Opening balance equity (3100); once the first month is closed they're fixed",
+    },
+    broughtForward: { th: "ยอดยกมา", en: "Brought forward" },
+  },
+
+  labels: {
+    label: { th: "ป้าย", en: "Label" },
+    print: { th: "พิมพ์ป้ายล็อต", en: "Print lot label" },
+    printShipment: { th: "พิมพ์ป้ายทุกล็อต", en: "Print labels for these lots" },
+    copies: { th: "ป้ายละ", en: "Copies each" },
+    received: { th: "รับเข้า", en: "Received" },
+  },
+
+  scan: {
+    scanLabel: { th: "สแกนป้ายล็อต", en: "Scan a lot label" },
+    notOnCount: { th: "ล็อต {lot} ไม่อยู่ในใบตรวจนับนี้", en: "{lot} isn't on this count" },
+    point: { th: "หันกล้องไปที่ QR บนป้ายล็อต", en: "Point the camera at the QR code on a lot label" },
+    noCamera: { th: "เปิดกล้องไม่ได้ — อนุญาตการใช้กล้อง หรือใช้ผ่าน HTTPS", en: "Can't open the camera — allow camera access (the app must be on HTTPS)" },
   },
 
   email: {

@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { Pencil, Lock } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
@@ -26,7 +27,8 @@ export default function Suppliers() {
   const { can } = useRole();
   const { suppliers, importOrders, exchangeRates, saveSupplier } = useData();
   const currencies = ["THB", ...[...new Set(exchangeRates.map((r) => r.currency))].sort()];
-  const [search, setSearch] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(() => params.get("q") ?? "");
   const [statusFilter, setStatusFilter] = useState("");
   /** null = closed, "" = creating, otherwise the supplier being edited. */
   const [editingId, setEditingId] = useState<string | null>(null);

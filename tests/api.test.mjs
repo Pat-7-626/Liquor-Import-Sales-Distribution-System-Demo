@@ -798,6 +798,159 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   check("image changes are on the audit trail", (await mgr.call("GET", "/api/audit?entityType=company&limit=50")).json.rows.some((e) => /signature/.test(e.summary.en)));
 }
 
+// ── opening balances: receivables, stock and supplier bills from before the system ──
+{
+  await sup.call("POST", "/api/admin/reset");
+  const mgr = await session("manager");
+  const s0 = await fullState(mgr);
+  const today = addDays(new Date().toISOString().slice(0, 10), 0);
+  const cust = s0.customers.find((c) => c.customerId === "CUS-0001");
+  const product = s0.products[0];
+  const warehouse = s0.warehouses.find((w) => w.active);
+  const supplier = s0.suppliers[0];
+  check("only the company's set-up role adds opening balances", !(await wh.cmd("addOpeningReceivable", { customerId: "CUS-0001", reference: "OLD-1", date: addDays(today, -40), amount: 1000 })).json.result.ok);
+  const ar = await mgr.cmd("addOpeningReceivable", { customerId: "CUS-0001", reference: "OLD-1", date: addDays(today, -40), dueDate: addDays(today, -10), amount: 1000 });
+  check(
+    "a customer's old invoice is brought forward",
+    ar.json.result.ok && Math.abs(ar.json.state.customers.find((c) => c.customerId === "CUS-0001").outstandingBalance - (cust.outstandingBalance + 1000)) < 0.01,
+    ar.json.result.error?.en,
+  );
+  check("…once only", !(await mgr.cmd("addOpeningReceivable", { customerId: "CUS-0001", reference: "OLD-1", date: addDays(today, -40), amount: 1000 })).json.result.ok);
+  check("…not dated in the future", !(await mgr.cmd("addOpeningReceivable", { customerId: "CUS-0001", reference: "OLD-2", date: addDays(today, 3), amount: 1000 })).json.result.ok);
+  check("…and it ages from its own due date", (await fullState(mgr)).arDocuments.some((d) => d.type === "openingBalance" && d.reference === "OLD-1" && d.dueDate === addDays(today, -10)));
+
+  const stock = await mgr.cmd("addOpeningStock", { sku: product.sku, lotBatch: "OPEN-T-1", warehouse: warehouse.code, receivedDate: addDays(today, -60), quantity: 10, unitCost: 500 });
+  check("a lot already on the shelf is brought in", stock.json.result.ok && stock.json.state.products.find((p) => p.sku === product.sku).stockAvailable === product.stockAvailable + 10, stock.json.result.error?.en);
+  check("…a lot number only once", !(await mgr.cmd("addOpeningStock", { sku: product.sku, lotBatch: "OPEN-T-1", warehouse: warehouse.code, receivedDate: addDays(today, -60), quantity: 1 })).json.result.ok);
+  check("…whole bottles only", !(await mgr.cmd("addOpeningStock", { sku: product.sku, lotBatch: "OPEN-T-2", warehouse: warehouse.code, receivedDate: addDays(today, -60), quantity: 1.5 })).json.result.ok);
+  check("…into a warehouse that exists", !(await mgr.cmd("addOpeningStock", { sku: product.sku, lotBatch: "OPEN-T-3", warehouse: "nowhere", receivedDate: addDays(today, -60), quantity: 1 })).json.result.ok);
+
+  const ap = await mgr.cmd("addOpeningPayable", { supplierId: supplier.supplierId, reference: "OLD-BILL-9", date: addDays(today, -20), currency: "usd", amount: 1000, rate: 35 });
+  const bill = ap.json.state?.apDocuments.find((d) => d.reference === "OLD-BILL-9");
+  check("an unpaid supplier bill is brought forward", ap.json.result.ok && bill?.importOrderNo === "" && bill.currency === "USD" && bill.amountThb === 35000, ap.json.result.error?.en);
+  const paid = bill && (await mgr.cmd("recordSupplierPayment", bill.docNo, 400, 35, "transfer", "TT-OB"));
+  check("…and paid like any other", paid?.json.result.ok, paid?.json.result.error?.en);
+
+  const st = await fullState(mgr);
+  const tb = (await mgr.call("GET", "/api/accounting/trial-balance")).json;
+  const bal = (c) => tb.accounts.find((a) => a.code === c)?.balance ?? 0;
+  check("the books still balance", tb.unbalancedEntries.length === 0);
+  check("receivables in the books include what was brought forward", Math.abs(bal("1200") - st.customers.reduce((s, c) => s + c.outstandingBalance, 0)) < 0.05 && arReconciles(st));
+  check("stock in the books includes the opening lot", Math.abs(bal("1300") - st.inventory.reduce((s, i) => s + i.quantityRemaining * i.unitCost, 0)) < 0.05);
+  const apOpen = st.apDocuments
+    .filter((d) => d.type === "invoice")
+    .reduce((s, d) => s + (d.amount - st.apDocuments.filter((p) => p.appliesTo === d.docNo).reduce((x, p) => x + p.amount, 0)) * d.rate, 0);
+  check("payables in the books include the bill brought forward", Math.abs(bal("2110") - apOpen) < 0.05, `${bal("2110")} vs ${apOpen.toFixed(2)}`);
+  check("the stock ledger explains the opening lot", ledgerOk(st) && st.stockMovements.some((m) => m.lotBatch === "OPEN-T-1" && m.reference === "OPENING" && m.quantity === 10));
+
+  const lastMonthEnd = addDays(`${today.slice(0, 7)}-01`, -1);
+  const closed = await mgr.cmd("closePeriod", lastMonthEnd);
+  check("closing a month…", closed.json.result.ok, closed.json.result.error?.en);
+  check("…fixes the opening balances", !(await mgr.cmd("addOpeningReceivable", { customerId: "CUS-0001", reference: "OLD-3", date: addDays(today, -40), amount: 5 })).json.result.ok);
+  await mgr.cmd("reopenPeriod", "test");
+}
+
+// ── two-step sign-in ──
+{
+  const { createHmac } = await import("node:crypto");
+  const b32 = (text) => {
+    const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = 0;
+    let value = 0;
+    const out = [];
+    for (const ch of text) {
+      value = (value << 5) | A.indexOf(ch);
+      bits += 5;
+      if (bits >= 8) {
+        out.push((value >>> (bits - 8)) & 255);
+        bits -= 8;
+      }
+    }
+    return Buffer.from(out);
+  };
+  const totp = (secret, at = Date.now()) => {
+    const counter = Buffer.alloc(8);
+    counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)));
+    const mac = createHmac("sha1", b32(secret)).update(counter).digest();
+    const o = mac[19] & 15;
+    return String((((mac[o] & 0x7f) << 24) | (mac[o + 1] << 16) | (mac[o + 2] << 8) | mac[o + 3]) % 1_000_000).padStart(6, "0");
+  };
+  const notThis = (code) => (code === "000000" ? "111111" : "000000");
+  const post = (path, body) => fetch(BASE + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  const mgr = await session("manager");
+  const key = `t_${Date.now().toString(36)}2f`;
+  await mgr.call("POST", "/api/admin/users", { key, role: "salesOfficer", name: { th: "ทดสอบ", en: "Two Step" }, password: "TempPass123" });
+  const tmp = await session(key, "TempPass123");
+  check("a temporary password must be replaced before setting up two-step sign-in", (await tmp.call("POST", "/api/auth/2fa/setup")).status === 403);
+  await tmp.call("POST", "/api/auth/password", { current: "TempPass123", next: "MyOwnPass99" });
+  const me = await session(key, "MyOwnPass99");
+  const setup = await me.call("POST", "/api/auth/2fa/setup");
+  const secret = setup.json?.secret ?? "";
+  check("setup gives a secret and an authenticator link", /^[A-Z2-7]{32}$/.test(secret) && setup.json.uri.startsWith("otpauth://totp/") && setup.json.uri.includes(`secret=${secret}`));
+  check("it isn't on until a code confirms it", (await me.call("GET", "/api/auth/me")).json.user.twoFactorEnabled === false);
+  check("a wrong code doesn't turn it on", (await me.call("POST", "/api/auth/2fa/enable", { code: notThis(totp(secret)) })).status === 422);
+  check("the right code turns it on", (await me.call("POST", "/api/auth/2fa/enable", { code: totp(secret) })).status === 200 && (await me.call("GET", "/api/auth/me")).json.user.twoFactorEnabled === true);
+
+  const step1 = await post("/api/auth/login", { key, password: "MyOwnPass99" });
+  const ticket = await step1.json();
+  check("the password alone no longer signs in", step1.status === 200 && ticket.twoFactor === true && !ticket.user && !(step1.headers.get("set-cookie") ?? "").includes("lisd_session="));
+  check("a wrong code is refused", (await post("/api/auth/2fa/verify", { challenge: ticket.challenge, code: notThis(totp(secret, Date.now() + 30000)) })).status === 401);
+  check("the ticket can't be used as a session", (await fetch(`${BASE}/api/state`, { headers: { cookie: `lisd_session=${ticket.challenge}` } })).status === 401);
+  check("a session can't be used as a ticket", (await post("/api/auth/2fa/verify", { challenge: me.cookie.replace("lisd_session=", ""), code: totp(secret, Date.now() + 30000) })).status === 410);
+  check("a forged ticket is refused", (await post("/api/auth/2fa/verify", { challenge: ticket.challenge.replace(/.$/, (c) => (c === "A" ? "B" : "A")), code: totp(secret) })).status === 410);
+  // The code that turned it on can't be used again, so take the next one (allowed for clock drift).
+  const code = totp(secret, Date.now() + 30000);
+  const ok = await post("/api/auth/2fa/verify", { challenge: ticket.challenge, code });
+  const cookie = (ok.headers.get("set-cookie") ?? "").split(";")[0];
+  check("password + code signs in", ok.status === 200 && cookie.startsWith("lisd_session="), String(ok.status));
+  check("…and the session works", (await fetch(`${BASE}/api/state`, { headers: { cookie } })).status === 200);
+  check("a code can't be used twice", (await post("/api/auth/2fa/verify", { challenge: ticket.challenge, code })).status === 401);
+  check("the users list shows who has it on", (await mgr.call("GET", "/api/admin/users")).json.users.find((u) => u.key === key)?.twoFactorEnabled === true);
+  check("turning it off needs the password", (await me.call("POST", "/api/auth/2fa/disable", { password: "wrong-one" })).status === 422);
+  check("only a user manager can reset someone's", (await me.call("POST", "/api/admin/users/manager/2fa/reset")).status === 403);
+  check("a lost phone: the manager resets it", (await mgr.call("POST", `/api/admin/users/${key}/2fa/reset`)).status === 200);
+  check("…which signs the user out", (await fetch(`${BASE}/api/state`, { headers: { cookie } })).status === 401);
+  const after = await session(key, "MyOwnPass99");
+  check("…and the password alone works again", after.status === 200 && after.cookie.startsWith("lisd_session="));
+  check("the changes are on the audit trail", (await fullState(mgr)).auditLog.filter((e) => e.entityType === "user" && e.entityId === key && /two-step/i.test(e.summary.en)).length >= 2);
+  await mgr.call("PATCH", `/api/admin/users/${key}`, { active: false });
+}
+
+// ── morning summary email ──
+{
+  const mgr = await session("manager");
+  const settings = (await mgr.call("GET", "/api/me/summary")).json;
+  check("the morning email can be set up", settings.emailEnabled === true && typeof settings.hour === "number");
+  check("a bad address is refused", (await mgr.call("POST", "/api/me/summary", { email: "not-an-address", dailySummary: true })).status === 422);
+  check("turning it on needs an address", (await mgr.call("POST", "/api/me/summary", { email: "", dailySummary: true })).status === 422);
+  const to = `digest-${Date.now()}@example.com`;
+  check("address and daily summary saved", (await mgr.call("POST", "/api/me/summary", { email: to, dailySummary: true })).status === 200);
+  check("…and read back", (await mgr.call("GET", "/api/me/summary")).json.email === to);
+  const sent = await mgr.call("POST", "/api/me/summary/send");
+  check("send me one now", sent.status === 200, sent.text.slice(0, 100));
+  check("…not twice in a minute", (await mgr.call("POST", "/api/me/summary/send")).status === 429);
+  try {
+    const box = await (await fetch("http://localhost:8025/api/v1/messages")).json();
+    const m = box.messages.find((x) => x.To?.[0]?.Address === to);
+    const full = m && (await (await fetch(`http://localhost:8025/api/v1/message/${m.ID}`)).json());
+    check(
+      "the summary arrives, listing what's waiting with links into the app",
+      Boolean(m) && /Your day: \d+ item/.test(m.Subject) && /Good morning/.test(full.HTML) && /href="http:\/\/localhost:8080\/[a-z-]+/.test(full.HTML),
+      m?.Subject,
+    );
+  } catch {
+    check("the demo mailbox is reachable", false);
+  }
+  const guest = (await fetch(`${BASE}/api/auth/guest`, { method: "POST" })).headers.get("set-cookie")?.split(";")[0];
+  if (guest)
+    check(
+      "guests can't set it up",
+      (await fetch(`${BASE}/api/me/summary`, { method: "POST", headers: { cookie: guest, "content-type": "application/json" }, body: JSON.stringify({ email: "g@example.com", dailySummary: true }) })).status === 403,
+    );
+  await mgr.call("POST", "/api/me/summary", { email: "", dailySummary: false });
+}
+
 // ── user management ──
 {
   const mgr = await session("manager");

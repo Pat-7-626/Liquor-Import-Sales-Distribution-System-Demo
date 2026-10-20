@@ -2,7 +2,7 @@ import { Stepper } from "../components/Stepper";
 import { importFlow } from "../lib/flows";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Paperclip, Trash2, PackageCheck, Pencil, Plus, X, Lock, Stamp } from "lucide-react";
+import { ArrowLeft, Paperclip, Trash2, PackageCheck, Pencil, Plus, X, Lock, Stamp, QrCode as QrCodeIcon } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -18,6 +18,7 @@ import { useRunAction } from "../lib/useRunAction";
 import { useWarehouseName } from "../lib/useWarehouseName";
 import type { DocumentKind, ImportOrderLineItem, ReceivingLine, WarehouseCode } from "../data/types";
 import { RecordLink, paths } from "../components/RecordLink";
+import { LotLabels } from "../components/LotLabels";
 
 const RECEIVING_ELIGIBLE_STATUSES = new Set(["approved", "customsCleared"]);
 const DOC_KINDS: DocumentKind[] = ["invoice", "packingList", "billOfLading", "importLicense", "other"];
@@ -51,6 +52,7 @@ export default function ImportOrderDetail() {
     products,
     attachDocument,
     removeDocument,
+    inventory,
     receiveGoods,
     correctImportOrderLines,
     recordCustomsClearance,
@@ -115,6 +117,7 @@ export default function ImportOrderDetail() {
     if (await runAction(result, t("importOrderDetail.savedLinesToast"))) setEditingLines(false);
   };
 
+  const [labelsOpen, setLabelsOpen] = useState(false);
   const eligibleForReceiving = Boolean(order && RECEIVING_ELIGIBLE_STATUSES.has(order.status) && order.lineItems && !order.receiving);
 
   const [receivingRows, setReceivingRows] = useState<ReceivingLine[] | null>(null);
@@ -563,7 +566,22 @@ export default function ImportOrderDetail() {
           <p className="mt-2 text-xs text-gray-400">{t("importOrderDetail.docsSessionNote")}</p>
         </Card>
 
-        <Card wide title={t("importOrderDetail.sectionReceiving")}>
+        <Card
+          wide
+          title={t("importOrderDetail.sectionReceiving")}
+          action={
+            order.receiving && (
+              <button
+                onClick={() => setLabelsOpen(true)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                data-testid="shipment-labels"
+              >
+                <QrCodeIcon size={13} />
+                {t("labels.printShipment")}
+              </button>
+            )
+          }
+        >
           {order.receiving ? (
             <>
               <p className="mb-2 text-sm text-gray-600">
@@ -690,6 +708,9 @@ export default function ImportOrderDetail() {
           <HistoryList entries={history} emptyLabel={t("importOrderDetail.noHistory")} />
         </Card>
       </div>
+      {labelsOpen && order.receiving && (
+        <LotLabels lots={inventory.filter((i) => order.receiving!.lines.some((l) => l.lotBatch === i.lotBatch))} onClose={() => setLabelsOpen(false)} />
+      )}
     </div>
   );
 }

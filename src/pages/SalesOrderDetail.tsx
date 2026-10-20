@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Lock, FileText, ArrowUpRight, Undo2 } from "lucide-react";
+import { ArrowLeft, Pencil, Lock, FileText, ArrowUpRight, Undo2, Copy } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -109,6 +109,16 @@ export default function SalesOrderDetail() {
           title={t("salesOrderDetail.sectionOverview")}
           action={
             <div className="flex items-center gap-1">
+              {can("createSalesOrder") && (
+                <Link
+                  to={`/sales-orders/new?copy=${encodeURIComponent(order.orderNo)}`}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                  data-testid="copy-order"
+                >
+                  <Copy size={13} />
+                  {t("salesOrderDetail.copyOrder")}
+                </Link>
+              )}
               <button
                 onClick={() => setDocsOpen(true)}
                 disabled={Boolean(order.approvalStatus)}

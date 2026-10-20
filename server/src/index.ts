@@ -8,7 +8,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as A from "../../src/domain/actions.ts";
 import type { Bilingual } from "../../src/data/types.ts";
-import { clearSession, issueSession, requireUser, toSessionUser, verifyPassword, type SessionUser } from "./auth.ts";
+import { clearSession, issueChallenge, issueSession, readChallenge, requireUser, toSessionUser, verifyPassword, type SessionUser } from "./auth.ts";
+import { verifyCode } from "./totp.ts";
 import { isCommand, runCommand, withLockedStore } from "./commands.ts";
 import { config } from "./config.ts";
 import { migrate, sql } from "./db.ts";
@@ -16,6 +17,7 @@ import { maskAudit, maskStore } from "./mask.ts";
 import { auditFromRow, loadStore } from "./repo.ts";
 import { registerQueryRoutes } from "./queries.ts";
 import { registerMailRoutes } from "./mail.ts";
+import { registerDigestRoutes, startDigest } from "./digest.ts";
 import { closePdf } from "./pdf.ts";
 import { resetDemoData, seedIfEmpty } from "./seed.ts";
 import { registerUserRoutes } from "./users.ts";
@@ -47,7 +49,15 @@ const RECENT_ACTIVITY = 20;
 /** Supplier invoices carry prices, but the people who file import paperwork and clear customs need them. */
 const handlesImportPaperwork = (u: SessionUser) => u.canViewSensitive || u.can("manageImportDocuments") || u.can("recordCustomsClearance");
 
-const publicUser = (u: SessionUser) => ({ key: u.key, role: u.role, name: u.name, mustChangePassword: u.mustChangePassword });
+const publicUser = (u: SessionUser) => ({
+  key: u.key,
+  role: u.role,
+  name: u.name,
+  mustChangePassword: u.mustChangePassword,
+  twoFactorEnabled: u.twoFactorEnabled,
+  twoFactorSetupRequired: u.twoFactorSetupRequired,
+  twoFactorRequired: config.requireTwoFactorRoles.has(u.role),
+});
 
 // ───────────────────────────── auth ─────────────────────────────
 
@@ -123,6 +133,7 @@ app.post("/api/auth/login", async (req, reply) => {
       must_change_password: boolean;
       token_version: number;
       locked_until: Date | null;
+      totp_enabled: boolean;
     }[]
   >`select * from users where key = ${body.data.key} and role <> 'guest'`;
   const row = rows[0];
@@ -154,7 +165,42 @@ app.post("/api/auth/login", async (req, reply) => {
     }
     return reply.code(401).send({ error: { th: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", en: "Wrong username or password" } });
   }
+  // Two-step sign-in: the password was right; the code comes next.
+  if (row.totp_enabled) return { twoFactor: true, challenge: issueChallenge(row.key, row.token_version) };
   await sql`update users set last_login_at = now(), failed_logins = 0, locked_until = null where key = ${row.key}`;
+  issueSession(reply, row.key, row.token_version);
+  return { user: publicUser(toSessionUser(row)), demoMode: config.demoMode };
+});
+
+/** Second step: the ticket from a correct password, plus the code from the authenticator app. */
+app.post("/api/auth/2fa/verify", async (req, reply) => {
+  const body = z.object({ challenge: z.string().max(500), code: z.string().trim().max(10) }).safeParse(req.body);
+  if (!body.success) return reply.code(400).send({ error: { th: "ข้อมูลไม่ครบ", en: "Missing code" } });
+  const ip = req.ip;
+  if (recentIpFailures(ip).length >= IP_LIMIT) return reply.code(429).send(TOO_MANY(LOCK_MINUTES));
+  const ticket = readChallenge(body.data.challenge);
+  if (!ticket) return reply.code(410).send({ error: { th: "หมดเวลา กรุณาเข้าสู่ระบบใหม่", en: "That took too long — sign in again" }, restart: true });
+  const [row] = await sql<
+    { key: string; role: string; name: Bilingual; active: boolean; must_change_password: boolean; token_version: number; totp_enabled: boolean; totp_secret: string | null; totp_last_step: string | null; locked_until: Date | null }[]
+  >`select * from users where key = ${ticket.key}`;
+  if (!row || !row.active || row.token_version !== ticket.version || !row.totp_enabled || !row.totp_secret)
+    return reply.code(410).send({ error: { th: "กรุณาเข้าสู่ระบบใหม่", en: "Sign in again" }, restart: true });
+  if (row.locked_until && row.locked_until.getTime() > Date.now())
+    return reply.code(429).send(TOO_MANY(Math.max(1, Math.ceil((row.locked_until.getTime() - Date.now()) / 60_000))));
+  const step = verifyCode(row.totp_secret, body.data.code, row.totp_last_step === null ? null : Number(row.totp_last_step));
+  if (step === null) {
+    // A wrong code counts like a wrong password: five and the account locks.
+    recentIpFailures(ip).push(Date.now());
+    const [after] = await sql<{ failed_logins: number }[]>`
+      update users set
+        failed_logins = case when failed_logins + 1 >= ${MAX_FAILURES} then 0 else failed_logins + 1 end,
+        locked_until = case when failed_logins + 1 >= ${MAX_FAILURES} then now() + make_interval(mins => ${LOCK_MINUTES}) else locked_until end
+      where key = ${row.key}
+      returning failed_logins`;
+    if (after.failed_logins === 0) return reply.code(429).send(TOO_MANY(LOCK_MINUTES));
+    return reply.code(401).send({ error: { th: "รหัสไม่ถูกต้อง", en: "That code isn't right" } });
+  }
+  await sql`update users set last_login_at = now(), failed_logins = 0, locked_until = null, totp_last_step = ${step} where key = ${row.key}`;
   issueSession(reply, row.key, row.token_version);
   return { user: publicUser(toSessionUser(row)), demoMode: config.demoMode };
 });
@@ -191,6 +237,7 @@ registerUserRoutes(app);
 
 registerQueryRoutes(app);
 registerMailRoutes(app);
+registerDigestRoutes(app);
 
 /** The books as derived from the records: trial balance plus the checks that tie it to the operational data. */
 app.get("/api/accounting/trial-balance", async (req, reply) => {
@@ -335,6 +382,7 @@ app.setErrorHandler((error, _req, reply) => {
 await migrate(config.migrationsDir);
 await seedIfEmpty();
 await app.listen({ port: config.port, host: "0.0.0.0" });
+startDigest(app.log);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {

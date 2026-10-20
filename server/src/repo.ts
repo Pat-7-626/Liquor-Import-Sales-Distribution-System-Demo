@@ -319,7 +319,8 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
           docNo: r.doc_no as string,
           type: r.type as ApDocument["type"],
           supplierId: r.supplier_id as string,
-          importOrderNo: r.import_order_no as string,
+          // Empty for a bill brought forward from before the system (no import order).
+          importOrderNo: (r.import_order_no as string | null) ?? "",
           reference: r.reference as string,
           date: r.date as string,
           dueDate: r.due_date as string | undefined,
@@ -632,7 +633,7 @@ const apRow = (db: Db, d: ApDocument) => ({
   doc_no: d.docNo,
   type: d.type,
   supplier_id: d.supplierId,
-  import_order_no: d.importOrderNo,
+  import_order_no: d.importOrderNo || null,
   reference: d.reference,
   date: d.date,
   due_date: d.dueDate ?? null,

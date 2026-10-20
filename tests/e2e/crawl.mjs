@@ -6,7 +6,7 @@ const ROUTES = [
   "overview/purchasing", "import-orders", "import-orders/new", "import-orders/IMP-2026-0142", "import-orders/IMP-2026-0144", "goods-receipts", "suppliers", "licenses",
   "overview/inventory", "inventory", "stock-movements", "stock-alerts", "lot-trace?lot=LOT-A2607-01", "products", "warehouses", "reorder-policies",
   "overview/tax", "tax-rates", "company", "users", "calendar", "payables", "exchange-rates", "accounting", "accounting/journal", "accounting/trial-balance", "accounting/profit-loss", "accounting/balance-sheet", "tax/vat-return",
-  "quotations", "purchase-requests", "expenses", "tax/withholding", "accounting/manual-journals", "accounting/closing", "accounting/bank", "stock-counts",
+  "quotations", "purchase-requests", "expenses", "tax/withholding", "accounting/manual-journals", "accounting/closing", "accounting/bank", "stock-counts", "opening-balances",
 ];
 const ROLES = ["somchai", "manager", "whOfficer", "salesOfficer", "docOfficer"];
 const problems = new Map();

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { promptPayPayload } from "../lib/promptpay";
+import { QrCode } from "./QrCode";
 import { EmailButton, type EmailSpec } from "./EmailDocument";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
@@ -249,20 +250,6 @@ export function Signatures({ left, right, signed, stamp, signedDate }: { left: B
   );
 }
 
-/** A PromptPay QR code as an image (rendered once, embedded, so it also prints and goes into the PDF). */
-function PromptPayQr({ payload }: { payload: string }) {
-  const [src, setSrc] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    import("qrcode")
-      .then((q) => q.toString(payload, { type: "svg", margin: 1, errorCorrectionLevel: "M" }))
-      .then((svg) => !cancelled && setSrc(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`));
-    return () => {
-      cancelled = true;
-    };
-  }, [payload]);
-  return src ? <img src={src} alt="PromptPay QR" className="h-28 w-28" data-testid="promptpay-qr" /> : <div className="h-28 w-28 rounded bg-gray-100" />;
-}
 
 /**
  * How to pay us: the bank account, and a PromptPay QR with the amount filled in. Shown on documents that
@@ -295,7 +282,7 @@ export function PaymentBlock({ amount }: { amount: number }) {
       </div>
       {payload && (
         <div className="flex shrink-0 flex-col items-center text-center">
-          <PromptPayQr payload={payload} />
+          <QrCode value={payload} testid="promptpay-qr" alt="PromptPay QR" />
           <p className="mt-1 text-xs font-medium text-gray-600">
             <Both th="สแกนจ่ายด้วยพร้อมเพย์" en="Scan to pay (PromptPay)" />
           </p>

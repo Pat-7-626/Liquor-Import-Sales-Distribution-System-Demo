@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, QrCode as QrCodeIcon } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -17,6 +17,7 @@ import { query, useApi } from "../lib/useApi";
 import type { StockMovement } from "../data/types";
 import { both } from "../i18n/translations";
 import { RecordLink } from "../components/RecordLink";
+import { LotLabels } from "../components/LotLabels";
 
 export default function LotTrace() {
   const { t, lang } = useLanguage();
@@ -28,6 +29,7 @@ export default function LotTrace() {
   const stockMovements = useApi<{ rows: StockMovement[] }>(lotBatch ? query("/api/stock-movements", { lot: lotBatch, limit: 5000 }) : null).data?.rows;
 
   const lot = inventory.find((i) => i.lotBatch === lotBatch) ?? null;
+  const [labelsOpen, setLabelsOpen] = useState(false);
   const age = lot ? computeInventoryAge(lot.receivedDate) : null;
 
   // Chronological ledger with a running balance — the last balance must equal quantity on hand.
@@ -64,7 +66,20 @@ export default function LotTrace() {
 
   return (
     <div>
-      <PageHeader title={t("erp.page.lotTrace")} subtitle={t("erp.page.lotTraceSub")} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader title={t("erp.page.lotTrace")} subtitle={t("erp.page.lotTraceSub")} />
+        {lot && (
+          <button
+            onClick={() => setLabelsOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            data-testid="lot-label-print"
+          >
+            <QrCodeIcon size={15} />
+            {t("labels.print")}
+          </button>
+        )}
+      </div>
+      {labelsOpen && lot && <LotLabels lots={[lot]} onClose={() => setLabelsOpen(false)} />}
 
       <label className="mb-5 block max-w-md">
         <FieldLabel>{t("inventory.col.lotBatch")}</FieldLabel>

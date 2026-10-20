@@ -64,12 +64,19 @@ Out of the box every email goes to **Mailpit**, a catch-all mailbox in the stack
 <http://localhost:8025>; nothing reaches real people. To send for real, set `SMTP_HOST`, `SMTP_PORT`,
 `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `.env` and set `MAIL_CATCHALL_URL=` (empty).
 
+**Morning summary.** Under **My account** (the key icon in the header) anyone can give their email and tick
+**Send me the summary every morning**: after `DIGEST_HOUR` (default 07:00, Bangkok time) they get one email
+listing what's waiting on them — the same items as the header bell, each linking into the app at `APP_URL`.
+Days with nothing waiting send nothing. **Send me one now** sends it at once, to check it arrives.
+
 ### HTTPS on a real domain
 
 Point the domain's DNS at the server, then in `.env` set `DOMAIN=erp.example.com`,
 `SECURE_COOKIES=true` and `TRUST_PROXY_HOPS=2` (Caddy and nginx both sit in front of the API), and start
 with `docker compose --profile https up -d`. Caddy obtains and renews the
-certificate automatically and forwards to the app.
+certificate automatically and forwards to the app. Also set `APP_URL=https://erp.example.com` so links in
+emails point at it. Scanning lot labels with a phone's camera needs HTTPS (browsers only allow the camera on
+secure pages, and on `localhost`).
 
 ### Settings (`.env`)
 
@@ -87,6 +94,9 @@ certificate automatically and forwards to the app.
 | `DOMAIN` | — | Domain for the optional HTTPS front end. |
 | `SMTP_*`, `MAIL_CATCHALL_URL` | local Mailpit | Outgoing email (see Email above). |
 | `MAIL_UI_PORT` | `8025` | Port of the Mailpit mailbox, for this machine only. |
+| `APP_URL` | `http://localhost:8080` | Where people open the app; links in emails point here. |
+| `DIGEST_HOUR` | `7` | Hour (Bangkok time) the morning summary email goes out. |
+| `REQUIRE_TWO_FACTOR_ROLES` | — | Roles that must use two-step sign-in, comma-separated, e.g. `seniorManager,supervisor`. Empty = optional for everyone. |
 
 ### Users and access
 
@@ -102,6 +112,13 @@ same permission table the server enforces.
 - Accounts are **disabled, never deleted**, so the audit trail keeps every name. Disabling signs the person
   out at once. You can't disable yourself or change your own role, and there is always at least one active
   Senior Manager.
+- **Two-step sign-in:** under **My account → Two-step sign-in**, scan the QR code with an authenticator app
+  (Google Authenticator, Microsoft Authenticator, 1Password…) and type the code it shows. From then on,
+  signing in asks for the app's 6-digit code after the password. Each code works once; wrong codes count
+  towards the same lockout as wrong passwords. Turning it off needs the password. A Senior Manager can
+  **reset** it for someone who lost their phone (it signs them out). Roles listed in
+  `REQUIRE_TWO_FACTOR_ROLES` must set it up at their next sign-in, the way a temporary password works, and
+  can't turn it off. (In demo mode the header user switcher skips sign-in altogether, as it always has.)
 - Every change is recorded in the **Audit Trail** (record type "User"); passwords never are.
 
 **From the terminal** (e.g. to create the first account, or if nobody can sign in):
@@ -199,8 +216,8 @@ if it's somewhere unusual); screenshots go to `tests/output/`.
 
 - `tests/api.test.mjs` — permissions, validation, masking, concurrency, sales/import workflows, costing,
   payables, expenses and withholding, journals, month-end close, bank reconciliation, quotations, purchase
-  requests, paging, and the accounting invariants (the books reconcile with stock, receivables, payables
-  and tax withheld).
+  requests, opening balances, two-step sign-in, the morning summary email, paging, and the accounting
+  invariants (the books reconcile with stock, receivables, payables and tax withheld).
 - `tests/e2e/workflows.mjs` — the main workflows through the real UI, in a browser.
 - `tests/e2e/guest.mjs` — the read-only guest experience.
 - `tests/e2e/crawl.mjs` — opens every page as five roles in both languages, at desktop and phone widths,
@@ -218,12 +235,30 @@ needs are included — no manufacturing, service, or payroll.
 | **Purchasing & Import** | Purchase Requests · Import Orders · Goods Receipts · Supplier Invoices & Payments | Suppliers · Licenses · Exchange Rates | |
 | **Inventory** | Stock Levels (by lot) · Stock Movements · Stock Counts · Stock Alerts · Lot Trace | Products · Warehouses · Reorder Policies | |
 | **Tax** | | Tax & Duty Rates · Company Profile | VAT Return (ภ.พ.30) · Withholding Tax (ภ.ง.ด.3/53) |
-| **Accounting** | Expenses · Manual Journals · Bank Reconciliation · Month-end Close · Journal | | Trial Balance · Profit & Loss · Balance Sheet |
+| **Accounting** | Expenses · Manual Journals · Bank Reconciliation · Month-end Close · Opening Balances · Journal | | Trial Balance · Profit & Loss · Balance Sheet |
 
 Dashboard, Approvals, Calendar, Reports, Audit Trail, and Users & Access sit across all modules. The
 header bell lists what needs the signed-in person's attention (approvals and purchase requests waiting,
 late deliveries and arrivals, overdue invoices, supplier bills due, expiring licenses and quotations, low
 stock, withholding tax to remit, unmatched bank lines), by role.
+
+**Getting around.** **Search** (the box in the header, or **Ctrl K** / **/** anywhere) finds orders by
+number, tax invoice or delivery note, customers by name, ID or tax ID, lots, products, suppliers, quotations,
+purchase requests, receipts and expenses — arrow keys and Enter open one. **N** starts a new record on a list
+page and **?** lists the shortcuts. On an order, **Copy order** starts a new one for the same customer with the
+same products, quantities, prices and discounts (lots are picked again, oldest free stock first).
+
+**Lot labels and scanning.** Stock Levels, Lot Trace and a shipment's receiving card print **QR labels** for
+lots (choose how many copies). Scanning one with the scan button in Search opens that lot's trace, and on a
+**stock count** the scan button jumps to that lot's line. Scanning uses the phone or tablet camera in Chrome,
+Edge or Samsung Internet (browsers with barcode detection) and needs HTTPS. Any phone camera app also opens
+the label's link directly.
+
+**Going live: opening balances** (Accounting → Opening Balances). Import from spreadsheets what customers
+already owe (invoice by invoice, so it ages properly), the stock already on the shelves (lot, warehouse,
+received date, quantity and cost) and supplier bills still unpaid. Each row goes through the same checks as
+everything else and posts against Opening balance equity, so the books balance from day one; supplier bills
+brought forward are then paid like any other. Once the first month is closed they are fixed.
 
 How they connect:
 

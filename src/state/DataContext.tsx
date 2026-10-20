@@ -17,6 +17,9 @@ import type {
   Warehouse,
 } from "../data/types";
 import type {
+  OpeningPayableInput,
+  OpeningReceivableInput,
+  OpeningStockInput,
   BankLineInput,
   ExpenseInput,
   JournalInput,
@@ -46,6 +49,9 @@ import { useRole } from "./RoleContext";
 
 export type { ActionResult } from "../lib/api";
 export type {
+  OpeningPayableInput,
+  OpeningReceivableInput,
+  OpeningStockInput,
   BankLineInput,
   ExpenseInput,
   JournalInput,
@@ -122,6 +128,9 @@ interface DataContextValue extends ClientState {
 
   setOpeningBalances: (openingDate: string, openingBank: number) => Result;
   setCompanyImage: (kind: "logo" | "signature" | "stamp", dataUrl: string) => Result;
+  addOpeningReceivable: (input: OpeningReceivableInput) => Result;
+  addOpeningStock: (input: OpeningStockInput) => Result;
+  addOpeningPayable: (input: OpeningPayableInput) => Result;
   setPrintSignature: (on: boolean) => Result;
   closePeriod: (through: string) => Result;
   reopenPeriod: (reason: string) => Result;
@@ -250,6 +259,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       removeDocument: c("removeDocument"),
       setOpeningBalances: c("setOpeningBalances"),
       setCompanyImage: c("setCompanyImage"),
+      addOpeningReceivable: c("addOpeningReceivable"),
+      addOpeningStock: c("addOpeningStock"),
+      addOpeningPayable: c("addOpeningPayable"),
       setPrintSignature: c("setPrintSignature"),
       closePeriod: c("closePeriod"),
       reopenPeriod: c("reopenPeriod"),

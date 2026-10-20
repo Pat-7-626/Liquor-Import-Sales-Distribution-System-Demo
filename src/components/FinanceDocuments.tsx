@@ -126,7 +126,7 @@ export function SupplierPaymentVoucher({ payment: p, onClose }: { payment: ApDoc
           { label: { th: "เลขที่", en: "No." }, value: p.docNo },
           { label: { th: "วันที่", en: "Date" }, value: <DocDate iso={p.date} /> },
           { label: { th: "ใบแจ้งหนี้", en: "Invoice" }, value: inv?.reference ?? "—" },
-          { label: { th: "ออเดอร์นำเข้า", en: "Import order" }, value: p.importOrderNo },
+          { label: { th: "ออเดอร์นำเข้า", en: "Import order" }, value: p.importOrderNo || "ยอดยกมา / Brought forward" },
         ]}
         seller={<SellerBlock role={{ th: "ผู้จ่าย", en: "Payer" }} />}
         party={

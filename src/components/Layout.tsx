@@ -23,8 +23,9 @@ import {
   Eye,
   type LucideIcon,
 } from "lucide-react";
-import { ChangePasswordDialog } from "./ChangePassword";
+import { AccountDialog } from "./Account";
 import { NotificationBell } from "./NotificationBell";
+import { GlobalSearch } from "./GlobalSearch";
 import { useToast } from "./Toast";
 import type { Permission } from "../data/types";
 import { useLanguage } from "../i18n/LanguageContext";
@@ -133,6 +134,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/accounting/manual-journals", key: "manualJournals" },
       { to: "/accounting/bank", key: "bankReconciliation" },
       { to: "/accounting/closing", key: "periodClosing" },
+      { to: "/opening-balances", key: "openingBalances" },
       { to: "/accounting/journal", key: "journal" },
     ],
     master: [],
@@ -179,7 +181,7 @@ export function Layout() {
       return next;
     });
   const isActivePath = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
-  const { identity, identities, setIdentityKey, demoMode, signOut, isGuest, can, canViewSensitive } = useRole();
+  const { identity, identities, setIdentityKey, demoMode, signOut, isGuest, can, canViewSensitive, twoFactorEnabled, twoFactorRequired, refreshSession } = useRole();
   const [changingPassword, setChangingPassword] = useState(false);
   const toast = useToast();
   const bottomItems = BOTTOM_ITEMS.filter((i) => !i.perm || can(i.perm));
@@ -410,6 +412,7 @@ export function Layout() {
                 <span className="max-w-48 truncate text-sm font-medium text-gray-800">{bi(identity.name)}</span>
               )}
             </label>
+            <GlobalSearch />
             {!isGuest && <NotificationBell />}
             {isGuest ? (
               // A guest "signs out" straight to the sign-in page — that's the way to start making changes.
@@ -426,8 +429,8 @@ export function Layout() {
               <button
                 type="button"
                 onClick={() => setChangingPassword(true)}
-                title={t("password.title")}
-                aria-label={t("password.title")}
+                title={t("account.title")}
+                aria-label={t("account.title")}
                 data-testid="change-password"
                 className="rounded-full border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition-colors hover:border-gray-300 hover:text-gray-900"
               >
@@ -444,7 +447,17 @@ export function Layout() {
               </button>
               </>
             )}
-            <ChangePasswordDialog open={changingPassword} onClose={() => setChangingPassword(false)} onChanged={() => toast(t("password.changedToast"))} />
+            <AccountDialog
+              open={changingPassword}
+              onClose={() => setChangingPassword(false)}
+              onPasswordChanged={() => toast(t("password.changedToast"))}
+              twoFactorEnabled={twoFactorEnabled}
+              twoFactorRequired={twoFactorRequired}
+              onTwoFactorChanged={() => {
+                refreshSession();
+                toast(t("twoFactor.changedToast"));
+              }}
+            />
 
             <div role="group" aria-label={t("common.language")} className="flex shrink-0 rounded-full border border-gray-200 bg-white p-0.5 shadow-sm">
               {(["th", "en"] as const).map((l) => (

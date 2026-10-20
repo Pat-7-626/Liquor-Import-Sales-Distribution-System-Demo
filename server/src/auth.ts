@@ -39,6 +39,30 @@ export function issueSession(reply: FastifyReply, userKey: string, version = 0) 
   });
 }
 
+/**
+ * After a correct password, a user with two-step sign-in gets this short-lived ticket instead of a session;
+ * it proves the password step and is exchanged, with a code, for the session.
+ */
+export function issueChallenge(userKey: string, version: number): string {
+  const payload = Buffer.from(JSON.stringify({ u: userKey, v: version, exp: Date.now() + 5 * 60_000, p: "2fa" })).toString("base64url");
+  // Signed differently from a session, so a ticket can never be passed off as one.
+  return `${payload}.${sign(`2fa.${payload}`)}`;
+}
+
+export function readChallenge(raw: string): { key: string; version: number } | null {
+  const [payload, mac] = raw.split(".");
+  if (!payload || !mac) return null;
+  const expected = Buffer.from(sign(`2fa.${payload}`));
+  const given = Buffer.from(mac);
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+  try {
+    const { u, v, exp, p } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { u: string; v: number; exp: number; p?: string };
+    return p === "2fa" && exp > Date.now() ? { key: u, version: v } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function clearSession(reply: FastifyReply) {
   reply.clearCookie(SESSION_COOKIE, { path: "/" });
 }
@@ -52,8 +76,9 @@ function readSession(req: FastifyRequest): { key: string; version: number } | nu
   const given = Buffer.from(mac);
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
   try {
-    const { u, v, exp } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { u: string; v?: number; exp: number };
-    return exp > Date.now() ? { key: u, version: v ?? 0 } : null;
+    const { u, v, exp, p } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { u: string; v?: number; exp: number; p?: string };
+    // A two-step sign-in ticket is not a session.
+    return exp > Date.now() && p === undefined ? { key: u, version: v ?? 0 } : null;
   } catch {
     return null;
   }
@@ -65,9 +90,12 @@ export interface SessionUser extends Identity {
   /** Signed in with a temporary password that must be replaced before anything else. */
   mustChangePassword: boolean;
   tokenVersion: number;
+  twoFactorEnabled: boolean;
+  /** The role must use two-step sign-in and this user hasn't set it up yet. */
+  twoFactorSetupRequired: boolean;
 }
 
-type UserRow = { key: string; role: string; name: Bilingual; active?: boolean; must_change_password?: boolean; token_version?: number };
+type UserRow = { key: string; role: string; name: Bilingual; active?: boolean; must_change_password?: boolean; token_version?: number; totp_enabled?: boolean };
 
 export function toSessionUser(row: UserRow): SessionUser {
   const role = row.role as Role;
@@ -79,6 +107,8 @@ export function toSessionUser(row: UserRow): SessionUser {
     can: (p) => ROLE_PERMISSIONS[role]?.has(p) ?? false,
     mustChangePassword: row.must_change_password ?? false,
     tokenVersion: row.token_version ?? 0,
+    twoFactorEnabled: Boolean(row.totp_enabled),
+    twoFactorSetupRequired: config.requireTwoFactorRoles.has(role) && !row.totp_enabled,
   };
 }
 
@@ -90,7 +120,7 @@ export function toSessionUser(row: UserRow): SessionUser {
 export async function requireUser(req: FastifyRequest, reply: FastifyReply, opts: { allowPendingPassword?: boolean } = {}): Promise<SessionUser | null> {
   const session = readSession(req);
   const rows = session
-    ? await sql<UserRow[]>`select key, role, name, active, must_change_password, token_version from users where key = ${session.key}`
+    ? await sql<UserRow[]>`select key, role, name, active, must_change_password, token_version, totp_enabled from users where key = ${session.key}`
     : [];
   const row = rows[0];
   // A guest session stops working as soon as guest access is switched off.
@@ -101,6 +131,10 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply, opts
   const user = toSessionUser(row);
   if (user.mustChangePassword && !opts.allowPendingPassword) {
     reply.code(403).send({ error: { th: "กรุณาเปลี่ยนรหัสผ่านชั่วคราวก่อน", en: "Change your temporary password first" }, passwordChangeRequired: true });
+    return null;
+  }
+  if (user.twoFactorSetupRequired && !opts.allowPendingPassword) {
+    reply.code(403).send({ error: { th: "บทบาทของคุณต้องตั้งค่าการยืนยันสองขั้นตอนก่อน", en: "Your role must set up two-step sign-in first" }, twoFactorSetupRequired: true });
     return null;
   }
   return user;

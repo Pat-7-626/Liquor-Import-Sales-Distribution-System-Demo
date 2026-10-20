@@ -222,7 +222,9 @@ export function buildJournal(store: LedgerStore): JournalEntry[] {
         date: d.date,
         source: "supplierInvoice",
         ref: d.docNo,
-        memo: { th: `ใบแจ้งหนี้ผู้ขาย ${d.reference} (${d.importOrderNo})`, en: `Supplier invoice ${d.reference} (${d.importOrderNo})` },
+        memo: d.importOrderNo
+          ? { th: `ใบแจ้งหนี้ผู้ขาย ${d.reference} (${d.importOrderNo})`, en: `Supplier invoice ${d.reference} (${d.importOrderNo})` }
+          : { th: `เจ้าหนี้ยกมา ${d.reference}`, en: `Payable brought forward, ${d.reference}` },
         lines: [dr(preSystem ? "3100" : "2120", d.amountThb), cr("2110", d.amountThb)],
         href: "/payables",
       });

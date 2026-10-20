@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ShieldAlert, Plus, Trash2 } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -57,8 +57,44 @@ export default function NewSalesOrder() {
   const nextKey = useRef(1);
   const blankLine = (): DraftLine => ({ key: nextKey.current++, sku: "", lotBatch: "", quantity: 1, unitPrice: 0, discountPercent: 0 });
 
+  // "Copy order" (?copy=SO-…): same customer, products, quantities, prices and discounts; lots are picked
+  // afresh, oldest free stock first, since the original lots may be used up.
+  const [params] = useSearchParams();
+  const sourceOrder = salesOrders.find((o) => o.orderNo === params.get("copy"));
   const [customerId, setCustomerId] = useState("");
   const [lines, setLines] = useState<DraftLine[]>(() => [blankLine()]);
+  // Filled in once the order to copy is loaded (opening the link directly, the data may still be on its way).
+  const [copiedFrom, setCopiedFrom] = useState<string | null>(null);
+  const copyLines = (source: NonNullable<typeof sourceOrder>): DraftLine[] => {
+    const wanted = new Map<string, { quantity: number; unitPrice: number; discountPercent: number }>();
+    for (const l of source.lines) {
+      const w = wanted.get(l.sku);
+      wanted.set(l.sku, { quantity: (w?.quantity ?? 0) + l.quantity - (l.returnedQuantity ?? 0), unitPrice: l.unitPrice, discountPercent: l.discountPercent });
+    }
+    const out: DraftLine[] = [];
+    for (const [sku, w] of wanted) {
+      let need = w.quantity;
+      const lots = inventory.filter((i) => i.sku === sku && freeIn(i) > 0).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate));
+      for (const lot of lots) {
+        if (need <= 0) break;
+        const qty = Math.min(need, freeIn(lot));
+        out.push({ key: nextKey.current++, sku, lotBatch: lot.lotBatch, quantity: qty, unitPrice: w.unitPrice, discountPercent: w.discountPercent });
+        need -= qty;
+      }
+      // Not enough free stock: the shortfall stays on the order so the form shows it.
+      if (need > 0) {
+        const last = out.findLast((l) => l.sku === sku);
+        if (last) last.quantity += need;
+        else out.push({ key: nextKey.current++, sku, lotBatch: "", quantity: need, unitPrice: w.unitPrice, discountPercent: w.discountPercent });
+      }
+    }
+    return out.length ? out : [blankLine()];
+  };
+  if (sourceOrder && copiedFrom !== sourceOrder.orderNo) {
+    setCopiedFrom(sourceOrder.orderNo);
+    setCustomerId(sourceOrder.customerId);
+    setLines(copyLines(sourceOrder));
+  }
   const [submitting, setSubmitting] = useState(false);
   const [plannedDelivery, setPlannedDelivery] = useState(() => addDays(todayIso(), 1));
   const plannedOk = plannedDelivery >= todayIso() && plannedDelivery <= addDays(todayIso(), 90);

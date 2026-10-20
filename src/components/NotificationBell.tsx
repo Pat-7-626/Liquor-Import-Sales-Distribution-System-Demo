@@ -1,106 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, CalendarClock, ClipboardCheck, ClipboardList, FileInput, FileText, Landmark, Package, Receipt, Ship, Truck, Wallet, type LucideIcon } from "lucide-react";
-import { withholdingByMonth } from "../domain/finance";
+import { computeNotices, type Notice, type NoticeKey } from "../domain/notices";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useData } from "../state/DataContext";
 import { useRole } from "../state/RoleContext";
-import { addDays, computeArOpenItems, computeInboundBySku, computeLicenseStatus, importStage, isBookedSale, todayIso } from "../lib/business";
-import { apOpenAmount } from "../domain/actions";
+import { todayIso } from "../lib/business";
 
-interface Notice {
-  key: string;
-  count: number;
-  icon: LucideIcon;
-  tone: "red" | "amber" | "blue";
-  href: string;
-  /** Translation key; "{n}" is replaced with the count. */
-  label: string;
-}
+const ICONS: Record<NoticeKey, LucideIcon> = {
+  approvals: ClipboardCheck,
+  purchaseRequests: ClipboardList,
+  requestsToOrder: ClipboardList,
+  quotesExpiring: FileText,
+  withholdingDue: Landmark,
+  bankUnmatched: Landmark,
+  lateDeliveries: Truck,
+  lateArrivals: Ship,
+  overdueReceivables: Wallet,
+  payablesDue: Receipt,
+  awaitingInvoice: FileInput,
+  licenses: CalendarClock,
+  reorder: Package,
+};
 
-/**
- * What needs this person's attention, by role: each item is a count of things waiting on them, linking to
- * where they're dealt with. The same rules the module pages use — computed from the data, nothing stored.
- */
+/** The same rules the morning email uses — computed from the data, nothing stored. */
 function useNotices(): Notice[] {
   const { can, canViewSensitive } = useRole();
-  const { salesOrders, importOrders, licenses, customers, arDocuments, apDocuments, products, reorderPolicies, purchaseRequests, expenses, manualJournals, quotations, bankLines } = useData();
-  return useMemo(() => {
-    const today = todayIso();
-    const out: Notice[] = [];
-    const push = (n: Notice) => n.count > 0 && out.push(n);
-
-    if (can("approve")) {
-      const sales = salesOrders.filter((o) => o.approvalStatus === "pendingApproval").length;
-      const imports = importOrders.filter((o) => o.status === "pendingApproval" || o.status === "staging").length;
-      push({ key: "approvals", count: sales + imports, icon: ClipboardCheck, tone: "amber", href: "/approvals", label: "notify.approvals" });
-      push({ key: "purchaseRequests", count: purchaseRequests.filter((r) => r.status === "pending").length, icon: ClipboardList, tone: "amber", href: "/approvals", label: "notify.purchaseRequests" });
-    }
-    if (can("createImportOrder"))
-      push({ key: "requestsToOrder", count: purchaseRequests.filter((r) => r.status === "approved").length, icon: ClipboardList, tone: "blue", href: "/purchase-requests", label: "notify.requestsToOrder" });
-    if (can("createSalesOrder"))
-      push({
-        key: "quotesExpiring",
-        count: quotations.filter((q) => q.status === "open" && q.validUntil >= today && q.validUntil <= addDays(today, 3)).length,
-        icon: FileText,
-        tone: "amber",
-        href: "/quotations",
-        label: "notify.quotesExpiring",
-      });
-    if (can("manageExpenses") && canViewSensitive) {
-      // Withholding for a finished month is due by the 7th of the next one.
-      const due = withholdingByMonth(expenses, manualJournals).filter((m) => m.outstanding > 0 && m.month < today.slice(0, 7)).length;
-      push({ key: "withholdingDue", count: due, icon: Landmark, tone: "red", href: "/tax/withholding", label: "notify.withholdingDue" });
-    }
-    if (can("reconcileBank"))
-      push({ key: "bankUnmatched", count: bankLines.filter((l) => !l.matchedEntryId).length, icon: Landmark, tone: "blue", href: "/accounting/bank", label: "notify.bankUnmatched" });
-    if (can("updateDelivery"))
-      push({
-        key: "lateDeliveries",
-        count: salesOrders.filter((o) => isBookedSale(o) && ["pendingShipment", "inDelivery"].includes(o.deliveryStatus) && o.plannedDeliveryDate && o.plannedDeliveryDate < today).length,
-        icon: Truck,
-        tone: "red",
-        href: "/sales-orders",
-        label: "notify.lateDeliveries",
-      });
-    if (can("receiveGoods") || can("createImportOrder") || can("recordCustomsClearance"))
-      push({
-        key: "lateArrivals",
-        count: importOrders.filter((o) => !["receivedWarehouse", "rejected"].includes(importStage(o)) && o.etaDate < today).length,
-        icon: Ship,
-        tone: "red",
-        href: "/import-orders",
-        label: "notify.lateArrivals",
-      });
-    if (can("recordPayment") && canViewSensitive) {
-      const overdue = customers.flatMap((c) => computeArOpenItems(c, salesOrders, arDocuments)).filter((i) => i.dueDate < today).length;
-      push({ key: "overdueReceivables", count: overdue, icon: Wallet, tone: "red", href: "/ar-aging", label: "notify.overdueReceivables" });
-    }
-    if (can("managePayables")) {
-      const soon = apDocuments.filter((d) => d.type === "invoice" && apOpenAmount(apDocuments, d.docNo) > 0.005 && (d.dueDate ?? d.date) <= addDays(today, 7)).length;
-      push({ key: "payablesDue", count: soon, icon: Receipt, tone: "amber", href: "/payables", label: "notify.payablesDue" });
-      const toInvoice = importOrders.filter((o) => o.status === "receivedWarehouse" && !apDocuments.some((d) => d.type === "invoice" && d.importOrderNo === o.orderNo)).length;
-      push({ key: "awaitingInvoice", count: toInvoice, icon: FileInput, tone: "blue", href: "/payables", label: "notify.awaitingInvoice" });
-    }
-    if (can("editLicense"))
-      push({
-        key: "licenses",
-        count: licenses.filter((l) => computeLicenseStatus(l.expiryDate).status !== "normal").length,
-        icon: CalendarClock,
-        tone: "amber",
-        href: "/licenses",
-        label: "notify.licenses",
-      });
-    if (can("manageReorder") || can("createImportOrder")) {
-      const inbound = computeInboundBySku(importOrders);
-      const low = products.filter((p) => {
-        const policy = reorderPolicies.find((r) => r.sku === p.sku);
-        return policy && p.stockAvailable + (inbound.get(p.sku) ?? 0) <= policy.reorderPoint;
-      }).length;
-      push({ key: "reorder", count: low, icon: Package, tone: "amber", href: "/stock-alerts", label: "notify.reorder" });
-    }
-    return out;
-  }, [can, canViewSensitive, salesOrders, importOrders, licenses, customers, arDocuments, apDocuments, products, reorderPolicies, purchaseRequests, expenses, manualJournals, quotations, bankLines]);
+  const data = useData();
+  const { salesOrders, importOrders, licenses, customers, arDocuments, apDocuments, products, reorderPolicies, purchaseRequests, expenses, manualJournals, quotations, bankLines } = data;
+  return useMemo(
+    () =>
+      computeNotices(
+        { salesOrders, importOrders, licenses, customers, arDocuments, apDocuments, products, reorderPolicies, purchaseRequests, expenses, manualJournals, quotations, bankLines },
+        can,
+        canViewSensitive,
+        todayIso(),
+      ),
+    [can, canViewSensitive, salesOrders, importOrders, licenses, customers, arDocuments, apDocuments, products, reorderPolicies, purchaseRequests, expenses, manualJournals, quotations, bankLines],
+  );
 }
 
 const DOT = { red: "bg-rose-600", amber: "bg-amber-500", blue: "bg-blue-600" };
@@ -183,7 +120,7 @@ export function NotificationBell() {
           ) : (
             <ul className="max-h-96 divide-y divide-gray-100 overflow-y-auto">
               {notices.map((n) => {
-                const Icon = n.icon;
+                const Icon = ICONS[n.key];
                 return (
                   <li key={n.key}>
                     <Link to={n.href} onClick={() => setOpen(false)} role="menuitem" className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50" data-testid={`notice-${n.key}`}>

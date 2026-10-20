@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Pencil, Lock } from "lucide-react";
+import { Pencil, Lock, QrCode as QrCodeIcon } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useData } from "../state/DataContext";
 import { useRole } from "../state/RoleContext";
@@ -17,6 +17,7 @@ import { useRunAction } from "../lib/useRunAction";
 import { useWarehouseName } from "../lib/useWarehouseName";
 import { both } from "../i18n/translations";
 import { RecordLink } from "../components/RecordLink";
+import { LotLabels } from "../components/LotLabels";
 
 const STATUS_OPTIONS = ["normal", "agingStart", "agingLong"];
 /** Lots at or below this quantity are flagged so they get re-ordered or cleared. */
@@ -30,6 +31,7 @@ export default function Inventory() {
   const warehouseName = useWarehouseName();
   const WAREHOUSE_OPTIONS = warehouses.map((w) => w.code);
   const [search, setSearch] = useState("");
+  const [labelLots, setLabelLots] = useState<InventoryItem[] | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [params] = useSearchParams();
   const [warehouseFilter, setWarehouseFilter] = useState(params.get("warehouse") ?? "");
@@ -174,7 +176,15 @@ export default function Inventory() {
               </td>
               <td className={td}>{warehouseName(i.warehouse)}</td>
               <td className={td}>{i.exciseStampDate ? formatDate(i.exciseStampDate, lang) : <span className="text-gray-400">{t("common.notRecorded")}</span>}</td>
-              <td className={td}>
+              <td className={`${td} flex items-center gap-1`}>
+                <button
+                  onClick={() => setLabelLots([i])}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                  data-testid={`label-${i.lotBatch}`}
+                >
+                  <QrCodeIcon size={13} />
+                  {t("labels.label")}
+                </button>
                 <button
                   onClick={() => setEditingKey(i.lotBatch)}
                   disabled={!can("adjustInventory")}
@@ -189,6 +199,7 @@ export default function Inventory() {
           ))}
         </tbody>
       </TableContainer>
+      {labelLots && <LotLabels lots={labelLots} onClose={() => setLabelLots(null)} />}
 
       <EditDrawer
         open={editingKey !== null}

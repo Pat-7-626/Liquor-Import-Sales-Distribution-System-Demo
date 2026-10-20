@@ -34,6 +34,12 @@ export const config = {
   },
   /** How many proxies sit in front of the API (nginx = 1; Caddy + nginx = 2). Their X-Forwarded-For is trusted, nothing else. */
   trustProxyHops: Number(process.env.TRUST_PROXY_HOPS || 1),
+  /** Roles that must use two-step sign-in (comma-separated, e.g. "seniorManager,supervisor"). Empty = optional for everyone. */
+  requireTwoFactorRoles: new Set((process.env.REQUIRE_TWO_FACTOR_ROLES ?? "").split(",").map((r) => r.trim()).filter(Boolean)),
+  /** Where people open the app — used in links in emails. */
+  appUrl: (process.env.APP_URL || "http://localhost:8080").replace(/\/+$/, ""),
+  /** Hour of the day (local time) the morning summary goes out. */
+  digestHour: Number(process.env.DIGEST_HOUR || 7),
   migrationsDir: process.env.MIGRATIONS_DIR ?? new URL("../sql", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
 };
 

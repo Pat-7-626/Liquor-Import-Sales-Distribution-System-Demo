@@ -665,6 +665,7 @@ consoleProblems.length = 0;
   check("explaining a statement line posts and matches it", (await page.locator("[data-testid=bank-unmatched]").count()) === unmatched0 - 1);
   const csv = `date,description,amount,reference\n${new Date().toISOString().slice(0, 10)},TT IN UI TEST,1234.50,UI-1\n`;
   await page.setInputFiles("[data-testid=bank-file]", { name: "statement.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page.waitForSelector("[data-testid=bank-preview-row]", { timeout: 5000 }).catch(() => {});
   check("statement preview lists the file's lines", (await page.locator("[data-testid=bank-preview-row]").count()) === 1);
   await page.click("[data-testid=bank-import]");
   await page.waitForTimeout(600);
@@ -907,6 +908,169 @@ consoleProblems.length = 0;
   await page.waitForTimeout(500);
   check("…and can be approved from there", (await state()).purchaseRequests.find((r) => r.requestNo === req.requestNo).status === "approved");
   check("no console errors on approvals and imports", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
+}
+
+// ── Search, shortcuts, copy order, lot labels, opening balances, two-step sign-in, morning email ──
+{
+  await admin.post("/api/admin/reset");
+  consoleProblems.length = 0;
+  await as("somchai");
+  await go("/");
+
+  // Search from anywhere.
+  await page.keyboard.press("Control+k");
+  await page.waitForSelector("[data-testid=search-input]", { timeout: 3000 }).catch(() => {});
+  check("Ctrl+K opens search", (await page.locator("[data-testid=search-input]").count()) === 1);
+  await page.fill("[data-testid=search-input]", "SO-2026-3301");
+  await page.waitForTimeout(200);
+  check("…which finds an order by number", (await page.locator("[data-testid=search-hit]").count()) >= 1);
+  await page.keyboard.press("Enter");
+  await page.waitForURL(/\/sales-orders\/SO-2026-3301$/, { timeout: 5000 }).catch(() => {});
+  check("…and Enter opens it", page.url().endsWith("/sales-orders/SO-2026-3301"), page.url());
+  const st0 = await state();
+  const someCustomer = st0.customers[2];
+  await page.keyboard.press("/");
+  await page.fill("[data-testid=search-input]", someCustomer.name.en.split(" ")[0]);
+  await page.waitForTimeout(200);
+  check("search finds customers by name", (await page.locator("[data-testid=search-hit]").allInnerTexts()).some((x) => x.includes(someCustomer.name.en)));
+  await page.keyboard.press("Escape");
+  check("Esc closes it", (await page.locator("[data-testid=search-input]").count()) === 0);
+  await page.keyboard.press("?");
+  check("? lists the shortcuts", (await page.locator('[role=dialog][aria-label="Keyboard shortcuts"]').count()) === 1);
+  await page.keyboard.press("Escape");
+  await go("/sales-orders");
+  await page.keyboard.press("n");
+  await page.waitForURL(/\/sales-orders\/new/, { timeout: 5000 }).catch(() => {});
+  check("n starts a new record on a list page", page.url().endsWith("/sales-orders/new"), page.url());
+
+  // Copy an order.
+  const source = st0.salesOrders.find((o) => o.orderNo === "SO-2026-3301");
+  await go(`/sales-orders/${source.orderNo}`);
+  await page.click("[data-testid=copy-order]");
+  await page.waitForURL(/\/sales-orders\/new\?copy=/, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction((id) => document.querySelector("main")?.innerText.includes(id), source.customerId, { timeout: 5000 }).catch(() => {});
+  const form = await page.locator("main").innerText();
+  const firstSku = st0.products.find((p) => p.sku === source.lines[0].sku);
+  check("Copy order opens a new order for the same customer", page.url().includes(`copy=${source.orderNo}`) && form.includes(source.customerId), page.url());
+  check("…with the same products", form.includes(firstSku.sku) || form.includes(firstSku.name), firstSku.sku);
+
+  // Lot labels.
+  await go("/inventory");
+  const lot = st0.inventory.find((i) => i.quantityRemaining > 0);
+  await page.click(`[data-testid="label-${lot.lotBatch}"]`);
+  await page.waitForSelector("[data-testid=lot-label]", { timeout: 3000 }).catch(() => {});
+  check("a lot label shows its QR code and lot number", (await page.locator("[data-testid=lot-label]").count()) === 1 && (await page.locator("[data-testid=lot-label] img").count()) === 1 && (await page.locator("[data-testid=lot-label]").innerText()).includes(lot.lotBatch));
+  await page.fill("[data-testid=label-copies]", "4");
+  await page.waitForTimeout(150);
+  check("…as many copies as needed", (await page.locator("[data-testid=lot-label]").count()) === 4);
+  await page.keyboard.press("Escape");
+  await page.locator('#print-modal-root button[aria-label="Close"]').click().catch(() => {});
+
+  // Opening balances, imported from a spreadsheet.
+  await as("manager");
+  await go("/opening-balances");
+  check("Opening balances page lists the three kinds", (await page.locator("[data-testid^=opening-]:is(section)").count()) === 3);
+  await page.click("[data-testid=opening-import-receivables]");
+  const dated = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  await page.setInputFiles("[data-testid=csv-file]", {
+    name: "opening.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(`customerId,invoiceNo,invoiceDate,dueDate,amount\nCUS-0002,OLD-UI-1,${dated},,2500\nCUS-0002,OLD-UI-2,${dated},,-5\n`),
+  });
+  await page.waitForSelector("[data-testid=csv-row]", { timeout: 5000 }).catch(() => {});
+  check("the preview flags a bad row", (await page.locator("[data-testid=csv-row]").count()) === 2 && /amount must be a number above 0/.test(await page.locator("[role=dialog]:not([inert])").innerText()));
+  await page.click("[data-testid=csv-import]");
+  await page.waitForTimeout(600);
+  const st1 = await state();
+  check("…and imports the good one", st1.arDocuments.filter((d) => d.type === "openingBalance" && d.reference.startsWith("OLD-UI")).length === 1);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  check("…which the page lists", (await page.locator("[data-testid=opening-receivables]").innerText()).includes("OLD-UI-1"));
+
+  // Two-step sign-in, set up from "My account" and used at the sign-in page.
+  const { createHmac } = await import("node:crypto");
+  const totp = (secret, at) => {
+    const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = 0;
+    let value = 0;
+    const key = [];
+    for (const ch of secret.replace(/\s/g, "")) {
+      value = (value << 5) | A.indexOf(ch);
+      bits += 5;
+      if (bits >= 8) {
+        key.push((value >>> (bits - 8)) & 255);
+        bits -= 8;
+      }
+    }
+    const counter = Buffer.alloc(8);
+    counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)));
+    const mac = createHmac("sha1", Buffer.from(key)).update(counter).digest();
+    const o = mac[19] & 15;
+    return String((((mac[o] & 0x7f) << 24) | (mac[o + 1] << 16) | (mac[o + 2] << 8) | mac[o + 3]) % 1_000_000).padStart(6, "0");
+  };
+  const ukey = `ui_${Date.now().toString(36)}2f`;
+  await page.evaluate(
+    (k) => fetch("/api/admin/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: k, role: "salesOfficer", name: { th: "ทดสอบสองขั้น", en: "UI Two Step" }, password: "UiTemp12345" }) }),
+    ukey,
+  );
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  const p3 = await ctx.newPage();
+  p3.on("pageerror", (e) => consoleProblems.push("pageerror: " + e.message));
+  await p3.goto(BASE);
+  await p3.evaluate(async (k) => {
+    localStorage.setItem("lisd-lang", "en");
+    await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: k, password: "UiTemp12345" }) });
+    await fetch("/api/auth/password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ current: "UiTemp12345", next: "UiOwnPass987" }) });
+  }, ukey);
+  await p3.goto(BASE + "/");
+  await p3.waitForLoadState("networkidle");
+  await p3.click("[data-testid=change-password]");
+  await p3.click("[data-testid=account-tab-twoFactor]");
+  check("My account shows two-step sign-in as off", /off/.test(await p3.locator("[data-testid=totp-status]").innerText()));
+  await p3.click("[data-testid=totp-start]");
+  await p3.waitForSelector("[data-testid=totp-secret]", { timeout: 5000 }).catch(() => {});
+  check("setting up shows a QR code to scan", (await p3.locator("[data-testid=totp-qr]").count()) === 1);
+  const secret = (await p3.locator("[data-testid=totp-secret]").innerText()).replace(/\s/g, "");
+  await p3.fill("[data-testid=totp-code]", totp(secret, Date.now()));
+  await p3.click("[data-testid=totp-enable]");
+  await p3.waitForTimeout(600);
+  check("…and the app's code turns it on", /on/.test(await p3.locator("[data-testid=totp-status]").innerText()));
+
+  // The morning email, from the same dialog.
+  await p3.click("[data-testid=account-tab-summary]");
+  await p3.fill("[data-testid=summary-email]", `${ukey}@example.com`);
+  await p3.click("[data-testid=summary-daily]");
+  await p3.click("[data-testid=summary-send]");
+  await p3.waitForSelector("[data-testid=summary-message]", { timeout: 15000 }).catch(() => {});
+  check("Send me one now sends the morning summary", /Sent/.test(await p3.locator("[data-testid=summary-message]").innerText().catch(() => "")));
+  await p3.keyboard.press("Escape");
+
+  // Sign out and back in: password, then the code.
+  await p3.evaluate(() => fetch("/api/auth/logout", { method: "POST" }));
+  await p3.goto(BASE + "/");
+  await p3.waitForLoadState("networkidle");
+  await p3.locator("select").first().selectOption(ukey);
+  await p3.fill("input[type=password]", "UiOwnPass987");
+  await p3.click("button[type=submit]");
+  await p3.waitForSelector("[data-testid=login-2fa]", { timeout: 5000 }).catch(() => {});
+  check("after the password, sign-in asks for the code", (await p3.locator("[data-testid=login-2fa]").count()) === 1 && (await p3.locator("nav").count()) === 0);
+  await p3.fill("[data-testid=totp-code]", "000000" === totp(secret, Date.now() + 30000) ? "111111" : "000000");
+  await p3.click("[data-testid=totp-verify]");
+  await p3.waitForTimeout(400);
+  check("…a wrong code is refused", (await p3.locator("[data-testid=login-2fa] [role=alert]").innerText().catch(() => "")).includes("isn't right"));
+  await p3.fill("[data-testid=totp-code]", totp(secret, Date.now() + 30000));
+  await p3.click("[data-testid=totp-verify]");
+  await p3.waitForTimeout(800);
+  check("…and the right one opens the app", (await p3.locator("nav").count()) > 0);
+  await ctx.close();
+
+  await go("/users");
+  check("the Users list marks who uses two-step sign-in", (await page.locator(`[data-user=${ukey}] [data-testid=user-2fa]`).count()) === 1);
+  await page.locator(`[data-user=${ukey}] button[title="Reset two-step sign-in"]`).click();
+  await page.waitForTimeout(500);
+  check("…and a manager can reset it", (await page.locator(`[data-user=${ukey}] [data-testid=user-2fa]`).count()) === 0);
+  await page.evaluate((k) => fetch(`/api/admin/users/${k}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ active: false }) }), ukey);
+  check("no console errors on search, labels, opening balances and sign-in", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
 }
 
 // ── Users & Access ──

@@ -4,6 +4,7 @@ import type { Identity, Permission } from "../data/types";
 import { api, ApiError } from "../lib/api";
 import Login from "../pages/Login";
 import { ForcedPasswordChange } from "../components/ChangePassword";
+import { ForcedTwoFactorSetup } from "../components/Account";
 import { useBi } from "../lib/useBi";
 
 interface RoleContextValue {
@@ -21,12 +22,19 @@ interface RoleContextValue {
   signOut: () => Promise<void>;
   /** Re-reads the sign-in list (after users are added, renamed or disabled). */
   refreshIdentities: () => void;
+  twoFactorEnabled: boolean;
+  /** The role must use two-step sign-in, so it can't be turned off. */
+  twoFactorRequired: boolean;
+  /** Re-reads the signed-in user (after turning two-step sign-in on or off). */
+  refreshSession: () => void;
 }
+
+type SessionUserInfo = Identity & { mustChangePassword?: boolean; twoFactorEnabled?: boolean; twoFactorSetupRequired?: boolean; twoFactorRequired?: boolean };
 
 const RoleContext = createContext<RoleContextValue | null>(null);
 
 interface MeResponse {
-  user: Identity & { mustChangePassword?: boolean };
+  user: SessionUserInfo;
   demoMode: boolean;
 }
 
@@ -34,7 +42,7 @@ type Session =
   | { status: "loading" }
   | { status: "signedOut" }
   | { status: "error" }
-  | { status: "signedIn"; user: Identity & { mustChangePassword?: boolean }; demoMode: boolean };
+  | { status: "signedIn"; user: SessionUserInfo; demoMode: boolean };
 
 /** The signed-in user (from the API session). Shows the sign-in page until there is one. */
 export function RoleProvider({ children }: { children: ReactNode }) {
@@ -91,8 +99,11 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       isGuest: identity.role === "guest",
       signOut,
       refreshIdentities,
+      twoFactorEnabled: Boolean(session.user.twoFactorEnabled),
+      twoFactorRequired: Boolean(session.user.twoFactorRequired),
+      refreshSession: () => void loadMe(),
     };
-  }, [session, identities, setIdentityKey, signOut, refreshIdentities]);
+  }, [session, identities, setIdentityKey, signOut, refreshIdentities, loadMe]);
 
   if (session.status === "loading") return <div className="min-h-screen bg-canvas" />;
   if (session.status !== "signedIn" || !value)
@@ -106,12 +117,19 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     );
   // A temporary password set by an administrator has to be replaced before anything else.
   if (session.user.mustChangePassword) return <ForcedPassword name={session.user.name} onDone={loadMe} onSignOut={signOut} />;
+  // The role must use two-step sign-in and it isn't set up yet.
+  if (session.user.twoFactorSetupRequired) return <ForcedTwoFactor name={session.user.name} onDone={loadMe} onSignOut={signOut} />;
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;
 }
 
 function ForcedPassword({ name, onDone, onSignOut }: { name: Identity["name"]; onDone: () => void; onSignOut: () => void }) {
   const bi = useBi();
   return <ForcedPasswordChange name={bi(name)} onDone={onDone} onSignOut={() => void onSignOut()} />;
+}
+
+function ForcedTwoFactor({ name, onDone, onSignOut }: { name: Identity["name"]; onDone: () => void; onSignOut: () => void }) {
+  const bi = useBi();
+  return <ForcedTwoFactorSetup name={bi(name)} onDone={onDone} onSignOut={() => void onSignOut()} />;
 }
 
 export function useRole() {

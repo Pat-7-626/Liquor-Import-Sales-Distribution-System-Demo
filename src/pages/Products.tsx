@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { Upload, Pencil, Lock, Tags, X } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
@@ -31,7 +32,8 @@ export default function Products() {
   const { products: rows, updateProduct, createProduct } = useData();
   const [importing, setImporting] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [search, setSearch] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(() => params.get("q") ?? "");
   const [statusFilter, setStatusFilter] = useState("");
   const [editingSku, setEditingSku] = useState<string | null>(null);
   const [editedSkus, setEditedSkus] = useState<Set<string>>(new Set());

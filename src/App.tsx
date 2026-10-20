@@ -50,6 +50,7 @@ const BankReconciliation = lazy(() => import("./pages/Finance").then((m) => ({ d
 const Quotations = lazy(() => import("./pages/Quotations"));
 const PurchaseRequests = lazy(() => import("./pages/PurchaseRequests"));
 const StockCounts = lazy(() => import("./pages/StockCounts"));
+const OpeningBalances = lazy(() => import("./pages/OpeningBalances"));
 const SalesOverview = lazy(() => import("./pages/SalesOverview"));
 const PurchasingOverview = lazy(() => import("./pages/PurchasingOverview"));
 const InventoryOverview = lazy(() => import("./pages/InventoryOverview"));
@@ -108,6 +109,7 @@ export default function App() {
                   <Route path="quotations" element={<Quotations />} />
                   <Route path="purchase-requests" element={<PurchaseRequests />} />
                   <Route path="stock-counts" element={<StockCounts />} />
+                  <Route path="opening-balances" element={<OpeningBalances />} />
                   <Route path="company" element={<CompanyProfile />} />
                   <Route path="overview/sales" element={<SalesOverview />} />
                   <Route path="overview/purchasing" element={<PurchasingOverview />} />

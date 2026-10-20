@@ -61,6 +61,20 @@ const COMMANDS = {
   },
   scheduleDelivery: { args: z.tuple([id, date]), run: A.scheduleDelivery },
   setOpeningBalances: { args: z.tuple([date, num]), run: A.setOpeningBalances },
+  addOpeningReceivable: {
+    args: z.tuple([z.object({ customerId: id, reference: z.string().trim().max(64), date, dueDate: date.nullable().optional(), amount: num })]),
+    run: A.addOpeningReceivable,
+  },
+  addOpeningStock: {
+    args: z.tuple([
+      z.object({ sku: id, lotBatch: id, warehouse: id, receivedDate: date, quantity: num, unitCost: num.nullable().optional(), exciseStampDate: date.nullable().optional() }),
+    ]),
+    run: A.addOpeningStock,
+  },
+  addOpeningPayable: {
+    args: z.tuple([z.object({ supplierId: id, reference: z.string().trim().max(64), date, dueDate: date.nullable().optional(), currency: z.string().max(3), amount: num, rate: num })]),
+    run: A.addOpeningPayable,
+  },
   setCompanyImage: { args: z.tuple([z.enum(["logo", "signature", "stamp"]), z.string().max(400_000)]), run: A.setCompanyImage },
   setPrintSignature: { args: z.tuple([z.boolean()]), run: A.setPrintSignature },
   closePeriod: { args: z.tuple([date]), run: A.closePeriod },

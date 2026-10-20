@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, Copy, KeyRound, Lock, LockOpen, Pencil, Plus, Power, ShieldCheck, X } from "lucide-react";
+import { Check, Copy, KeyRound, Lock, LockOpen, Pencil, Plus, Power, ShieldCheck, ShieldOff, X } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useRole } from "../state/RoleContext";
@@ -32,6 +32,7 @@ interface UserRow {
   mustChangePassword: boolean;
   /** Set while repeated wrong passwords have locked the account. */
   lockedUntil: string | null;
+  twoFactorEnabled?: boolean;
 }
 
 /** 12 characters without look-alikes (0/O, 1/l/I), easy to read out or type from a note. */
@@ -178,7 +179,15 @@ export default function Users() {
                         {bi(u.name)}
                         {self && <span className="ml-1.5 rounded-full bg-gold-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-gold-600">{t("users.you")}</span>}
                       </p>
-                      <p className="text-xs text-gray-500">{u.key}</p>
+                      <p className="flex items-center gap-1.5 text-xs text-gray-500">
+                        {u.key}
+                        {u.twoFactorEnabled && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700" data-testid="user-2fa" title={t("twoFactor.isOn")}>
+                            <ShieldCheck size={10} />
+                            {t("twoFactor.short")}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                 </td>
@@ -215,6 +224,16 @@ export default function Users() {
                           onClick={() => void send(`/api/admin/users/${encodeURIComponent(u.key)}`, "PATCH", { unlock: true }, `${t("users.unlockedToast")}: ${u.key}`)}
                           icon={<LockOpen size={15} />}
                           label={t("users.unlock")}
+                        />
+                      )}
+                      {u.twoFactorEnabled && !self && (
+                        <ActionButton
+                          onClick={() => {
+                            if (window.confirm(t("twoFactor.confirmReset").replace("{name}", bi(u.name))))
+                              void send(`/api/admin/users/${encodeURIComponent(u.key)}/2fa/reset`, "POST", {}, `${t("twoFactor.resetToast")}: ${u.key}`);
+                          }}
+                          icon={<ShieldOff size={15} />}
+                          label={t("twoFactor.reset")}
                         />
                       )}
                       <ActionButton onClick={() => setEditing(u)} icon={<Pencil size={15} />} label={t("common.edit")} />

@@ -138,8 +138,8 @@ export default function Payables() {
                   <span className="font-medium text-gray-900">{i.reference}</span>
                   <span className="block text-xs text-gray-500">
                     {i.docNo} ·{" "}
-                    <RecordLink to={`/import-orders/${i.importOrderNo}`}>
-                      {i.importOrderNo}
+                    <RecordLink to={i.importOrderNo ? `/import-orders/${i.importOrderNo}` : "/opening-balances"}>
+                      {i.importOrderNo || t("ob.broughtForward")}
                     </RecordLink>{" "}
                     · {formatDate(i.date, lang)}
                   </span>

@@ -48,6 +48,9 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       MAIL_CATCHALL_URL: ${MAIL_CATCHALL_URL-http://localhost:8025}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      DIGEST_HOUR: ${DIGEST_HOUR:-7}
+      REQUIRE_TWO_FACTOR_ROLES: ${REQUIRE_TWO_FACTOR_ROLES:-}
     # Reachable from this machine only, so `npm run dev` (Vite on :5173) can use the running API.
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"

@@ -4,6 +4,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { api, ApiError } from "../lib/api";
 import type { Identity } from "../data/types";
 import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
+import { CodeInput } from "../components/Account";
 
 export default function Login({
   identities,
@@ -22,6 +23,9 @@ export default function Login({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // After a correct password, when two-step sign-in is on: the ticket to exchange with the code.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState("");
 
   const enterAsGuest = async () => {
     if (!onGuest) return;
@@ -41,7 +45,12 @@ export default function Login({
     setBusy(true);
     setError(null);
     try {
-      await api("/api/auth/login", { method: "POST", body: { key, password } });
+      const res = await api<{ twoFactor?: boolean; challenge?: string }>("/api/auth/login", { method: "POST", body: { key, password } });
+      if (res.twoFactor && res.challenge) {
+        setChallenge(res.challenge);
+        setCode("");
+        return;
+      }
       onSignedIn();
     } catch (err) {
       // 429 = locked after repeated failures: the server says for how long.
@@ -52,6 +61,28 @@ export default function Login({
             ? err.bilingual[lang]
             : t("auth.serverUnreachable"),
       );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verify = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!challenge) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/auth/2fa/verify", { method: "POST", body: { challenge, code } });
+      onSignedIn();
+    } catch (err) {
+      // 410: the ticket expired or the account changed — start again from the password.
+      const restart = err instanceof ApiError && err.status === 410;
+      if (restart) {
+        setChallenge(null);
+        setPassword("");
+      }
+      setCode("");
+      setError(err instanceof ApiError && err.bilingual ? err.bilingual[lang] : t("auth.serverUnreachable"));
     } finally {
       setBusy(false);
     }
@@ -68,6 +99,38 @@ export default function Login({
           <p className="mt-1 text-sm text-gray-300">{t("common.appTitle")}</p>
         </div>
 
+        {challenge ? (
+          <form onSubmit={verify} className="space-y-4 rounded-xl bg-white p-6 shadow-2xl" data-testid="login-2fa">
+            <h2 className="text-base font-semibold text-gray-900">{t("twoFactor.loginTitle")}</h2>
+            <p className="text-sm text-gray-600">{t("twoFactor.loginHint")}</p>
+            <CodeInput value={code} onChange={setCode} autoFocus />
+            {error && (
+              <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={busy || code.length !== 6}
+              className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+              data-testid="totp-verify"
+            >
+              {busy ? t("auth.signingIn") : t("twoFactor.verify")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setChallenge(null);
+                setPassword("");
+                setError(null);
+              }}
+              className="w-full text-sm text-gray-500 hover:text-gray-800 hover:underline"
+            >
+              {t("twoFactor.back")}
+            </button>
+            <p className="text-xs text-gray-500">{t("twoFactor.lostPhone")}</p>
+          </form>
+        ) : (
         <form onSubmit={submit} className="space-y-4 rounded-xl bg-white p-6 shadow-2xl">
           <h2 className="text-base font-semibold text-gray-900">{t("auth.signIn")}</h2>
           {unreachable && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{t("auth.serverUnreachable")}</p>}
@@ -144,6 +207,7 @@ export default function Login({
             ))}
           </div>
         </form>
+        )}
       </div>
     </div>
   );

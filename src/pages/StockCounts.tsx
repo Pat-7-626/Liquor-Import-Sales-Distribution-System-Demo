@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardCheck, Printer, X } from "lucide-react";
+import { ClipboardCheck, Printer, X, ScanLine } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -12,6 +12,7 @@ import { Both, DocDate, DocTh, DocumentHeader, PrintFrame, Signatures } from "..
 import { useRunAction } from "../lib/useRunAction";
 import { formatDate, formatNumber } from "../lib/format";
 import type { StockCount } from "../data/types";
+import { Scanner, scannerAvailable } from "../components/Scanner";
 
 const TONE: Record<StockCount["status"], string> = {
   open: "bg-amber-50 text-amber-700 ring-amber-600/20",
@@ -53,6 +54,20 @@ function CountCard({ count: c, onPrint }: { count: StockCount; onPrint: () => vo
   const runAction = useRunAction();
   const { products, warehouses, enterStockCount, postStockCount, cancelStockCount } = useData();
   const editable = c.status === "open" && can("adjustInventory");
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  // A scanned label holds a link to its lot: find that line and put the cursor in its count.
+  const onScan = (code: string) => {
+    setScanning(false);
+    const lot = decodeURIComponent(code.match(/[?&]lot=([^&]+)/)?.[1] ?? code).trim();
+    const input = document.querySelector<HTMLInputElement>(`[data-count="${c.countNo}"] [data-lot="${CSS.escape(lot)}"] input`);
+    if (input) {
+      input.scrollIntoView({ block: "center" });
+      input.focus();
+      input.select();
+      setScanNote(null);
+    } else setScanNote(t("scan.notOnCount").replace("{lot}", lot));
+  };
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(c.lines.map((l) => [l.lotBatch, l.counted === null ? "" : String(l.counted)])));
   // Keep the inputs in step when the saved count changes (another person saving, posting).
   const [base, setBase] = useState(c);
@@ -80,6 +95,12 @@ function CountCard({ count: c, onPrint }: { count: StockCount; onPrint: () => vo
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
           {t("sc.progress").replace("{n}", String(counted)).replace("{total}", String(c.lines.length))}
+          {editable && scannerAvailable() && (
+            <button onClick={() => setScanning(true)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50" data-testid={`count-scan-${c.countNo}`}>
+              <ScanLine size={13} />
+              {t("scan.scanLabel")}
+            </button>
+          )}
           {c.status !== "cancelled" && (
             <button onClick={onPrint} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50">
               <Printer size={13} />
@@ -135,6 +156,8 @@ function CountCard({ count: c, onPrint }: { count: StockCount; onPrint: () => vo
           </tbody>
         </table>
       </div>
+      {scanning && <Scanner onCode={onScan} onClose={() => setScanning(false)} />}
+      {scanNote && <p className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">{scanNote}</p>}
       {editable && (
         <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-3">
           <span className="text-xs text-gray-500">{diffs.length ? t("sc.differences").replace("{n}", String(diffs.length)) : t("sc.noDifferences")}</span>

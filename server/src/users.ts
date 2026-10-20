@@ -5,6 +5,8 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { Bilingual } from "../../src/data/types.ts";
 import { hashPassword, issueSession, requireUser, verifyPassword, type SessionUser } from "./auth.ts";
+import { config } from "./config.ts";
+import { newSecret, otpauthUri, verifyCode } from "./totp.ts";
 import { sql, type Tx } from "./db.ts";
 
 export const ROLES = [
@@ -47,6 +49,7 @@ interface UserRecord {
   password_changed_at: string | null;
   must_change_password: boolean;
   locked_until: string | null;
+  totp_enabled?: boolean;
 }
 
 const toPublic = (u: UserRecord) => ({
@@ -58,6 +61,7 @@ const toPublic = (u: UserRecord) => ({
   lastLoginAt: u.last_login_at,
   passwordChangedAt: u.password_changed_at,
   mustChangePassword: u.must_change_password,
+  twoFactorEnabled: Boolean(u.totp_enabled),
   lockedUntil: u.locked_until && new Date(u.locked_until).getTime() > Date.now() ? u.locked_until : null,
 });
 
@@ -99,7 +103,7 @@ export function registerUserRoutes(app: FastifyInstance) {
     const user = await requirePermission(req, reply, "viewUsers");
     if (!user) return;
     const rows = await sql<UserRecord[]>`
-      select key, role, name, active, created_at, last_login_at, password_changed_at, must_change_password, locked_until
+      select key, role, name, active, created_at, last_login_at, password_changed_at, must_change_password, locked_until, totp_enabled
       from users where role <> 'guest' order by active desc, key`;
     return { users: rows.map(toPublic), me: user.key, canManage: user.can("manageUsers") };
   });
@@ -148,7 +152,7 @@ export function registerUserRoutes(app: FastifyInstance) {
     const b = body.data;
     return locked(async (tx) => {
       const [target] = await tx<UserRecord[]>`
-        select key, role, name, active, created_at, last_login_at, password_changed_at, must_change_password, locked_until
+        select key, role, name, active, created_at, last_login_at, password_changed_at, must_change_password, locked_until, totp_enabled
         from users where key = ${req.params.key} and role <> 'guest'`;
       if (!target) return reply.code(404).send(say("ไม่พบผู้ใช้", "User not found"));
       const self = target.key === user.key;
@@ -210,6 +214,60 @@ export function registerUserRoutes(app: FastifyInstance) {
   });
 
   /** Anyone signed in (not guests) changes their own password; works while a temporary password is pending. */
+  // ── two-step sign-in ──
+
+  /** Start setting up: a new secret, shown once as a QR code; it isn't active until a code confirms it. */
+  app.post("/api/auth/2fa/setup", async (req, reply) => {
+    const user = await requireUser(req, reply, { allowPendingPassword: true });
+    if (!user) return;
+    if (user.role === "guest") return reply.code(403).send(DENIED);
+    if (user.mustChangePassword) return reply.code(403).send(say("กรุณาเปลี่ยนรหัสผ่านชั่วคราวก่อน", "Change your temporary password first"));
+    if (user.twoFactorEnabled) return reply.code(409).send(say("ตั้งค่าไว้แล้ว", "Two-step sign-in is already on"));
+    const secret = newSecret();
+    await sql`update users set totp_secret = ${secret}, totp_last_step = null where key = ${user.key}`;
+    return { secret, uri: otpauthUri(secret, user.key, "LISD") };
+  });
+
+  app.post("/api/auth/2fa/enable", async (req, reply) => {
+    const user = await requireUser(req, reply, { allowPendingPassword: true });
+    if (!user) return;
+    const body = z.object({ code: z.string().trim().max(10) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send(say("ข้อมูลไม่ครบ", "Missing code"));
+    const [row] = await sql<{ totp_secret: string | null; totp_enabled: boolean }[]>`select totp_secret, totp_enabled from users where key = ${user.key}`;
+    if (!row?.totp_secret || row.totp_enabled) return reply.code(409).send(say("เริ่มตั้งค่าใหม่", "Start the setup again"));
+    const step = verifyCode(row.totp_secret, body.data.code, null);
+    if (step === null) return reply.code(422).send(say("รหัสไม่ถูกต้อง ลองรหัสถัดไปจากแอป", "That code isn't right — try the next one the app shows"));
+    await sql`update users set totp_enabled = true, totp_last_step = ${step} where key = ${user.key}`;
+    await audit(sql, user, user.key, "updated", { th: `${user.key} เปิดการยืนยันสองขั้นตอน`, en: `${user.key} turned on two-step sign-in` });
+    return { ok: true };
+  });
+
+  app.post("/api/auth/2fa/disable", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const body = z.object({ password: z.string().max(200) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send(say("ข้อมูลไม่ครบ", "Missing password"));
+    if (config.requireTwoFactorRoles.has(user.role)) return reply.code(422).send(say("บทบาทของคุณต้องใช้การยืนยันสองขั้นตอน", "Your role must keep two-step sign-in on"));
+    const [row] = await sql<{ password_hash: string }[]>`select password_hash from users where key = ${user.key}`;
+    if (!row || !(await verifyPassword(body.data.password, row.password_hash))) return reply.code(422).send(say("รหัสผ่านไม่ถูกต้อง", "Wrong password"));
+    await sql`update users set totp_enabled = false, totp_secret = null, totp_last_step = null where key = ${user.key}`;
+    await audit(sql, user, user.key, "updated", { th: `${user.key} ปิดการยืนยันสองขั้นตอน`, en: `${user.key} turned off two-step sign-in` });
+    return { ok: true };
+  });
+
+  /** Lost phone: a Senior Manager turns it off for someone else; they set it up again at next sign-in if required. */
+  app.post<{ Params: { key: string } }>("/api/admin/users/:key/2fa/reset", async (req, reply) => {
+    const user = await requirePermission(req, reply, "manageUsers");
+    if (!user) return;
+    if (req.params.key === user.key) return reply.code(422).send(say("รีเซ็ตของตัวเองไม่ได้", "You can't reset your own"));
+    const [row] = await sql<{ key: string }[]>`
+      update users set totp_enabled = false, totp_secret = null, totp_last_step = null, token_version = token_version + 1
+      where key = ${req.params.key} and role <> 'guest' returning key`;
+    if (!row) return reply.code(404).send(say("ไม่พบผู้ใช้", "User not found"));
+    await audit(sql, user, row.key, "updated", { th: `รีเซ็ตการยืนยันสองขั้นตอนของ ${row.key}`, en: `Reset two-step sign-in for ${row.key}` });
+    return { ok: true };
+  });
+
   app.post("/api/auth/password", async (req, reply) => {
     const user = await requireUser(req, reply, { allowPendingPassword: true });
     if (!user) return;

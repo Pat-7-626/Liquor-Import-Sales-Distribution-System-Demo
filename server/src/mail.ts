@@ -34,7 +34,7 @@ const HOURLY_LIMIT = 30;
 const sent = new Map<string, number[]>();
 
 let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
-const mailer = () =>
+export const mailer = () =>
   (transport ??= nodemailer.createTransport({
     host: config.smtp.host,
     port: config.smtp.port,
