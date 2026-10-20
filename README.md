@@ -68,6 +68,8 @@ Out of the box every email goes to **Mailpit**, a catch-all mailbox in the stack
 **Send me the summary every morning**: after `DIGEST_HOUR` (default 07:00, Bangkok time) they get one email
 listing what's waiting on them — the same items as the header bell, each linking into the app at `APP_URL`.
 Days with nothing waiting send nothing. **Send me one now** sends it at once, to check it arrives.
+In demo mode a Senior Manager or supervisor can also run the whole morning pass at once with
+`POST /api/admin/digest/run` (same rules: once a day per person) instead of waiting for the hour.
 
 ### HTTPS on a real domain
 
@@ -220,6 +222,8 @@ if it's somewhere unusual); screenshots go to `tests/output/`.
   invariants (the books reconcile with stock, receivables, payables and tax withheld).
 - `tests/e2e/workflows.mjs` — the main workflows through the real UI, in a browser.
 - `tests/e2e/guest.mjs` — the read-only guest experience.
+- `tests/e2e/required-2fa.mjs` — restarts the API with two-step sign-in required for one role, checks the
+  forced set-up, then restarts it as it was.
 - `tests/e2e/crawl.mjs` — opens every page as five roles in both languages, at desktop and phone widths,
   and fails on console errors, missing translations, or a page that scrolls sideways.
 
@@ -250,9 +254,10 @@ same products, quantities, prices and discounts (lots are picked again, oldest f
 
 **Lot labels and scanning.** Stock Levels, Lot Trace and a shipment's receiving card print **QR labels** for
 lots (choose how many copies). Scanning one with the scan button in Search opens that lot's trace, and on a
-**stock count** the scan button jumps to that lot's line. Scanning uses the phone or tablet camera in Chrome,
-Edge or Samsung Internet (browsers with barcode detection) and needs HTTPS. Any phone camera app also opens
-the label's link directly.
+**stock count** the scan button jumps to that lot's line. Scanning works with the camera in any current
+browser — phone, tablet or laptop; QR codes are read by the browser's own reader where it has one and by a
+small built-in reader elsewhere (Windows, iPhone). Browsers only allow the camera on HTTPS (or `localhost`).
+Any phone camera app also opens the label's link directly.
 
 **Going live: opening balances** (Accounting → Opening Balances). Import from spreadsheets what customers
 already owe (invoice by invoice, so it ages properly), the stock already on the shelves (lot, warehouse,

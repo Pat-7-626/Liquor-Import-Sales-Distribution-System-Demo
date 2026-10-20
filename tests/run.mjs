@@ -1,6 +1,6 @@
 // npm test — bring the whole stack up from the current code, then run every suite.
 //   npm test              API + browser suites
-//   npm test -- api       one suite: api | workflows | guest | crawl
+//   npm test -- api       one suite: api | workflows | guest | crawl | required2fa
 // WARNING: the suites reset the demo data (and create, then remove, test user accounts).
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -11,6 +11,7 @@ const SUITES = {
   workflows: "tests/e2e/workflows.mjs",
   guest: "tests/e2e/guest.mjs",
   crawl: "tests/e2e/crawl.mjs",
+  required2fa: "tests/e2e/required-2fa.mjs",
 };
 const wanted = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 const unknown = wanted.filter((w) => !SUITES[w]);

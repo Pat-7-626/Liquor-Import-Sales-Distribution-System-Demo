@@ -1073,6 +1073,85 @@ consoleProblems.length = 0;
   check("no console errors on search, labels, opening balances and sign-in", consoleProblems.length === 0, consoleProblems.slice(0, 3).join(" | "));
 }
 
+// ── Scanning a lot label with the camera (a simulated camera showing the printed QR code) ──
+{
+  await admin.post("/api/admin/reset");
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  // The camera films whatever image window.__cameraShows holds. No native barcode reader, as on Windows
+  // and iPhones, so the app's own QR reader does the decoding.
+  await ctx.addInitScript(() => {
+    delete window.BarcodeDetector;
+    const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 640;
+    const g = canvas.getContext("2d");
+    const img = new Image();
+    let shown = "";
+    setInterval(() => {
+      if (window.__cameraShows && window.__cameraShows !== shown) {
+        shown = window.__cameraShows;
+        img.src = shown;
+      }
+      g.fillStyle = "#fff";
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      if (img.complete && img.naturalWidth) g.drawImage(img, 90, 170, 300, 300);
+    }, 50);
+    navigator.mediaDevices.getUserMedia = async () => canvas.captureStream(15);
+  });
+  const p4 = await ctx.newPage();
+  const problems = [];
+  p4.on("pageerror", (e) => problems.push(e.message));
+  await p4.goto(BASE);
+  await p4.evaluate(async () => {
+    localStorage.setItem("lisd-lang", "en");
+    await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "whOfficer", password: "demo1234" }) });
+  });
+  const lot = (await state()).inventory.find((i) => i.quantityRemaining > 0 && i.warehouse === "whA");
+  await p4.goto(`${BASE}/inventory`);
+  await p4.waitForLoadState("networkidle");
+  await p4.click(`[data-testid="label-${lot.lotBatch}"]`);
+  await p4.waitForSelector("[data-testid=lot-label] img", { timeout: 5000 });
+  const qr = await p4.locator("[data-testid=lot-label] img").first().getAttribute("src");
+  await p4.keyboard.press("Escape");
+  await p4.locator('#print-modal-root button[aria-label="Close"]').click().catch(() => {});
+
+  // From search: scanning a label opens the lot.
+  await p4.evaluate((src) => (window.__cameraShows = src), qr);
+  await p4.keyboard.press("Control+k");
+  await p4.click("[data-testid=search-scan]");
+  await p4.waitForURL(/\/lot-trace\?lot=/, { timeout: 10000 }).catch(() => {});
+  check("scanning a lot label (no native barcode reader) opens that lot", decodeURIComponent(p4.url()).endsWith(`lot=${lot.lotBatch}`), p4.url());
+  check("…and the camera is let go", (await p4.locator("[data-testid=scanner]").count()) === 0);
+
+  // On a stock count: scanning a label puts the cursor in that lot's count.
+  await p4.evaluate(() => (window.__cameraShows = ""));
+  await p4.goto(`${BASE}/stock-counts`);
+  await p4.waitForLoadState("networkidle");
+  await p4.click('button:has-text("Start a count")');
+  await p4.selectOption("[data-testid=count-warehouse]", "whA");
+  await p4.click("[data-testid=count-start]");
+  await p4.waitForSelector("[data-testid=stock-count][data-status=open]", { timeout: 5000 });
+  const countNo = await p4.locator("[data-testid=stock-count][data-status=open]").first().getAttribute("data-count");
+  await p4.evaluate((src) => (window.__cameraShows = src), qr);
+  await p4.click(`[data-testid=count-scan-${countNo}]`);
+  await p4.waitForFunction((l) => document.activeElement?.closest("[data-lot]")?.getAttribute("data-lot") === l, lot.lotBatch, { timeout: 10000 }).catch(() => {});
+  check("on a stock count, scanning a label jumps to that lot's line", await p4.evaluate((l) => document.activeElement?.closest("[data-lot]")?.getAttribute("data-lot") === l, lot.lotBatch));
+
+  // No camera allowed: the scanner says so instead of hanging.
+  await p4.evaluate(() => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      throw new DOMException("denied", "NotAllowedError");
+    };
+  });
+  await p4.click(`[data-testid=count-scan-${countNo}]`);
+  await p4.waitForTimeout(300);
+  check("without camera permission the scanner explains", /camera/i.test(await p4.locator("[data-testid=scanner-message]").innerText()));
+  await p4.keyboard.press("Escape");
+  await p4.evaluate((no) => fetch("/api/commands/cancelStockCount", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ args: [no] }) }), countNo);
+  check("no page errors while scanning", problems.length === 0, problems.slice(0, 2).join(" | "));
+  await ctx.close();
+}
+
 // ── Users & Access ──
 {
   await as("salesOfficer");

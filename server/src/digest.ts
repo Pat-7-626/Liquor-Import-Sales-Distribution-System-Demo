@@ -61,9 +61,13 @@ async function send(r: Recipient, notices: Notice[]) {
   await mailer().sendMail({ from: config.smtp.from, to: r.email, subject, html, text });
 }
 
-/** One pass: everyone due a summary today. Each person is claimed first, so two API instances can't both send. */
-export async function runDigest(log: FastifyBaseLogger) {
-  if (!config.smtp.host || new Date().getHours() < config.digestHour) return;
+/**
+ * One pass: everyone due a summary today. Each person is claimed first, so two API instances can't both send.
+ * `anyHour` skips waiting for DIGEST_HOUR (the demo's "run it now").
+ */
+export async function runDigest(log: FastifyBaseLogger, opts: { anyHour?: boolean } = {}): Promise<{ sent: string[]; nothingToSay: string[] }> {
+  const result = { sent: [] as string[], nothingToSay: [] as string[] };
+  if (!config.smtp.host || (!opts.anyHour && new Date().getHours() < config.digestHour)) return result;
   const today = todayIso();
   const due = await sql<Recipient[]>`
     update users set last_summary_on = ${today}
@@ -74,11 +78,15 @@ export async function runDigest(log: FastifyBaseLogger) {
     try {
       if (!byRole.has(r.role)) byRole.set(r.role, await noticesFor(r.role));
       const notices = byRole.get(r.role)!;
-      if (notices.length) await send(r, notices);
+      if (notices.length) {
+        await send(r, notices);
+        result.sent.push(r.key);
+      } else result.nothingToSay.push(r.key);
     } catch (e) {
       log.error({ err: e, user: r.key }, "morning summary failed");
     }
   }
+  return result;
 }
 
 export function startDigest(log: FastifyBaseLogger) {
@@ -91,6 +99,15 @@ const settings = z.object({ email: z.string().trim().max(200).email().or(z.liter
 const lastSentNow = new Map<string, number>();
 
 export function registerDigestRoutes(app: FastifyInstance) {
+  /** Demo only: the morning run, now, instead of waiting for DIGEST_HOUR. Same rules: once a day per person. */
+  app.post("/api/admin/digest/run", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    if (!config.demoMode) return reply.code(403).send({ error: { th: "ปิดใช้งานในโหมดใช้งานจริง", en: "Disabled outside demo mode" } });
+    if (!user.can("manageUsers") && user.role !== "supervisor") return reply.code(403).send({ error: { th: "บทบาทของคุณไม่มีสิทธิ์", en: "Your role isn't permitted to do this" } });
+    return runDigest(req.log, { anyHour: true });
+  });
+
   app.get("/api/me/summary", async (req, reply) => {
     const user = await requireUser(req, reply);
     if (!user) return;

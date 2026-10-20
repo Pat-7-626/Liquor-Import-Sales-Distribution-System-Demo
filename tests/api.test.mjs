@@ -949,6 +949,28 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
       (await fetch(`${BASE}/api/me/summary`, { method: "POST", headers: { cookie: guest, "content-type": "application/json" }, body: JSON.stringify({ email: "g@example.com", dailySummary: true }) })).status === 403,
     );
   await mgr.call("POST", "/api/me/summary", { email: "", dailySummary: false });
+
+  // The morning run itself (the demo can run it now rather than waiting for DIGEST_HOUR).
+  const key = `t_${Date.now().toString(36)}dg`;
+  await mgr.call("POST", "/api/admin/users", { key, role: "seniorManager", name: { th: "ทดสอบสรุป", en: "Digest Test" }, password: "TempPass123" });
+  const tmp = await session(key, "TempPass123");
+  await tmp.call("POST", "/api/auth/password", { current: "TempPass123", next: "MyOwnPass99" });
+  const dg = await session(key, "MyOwnPass99");
+  const dgTo = `${key}@example.com`;
+  await dg.call("POST", "/api/me/summary", { email: dgTo, dailySummary: true });
+  check("only managers run the morning email by hand", (await wh.call("POST", "/api/admin/digest/run")).status === 403);
+  const run1 = (await mgr.call("POST", "/api/admin/digest/run")).json;
+  check("the morning run emails whoever turned it on", run1.sent?.includes(key), JSON.stringify(run1));
+  check("…and not whoever turned it off", !run1.sent?.includes("manager") && !run1.nothingToSay?.includes("manager"));
+  const run2 = (await mgr.call("POST", "/api/admin/digest/run")).json;
+  check("…once a day only", !run2.sent?.includes(key) && !run2.nothingToSay?.includes(key), JSON.stringify(run2));
+  try {
+    const box = await (await fetch("http://localhost:8025/api/v1/messages")).json();
+    check("…and it arrives", box.messages.filter((x) => x.To?.[0]?.Address === dgTo).length === 1);
+  } catch {
+    check("the demo mailbox is reachable", false);
+  }
+  await mgr.call("PATCH", `/api/admin/users/${key}`, { active: false });
 }
 
 // ── user management ──
