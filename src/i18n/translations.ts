@@ -348,8 +348,8 @@ const dict = {
     chooseFile: { th: "เลือกไฟล์...", en: "Choose file..." },
     attachedToast: { th: "แนบเอกสารแล้ว", en: "Document attached" },
     docsSessionNote: {
-      th: "ไฟล์แนบเก็บไว้ในเบราว์เซอร์นี้เท่านั้น (ไม่ใช่การอัปโหลดจริง)",
-      en: "Attached files live only in this browser session (not a real upload)",
+      th: "ไฟล์ PDF หรือรูปภาพไม่เกิน 10 MB เก็บไว้ที่เซิร์ฟเวอร์ — ใบแจ้งหนี้ของผู้ขายเปิดได้เฉพาะบทบาทที่เห็นราคาหรือดูแลเอกสารนำเข้า",
+      en: "PDF or image up to 10 MB, stored on the server — the supplier's invoice opens only for roles that see prices or handle import paperwork",
     },
 
     receivingIneligible: {
