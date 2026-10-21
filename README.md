@@ -1,47 +1,468 @@
 # Liquor Import, Sales & Distribution System
 
-Built from `Liquor_Import_Sales_Distribution_System_Requirements_v2.0.pdf` and
-`liquor-import-fe-demo-data.xlsx`: a React web app, a Node.js API, and PostgreSQL, run together with Docker.
+A complete, bilingual (Thai / English) ERP demo for a company that imports wine, spirits and beer into
+Thailand and sells them to hotels, restaurants and shops. It covers the whole flow: import orders and
+customs, lots and warehouses, sales orders and delivery, Thai tax documents, receivables and payables,
+and a general ledger that is always in step with the operational screens.
 
-## Run with Docker
+It was built from a written requirements specification (v2.0) and a demo-data spreadsheet; neither source
+file is part of this repository. It runs as a React web app, a Node.js API and a PostgreSQL database,
+started together with Docker.
+
+**Highlights**
+
+- **One set of business rules**, run by the server: approvals, credit, licenses, stock, tax and accounting
+  can't be bypassed from the browser.
+- **Prices hidden by role**, on the server: roles without price access never receive cost prices, sales
+  values, credit figures or money amounts at all.
+- **Thai tax documents**: tax invoices, receipts, credit/debit notes, withholding certificates (50 ทวิ),
+  VAT return (ภ.พ.30) and withholding returns (ภ.ง.ด.3/53), printed or emailed as PDF.
+- **Books derived from the records**: the journal, trial balance, P&L and balance sheet come straight from
+  invoices, payments, stock movements and expenses, with live reconciliation checks.
+- **Lot traceability**: every unit can be followed from the supplier's shipment to the customer who got
+  it, with QR lot labels you can scan with a phone or laptop camera.
+- **Security**: hashed passwords, account lockout, optional or required two-step sign-in, a full audit
+  trail, a content security policy, and an optional HTTPS front end.
+- **Tested**: about 570 automated checks across the API and a real browser, plus a crawl of every page for
+  five roles in both languages at desktop and phone widths.
+
+---
+
+## Contents
+
+- [Quick start](#quick-start)
+- [A five-minute tour](#a-five-minute-tour)
+- [What it does](#what-it-does)
+- [Printed documents and exports](#printed-documents-and-exports)
+- [Roles and permissions](#roles-and-permissions)
+- [Business rules](#business-rules)
+- [Running it](#running-it)
+- [Users, passwords and two-step sign-in](#users-passwords-and-two-step-sign-in)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Tests](#tests)
+- [About the demo data](#about-the-demo-data)
+- [Known limitations](#known-limitations)
+
+---
+
+## Quick start
+
+You need **Docker Desktop** (or Docker Engine with Compose).
 
 ```bash
-cp .env.example .env          # then set POSTGRES_PASSWORD and SESSION_SECRET (openssl rand -hex 32)
+cp .env.example .env          # then set POSTGRES_PASSWORD and SESSION_SECRET (e.g. openssl rand -hex 32)
 docker compose up -d --build
 ```
 
-Open **http://localhost:8080**. On first start the API creates the database schema and loads the demo
-data. Sign in as any of the nine users below with the password from `DEMO_PASSWORD` (default `demo1234`).
+Open **<http://localhost:8080>**. On first start the API creates the database and loads the demo data.
 
-| User key | Role |
+Pick a user on the sign-in page; every demo user's password is the `DEMO_PASSWORD` from `.env`
+(default **`demo1234`**).
+
+| User | Role | Good for trying |
+| --- | --- | --- |
+| `manager` | Senior Manager | prices and credit terms, the books, closing a month, users |
+| `orderOfficer` | Order Officer | import orders, suppliers, purchase requests |
+| `docOfficer` | Documentation Officer | import documents, customs clearance, licenses |
+| `whOfficer` | Warehouse Officer | receiving goods, stock adjustments and counts, delivery |
+| `taxOfficer` | Tax Officer | tax rates, expenses, withholding tax |
+| `salesOfficer` | Sales Officer | quotations, sales orders, payments, reminders |
+| `distOfficer` | Distribution Officer | delivery status only |
+| `somchai`, `piyada` | Supervisor | approvals (two of them, for two-level approval) and almost everything else |
+
+Or click **Continue as guest** to look around without an account: a guest can open every page but can't
+change anything and never receives prices or credit figures. The server enforces both.
+
+In demo mode the header has a **user switcher** to jump between roles, and **Reset demo data** at the
+bottom of the sidebar reloads the original data. The demo's dates move with the calendar, so a reset always
+shows the same situation: two licenses about to expire, a customer on credit hold, withholding tax due and
+a bank statement to reconcile.
+
+Emails the app sends never reach real people: they land in a local test mailbox at
+**<http://localhost:8025>**.
+
+| Command | Does |
 | --- | --- |
-| `manager` | Senior Manager |
-| `orderOfficer` | Order Officer |
-| `docOfficer` | Documentation Officer |
-| `whOfficer` | Warehouse Officer |
-| `taxOfficer` | Tax Officer |
-| `salesOfficer` | Sales Officer |
-| `distOfficer` | Distribution Officer |
-| `somchai`, `piyada` | Supervisor (two, for two-level approvals) |
+| `docker compose logs -f api` | follow the API log |
+| `docker compose exec db psql -U lisd lisd` | SQL shell |
+| `docker compose stop` / `npm run stop` | stop (data is kept) |
+| `docker compose down -v` | stop and **delete** all data and uploaded documents |
 
-Or click **Continue as guest** to look around without an account. A guest can open every page but can't
-change anything, never receives prices or credit figures, and can't switch to a staff user — the server
-enforces all three.
+---
 
-Useful commands:
+## A five-minute tour
 
-```bash
-docker compose logs -f api                                   # API log
-docker compose exec db psql -U lisd lisd                     # SQL shell
-docker compose down                                          # stop (data is kept in volumes)
-docker compose down -v                                       # stop and DELETE all data + uploads
-```
+1. **Dashboard** (as `somchai`): KPIs, every open order's status, and what needs attention. The **bell**
+   in the header lists what is waiting on you.
+2. **Search**: press **Ctrl K** (or **/**) and type an order number, a customer or a lot. **?** lists
+   the keyboard shortcuts; **N** starts a new record on a list page.
+3. **Sales → Sales Orders → New**: pick a customer and products. License, credit limit, stock and margin
+   are checked as you type, and each line suggests the oldest lot (FIFO). Too much discount, over the credit
+   limit or below cost? It goes to **Approvals** instead of being booked.
+4. Open an order and print its **tax invoice**, delivery note or picking list, or **Email** it as a PDF
+   (then look in <http://localhost:8025>). **Copy order** starts a repeat order for the same customer.
+5. **Purchasing & Import → Import Orders**: an order moves through Staging → Approved → Customs cleared →
+   Received into a warehouse. Receiving creates lots with their landed cost and prints **QR lot labels**.
+6. **Inventory → Lot Trace**: follow a lot back to its shipment and forward to every customer who
+   received it, with an exportable recall list.
+7. **Accounting** (as `manager`): the overview shows the reconciliation checks live; **Trial Balance**,
+   **Profit & Loss** and **Balance Sheet** come straight from the records.
+8. **My account** (key icon in the header): turn on **two-step sign-in** with an authenticator app, or
+   the **morning summary email**.
+9. Switch to `whOfficer` or continue as a guest: the same pages, with prices and credit masked.
+
+---
+
+## What it does
+
+The sidebar is organised like an ERP. Each module has an **Overview** and splits into day-to-day
+**transactions**, the **master data** they run on, and **reports**. Only what a liquor importer and
+distributor needs is included: no manufacturing, service or payroll.
+
+| Module | Transactions | Master data | Reports |
+| --- | --- | --- | --- |
+| **Sales** | Quotations · Sales Orders · Receipts & Credit Notes · AR Aging | Customers · Price Lists | |
+| **Purchasing & Import** | Purchase Requests · Import Orders · Goods Receipts · Supplier Invoices & Payments | Suppliers · Licenses · Exchange Rates | |
+| **Inventory** | Stock Levels · Stock Movements · Stock Counts · Stock Alerts · Lot Trace | Products / SKU · Warehouses · Reorder Policies | |
+| **Tax** | | Tax & Duty Rates · Company Profile | VAT Return (ภ.พ.30) · Withholding Tax (ภ.ง.ด.3/53) |
+| **Accounting** | Expenses · Manual Journals · Bank Reconciliation · Month-end Close · Opening Balances · Journal | | Trial Balance · Profit & Loss · Balance Sheet |
+
+**Dashboard**, **Approvals**, **Calendar**, **Reports**, **Audit Trail** and **Users & Access** sit across
+all modules.
+
+### Sales
+
+- **Quotations** (ใบเสนอราคา) are priced like a sales order, printable, and valid until a date. They don't
+  hold stock. When accepted, a quotation becomes a sales order at the quoted prices, with lots picked oldest
+  first and the usual license, credit and discount checks. Expired and declined quotations stay on record,
+  and the win rate is shown.
+- **Sales Orders** have several lines, each a product, lot, quantity, price and discount. Two lines may
+  draw on the same lot, but together they can't exceed it. Price Lists set each channel's price
+  automatically.
+  - **Approval:** orders over the standard discount, over the credit limit or priced below cost wait for a
+    supervisor, and nothing is booked or invoiced until they're approved.
+  - **Booked stock:** units held by orders awaiting approval aren't offered to other orders.
+  - **Editing:** a booked order can be edited until it ships; stock and balance move by the difference.
+  - **Delivery:** each order has a planned delivery date (dispatch can reschedule it up to 90 days ahead).
+    Its progress shows Ordered → (Approved) → Out for delivery → Delivered → Paid, with who did each step
+    and when.
+  - **Views:** the list has a **board** by stage and a **calendar** of planned deliveries and payments
+    owed.
+- **Delivery status** only moves forward: Pending → In Delivery → Delivered, or Returned / Damaged.
+  Returned stock goes back into its lot, and both Returned and Damaged credit the customer. A delivered order
+  can also have **some units returned**, which issues a credit note for exactly those units.
+- **Receipts & Credit Notes** lists receipts (RC-), credit notes (CN-) and debit notes (DN-).
+  - **Receipts:** recording a payment issues a receipt. A payment can be applied to a chosen invoice;
+    otherwise it settles the oldest first.
+  - **Notes:** changing the value of an order that's already invoiced issues a credit or debit note against
+    the original tax invoice, instead of rewriting it.
+  - **VAT:** each invoice keeps the VAT rate it was issued at.
+- **AR Aging** splits what each customer owes into Not yet due / 1–30 / 31–60 / 61–90 / 90+ days. Every
+  invoice gets a due date from the customer's payment terms. Its **Collections** tab lists customers with
+  overdue invoices, longest first, with:
+  - a printable, emailable **statement of account**: opening balance, every invoice, note and payment with
+    a running balance, closing balance and aging summary;
+  - **reminder letters** in three levels (friendly, firm with 7 days, final notice), each recorded on the
+    customer's history.
+- **Credit hold:** a customer whose oldest unpaid invoice is more than 60 days past due can still order, but
+  the order goes to a supervisor. The order screen says so before saving.
+- **Customers** hold the tax ID (checked with the mod-11 check digit), branch, Thai and English address,
+  credit limit, payment terms and license. The customer page shows open items, payments, the statement and
+  the full history. The outstanding balance moves only through orders, returns and payments; nobody can
+  type it in.
+
+### Purchasing and import
+
+- **Purchase Requests:** purchasing or warehouse staff ask for stock, from Stock Alerts in one click. A
+  supervisor other than the requester approves or rejects, in the Approvals queue. Purchasing then opens an
+  import order pre-filled from the request.
+- **Import Orders** have four intake methods: manual, plus API, Excel and email, which are simulated.
+  - **Calculation:** duty, excise and VAT are calculated automatically, and licenses are checked (expiry,
+    ETA, Type 5 cap).
+  - **Workflow:** Staging → Approved → Customs cleared (with the declaration number) → Received into a
+    chosen warehouse. Orders over ฿500,000 need **two different supervisors**.
+  - **Corrections:** lines can be corrected in Staging, flagged or rejected, and correcting a rejected
+    order resubmits it.
+  - **Documents:** supplier invoice, packing list, bill of lading and import license (PDF or image) are
+    attached to the order.
+- **Landed cost:** receiving a shipment gives each lot its cost per unit. That is the supplier price at the
+  order's exchange rate, plus import duty, excise, and a share of freight, insurance and clearing (entered at
+  receipt). Each sale line records the cost of the lot it came from, so margins use what the goods really
+  cost.
+- **Supplier Invoices & Payments** (accounts payable):
+  - **Invoices:** recorded once goods are received, billed for what arrived, and due on the supplier's
+    payment terms.
+  - **Payments:** in part or in full, at the day's rate; the difference from the booked rate is booked as
+    an exchange gain or loss.
+  - **Overview:** payables aging and shipments still waiting for a bill are on the same page.
+- **Exchange Rates** keep the baht rate for each currency, with history. An import order is priced in the
+  supplier's currency and fixed at the rate of the day it's placed.
+- **Suppliers** fill in country, Incoterms, currency, payment terms and manufacturer registration on new
+  orders. **Licenses** have a validity timeline with Renew on each row; renewing updates every customer
+  holding the license.
+
+### Inventory
+
+- **Stock Levels** by lot, with age and warehouse, and a **QR label** for any lot. Product stock is
+  always the sum of its lots.
+- **Stock Movements** is the stock ledger: every receipt, sale, return and adjustment, per lot. Each
+  lot's movements add up to its quantity on hand, and Lot Trace checks this.
+- **Stock Counts:** start a count for a warehouse, which records what every lot should hold at that moment.
+  Print a blind count sheet, enter or scan what was counted, then post. Every lot that differs is adjusted
+  in one go and the value goes to inventory adjustments in the books. Sales made during the count aren't
+  mistaken for losses.
+- **Stock Alerts** compares stock plus approved inbound orders against each **Reorder Policy**, and opens
+  a pre-filled import order or purchase request.
+- **Lot Trace** follows a lot back to its import order, supplier and customs declaration, and forward to
+  every customer who received it, with an exportable recall list.
+- **Warehouses** are chosen when receiving. One that still holds stock can't be deactivated.
+
+### Tax
+
+- **Tax & Duty Rates** drive import duty (by HS Code prefix), excise and VAT. Each order keeps the tax
+  calculated at the time, so a rate change affects only new or corrected orders.
+- **VAT Return (ภ.พ.30):** output tax from the month's tax invoices, credit notes and debit notes, input tax
+  from import VAT and expense tax invoices, and the net amount payable or carried forward. The output and
+  input tax reports can be exported.
+- **Withholding Tax:** what was withheld each month, split by form (ภ.ง.ด.53 for companies, ภ.ง.ด.3 for
+  individuals), what has been remitted, and what is due by the 7th. It exports the form attachments, and
+  **Remit** records the payment to the Revenue Department.
+- **Company Profile:** the seller's name, address, tax ID and branch printed on every document, the bank
+  account and PromptPay ID, the logo, the authorised signature and stamp, and the date the books start, with
+  the cash in the bank that day.
+
+### Accounting
+
+- **Journal entries are generated from the records**: invoices, credit and debit notes, receipts, stock
+  movements (cost of sales, returns, adjustments), goods receipts, supplier invoices and payments, and
+  expenses. That way the books can't disagree with the operational screens.
+- **Live reconciliation checks** on the overview: debits equal credits, the inventory account equals stock
+  × landed cost, receivables equal what customers owe, and payables equal unpaid supplier invoices.
+- **Expenses** (rent, delivery, fees, utilities…) are paid from the bank to an expense account.
+  - **Tax:** VAT from the payee's tax invoice is reclaimable, and **withholding tax** (1/2/3/5%) can be
+    kept back.
+  - **Documents:** each expense prints a **payment voucher** (ใบสำคัญจ่าย), and one with tax withheld also
+    prints a **withholding certificate** (50 ทวิ) for the payee.
+- **Manual Journals** cover what no record does: accruals, owner's capital, corrections, bank charges.
+  Entries must balance and can't touch the accounts the records drive (receivables, inventory, VAT,
+  payables), so the checks keep holding. A wrong entry is reversed, never edited.
+- **Bank Reconciliation** imports the bank's statement as CSV.
+  - **Formats:** `date, description, amount, reference`, or withdrawal and deposit columns. Thai
+    Buddhist-year dates and Thai Windows (TIS-620) encoding are understood.
+  - **Matching:** lines already imported are skipped. The rest match automatically to book entries with the
+    same amount within 5 days.
+  - **Differences:** what's left shows on both sides. A line on the statement but not in the books can be
+    recorded as a journal and matched in one step.
+- **Month-end Close:** once a month is closed, nothing (expense, journal, supplier invoice) can be dated
+  into it. Each open month shows what's still outstanding, and the latest closed month can be reopened with
+  a reason.
+- **Opening Balances**, for going live: import from spreadsheets what customers already owe (invoice by
+  invoice, so it ages correctly), the stock already on the shelves (lot, warehouse, received date,
+  quantity, cost) and supplier bills still unpaid.
+  - **Checks:** each row goes through the same checks as everything else and posts against Opening balance
+    equity, so the books balance from day one.
+  - **Afterwards:** bills brought forward are paid like any other, and opening balances are fixed once the
+    first month is closed.
+- **Trial Balance**, **Profit & Loss** (down to net profit after operating expenses) and **Balance Sheet**.
+
+### Across the system
+
+- **Dashboard:** KPIs, a real-time status list of every order, exception lists (expiring licenses, aging
+  stock, overdue or blocked imports, at-risk customers, orders ready to pick) and recent activity.
+- **Approvals:** one queue for sales orders, import orders and purchase requests, with reject-with-reason
+  and the approver's name and time on every decision. Nobody approves what they raised.
+- **Notifications:** the bell lists what is waiting on the signed-in person, by role. That covers
+  approvals and purchase requests, late deliveries and arrivals, overdue invoices, supplier bills due,
+  expiring licenses and quotations, low stock, withholding tax to remit and unmatched bank lines.
+- **Morning summary email:** the same list, emailed each morning to whoever turns it on (see
+  [Running it](#morning-summary-email)).
+- **Calendar:** arrivals, deliveries, payments due and license expiries. Colour shows the kind of event,
+  a red outline means late, and struck-through means done.
+- **Search and shortcuts:** **Ctrl K** or **/** searches orders (by order, tax invoice or delivery note
+  number), customers (name, ID, tax ID), lots, products, suppliers, quotations, purchase requests, receipts
+  and expenses. **N** starts a new record and **?** lists the shortcuts. Names and numbers throughout the
+  app are links to their record.
+- **Lot labels and scanning:** Stock Levels, Lot Trace and a shipment's receiving card print QR labels
+  (choose how many copies).
+  - **In search,** scanning a label opens that lot.
+  - **On a stock count,** scanning a label jumps to that lot's line.
+  - **Browsers:** scanning works with the camera in any current browser, on a phone, tablet or laptop. QR
+    codes are read by the browser's own reader where it has one, and by a small built-in reader elsewhere
+    (for example Windows and iPhone).
+  - **HTTPS:** browsers allow the camera only on HTTPS or `localhost`.
+  - **Without the app:** any phone's camera app also opens a label's link directly.
+- **Reports:** net sales and gross margin, sales by SKU, channel and customer, inventory value by pipeline
+  stage and by age, and a monthly tax-and-sales reconciliation.
+- **Audit Trail:** every create, update, approval, rejection and payment, with the signed-in user and the
+  old and new values. You can search it by record, user or text, and export it. Entries that mention money
+  are hidden from roles without price access.
+- **CSV import** on Products and Customers, and for opening balances. Download a template, fill it in Excel,
+  and preview every row with its problems before importing the valid rows. Each row goes through the same
+  rules as the form.
+- **Thai / English** everywhere, switchable at any time. Every screen also works at phone width.
+
+---
+
+## Printed documents and exports
+
+Every printed document shares one layout:
+
+- **Header:** title, number and dates at the top.
+- **Parties:** seller and buyer side by side in identical boxes.
+- **Labels:** every label in Thai, with English beneath.
+- **Long documents:** column headings repeat and the title and "page n of N" appear on every page, while
+  totals print once at the end.
+
+| Document | From |
+| --- | --- |
+| Tax invoice (ใบกำกับภาษี, Revenue Code s.86/4), delivery note, picking list (grouped by warehouse) | a sales order |
+| Receipt, credit note (ใบลดหนี้), debit note (ใบเพิ่มหนี้) | Receipts & Credit Notes |
+| Quotation | Quotations |
+| Statement of account, reminder letters | AR Aging → Collections, the customer page |
+| Payment voucher (ใบสำคัญจ่าย), withholding certificate (50 ทวิ) | Expenses, supplier payments |
+| Blind stock count sheet | Stock Counts |
+| QR lot labels | Stock Levels, Lot Trace, receiving |
+
+- **Tax invoices** carry everything the Revenue Code asks for:
+  - seller and buyer name, address, 13-digit tax ID and head office or branch;
+  - invoice number and date, and every line;
+  - VAT shown separately;
+  - the amount in words in Thai and English.
+
+  Notes state the original invoice, the original and correct value, the VAT on the difference, and the
+  reason.
+- **How to pay:** invoices, statements and reminders show the bank account and a **PromptPay QR code** with
+  the amount filled in.
+- **Original and copy:** a tax invoice, receipt or credit/debit note can print the original, the copy, or
+  both together.
+- **Logo, signature and stamp:** the company **logo** goes on every document, and, when switched on, the
+  **authorised signature and stamp** go on the documents the company issues. Roles without price access
+  never receive the signature image.
+- **The withholding certificate** follows the Revenue Department's 50 ทวิ layout:
+  - tax IDs in boxes;
+  - the payee's line number on the month's ภ.ง.ด.3/53;
+  - the return-type and payment-type checkboxes;
+  - the income rows;
+  - copies 1 and 2.
+- **Email:** documents can be emailed as an A4 **PDF**, rendered on the server by Chromium with Thai fonts,
+  offline. Every sending is recorded on the record's history.
+- **Spreadsheet exports** are Excel workbooks (.xlsx):
+  - Thai and English headings, with a frozen heading row;
+  - amounts as numbers and dates as dates;
+  - IDs as text, so tax IDs keep their leading zero.
+
+---
+
+## Roles and permissions
+
+Each action is limited to the roles that do that job. The same table is enforced by the API and shown in
+the app under **Users & Access → What each role can do**.
+
+| Role | Can do |
+| --- | --- |
+| Senior Manager | product prices, customer credit terms, open customers, price lists, company profile and opening balances, exchange rates, supplier invoices and payments, expenses, journals, bank reconciliation, month-end close, users |
+| Order Officer | create and edit import orders, attach documents, products, suppliers, reorder policies, purchase requests |
+| Documentation Officer | attach documents, record customs clearance, add and renew licenses |
+| Warehouse Officer | receive goods, adjust stock, stock counts, update delivery status, warehouses, reorder policies, purchase requests |
+| Tax Officer | record customs clearance, tax and duty rates, exchange rates, expenses and withholding tax |
+| Sales Officer | quotations, create and edit sales orders, record payments, statements and reminders, open customers (credit terms start at 0) |
+| Distribution Officer | update delivery status |
+| Supervisor | everything above except managing users (they can view them) and closing months; approves and rejects orders and purchase requests |
+| Guest | look at everything, change nothing |
+
+**Who sees prices:** Senior Manager, Order Officer, Tax Officer, Sales Officer and Supervisor. For the other
+roles, and for guests, the API removes cost prices, sales values, discounts, credit figures, tax amounts and
+money in the audit trail before anything is sent.
+
+---
+
+## Business rules
+
+Every write runs through the domain rules in `src/domain/` **on the server**. The screen often prevents a
+mistake first, but the server checks again and answers with a reason (shown as a red message) instead of
+doing the wrong thing.
+
+| Rule | Where |
+| --- | --- |
+| Each action is allowed only for the roles that do that job (`ROLE_PERMISSIONS` in `src/data/identities.ts`) | everywhere |
+| The raiser can't approve their own order; imports over ฿500,000 need two *different* supervisors | approvals |
+| Approval re-checks stock and licenses at approval time, not just at entry | approvals |
+| Import validation (SKU, ABV, price, quantity, license expiry, ETA, Type 5 cap) runs on create, every correction and every ETA change | import orders |
+| Over-discount, over-credit and below-cost sales need a supervisor, including when editing a booked order | sales orders |
+| Booked orders can be edited only until they ship; stock and balance move by the difference, line by line | sales orders |
+| Units held by orders awaiting approval can't be promised to another order | sales orders |
+| Orders for a customer with an invoice more than 60 days overdue need approval (credit hold) | sales orders |
+| Delivery status only moves forward; Returned and Damaged are final | sales orders |
+| Tax ID: 13 digits with a valid check digit; branch: 5 digits; address in Thai and English | customers, company |
+| Payment terms 0–365 days; due date = invoice date + terms | customers, invoices |
+| Stock changes only through receipts, sales, returns and reasoned adjustments; lot numbers are unique | inventory |
+| One open count per warehouse; a count posts only when every lot is counted; differences are measured against the start of the count | stock counts |
+| Renewing a license updates every customer holding it | licenses |
+| An import order needs an exchange rate for its currency and keeps the rate it was placed at | import orders |
+| One supplier invoice per received shipment; payments can't exceed what's owed | payables |
+| A quotation converts once, before it expires, and only with enough free stock | quotations |
+| One open purchase request per product; the requester can't approve it; only approved requests are ordered | purchase requests |
+| Nothing is dated into a closed month; months close in order and only the latest reopens, with a reason | accounting |
+| Journals balance and never touch receivables, inventory, VAT or payables; mistakes are reversed, not edited | accounting |
+| Withholding needs the payee's valid tax ID; a month's tax is remitted once, after the month ends | expenses, tax |
+| A statement line matches one book entry of the same amount; re-imported lines are skipped | bank |
+| Opening balances can be added only by the company's set-up roles, and only until the first month is closed | opening balances |
+| Five wrong passwords or codes lock an account for 15 minutes (a Senior Manager can unlock it) | sign-in |
+
+---
+
+## Running it
+
+### Settings (`.env`)
+
+Copy `.env.example` to `.env`. `npm run dev` does this for you, with fresh random secrets.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | — | Database password. |
+| `SESSION_SECRET` | — (required) | Signs sign-in sessions; at least 32 random characters. |
+| `DEMO_MODE` | `true` | The header user switcher and **Reset demo data**. Set `false` for real use. |
+| `ALLOW_GUEST` | follows `DEMO_MODE` | **Continue as guest** on the sign-in page. Set `false` to require sign-in. |
+| `DEMO_PASSWORD` | `demo1234` | Password given to every seeded user on first start. |
+| `SECURE_COOKIES` | `false` | Set `true` when served over HTTPS. |
+| `TRUST_PROXY_HOPS` | `1` | Proxies in front of the API: nginx = 1; with the HTTPS front end, 2. |
+| `WEB_PORT` | `8080` | Port the web app is published on. |
+| `API_PORT` | `3000` | Port the API is published on, for this machine only (used by `npm run dev`). |
+| `APP_URL` | `http://localhost:8080` | Where people open the app; links in emails point here. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | local Mailpit | Outgoing email (see below). |
+| `MAIL_CATCHALL_URL` | `http://localhost:8025` | Where caught mail can be read; set it empty when sending for real. |
+| `MAIL_UI_PORT` | `8025` | Port of the Mailpit mailbox, for this machine only. |
+| `DIGEST_HOUR` | `7` | Hour (Bangkok time) the morning summary email goes out. |
+| `REQUIRE_TWO_FACTOR_ROLES` | — | Roles that must use two-step sign-in, comma-separated, e.g. `seniorManager,supervisor`. Empty = optional for everyone. |
+| `BACKUP_EVERY_HOURS` / `BACKUP_KEEP_DAYS` | `24` / `14` | Backup schedule and how long backups are kept. |
+| `DOMAIN` | — | Domain for the optional HTTPS front end. |
+
+### Email
+
+Out of the box every email goes to **Mailpit**, a catch-all mailbox in the stack. Read the mail at
+<http://localhost:8025>; nothing reaches real people. To send for real, set the `SMTP_*` variables and
+set `MAIL_CATCHALL_URL=` (empty).
+
+Documents are emailed as the page as it prints, with an A4 PDF attached. Run outside Docker without
+Chromium, the API attaches the page as `.html` instead; set `CHROMIUM_PATH` to use a local Chrome.
+
+### Morning summary email
+
+Under **My account → Morning email** anyone can enter their email address and tick **Send me the summary
+every morning**. After `DIGEST_HOUR` they get one email listing what is waiting on them: the same items as
+the bell, each linking into the app at `APP_URL`. A day with nothing waiting sends nothing.
+
+To test it:
+- **Send me one now** sends one immediately.
+- In demo mode, a Senior Manager or supervisor can run the whole morning pass at once with
+  `POST /api/admin/digest/run`. The same rules apply: one per person per day.
 
 ### Backups
 
-The `backup` service writes a database dump and an archive of uploaded documents into `./backups` when
-it starts and then every `BACKUP_EVERY_HOURS` (default 24), keeping `BACKUP_KEEP_DAYS` (default 14).
-To restore a dump into a fresh, empty database:
+The `backup` service writes a database dump (`lisd-db-YYYYMMDD-HHMM.sql.gz`) and an archive of uploaded
+documents (`lisd-uploads-….tar.gz`) into `./backups`. It does this when it starts and then every
+`BACKUP_EVERY_HOURS`, keeping `BACKUP_KEEP_DAYS` days. To restore into a fresh, empty database:
 
 ```bash
 docker compose down -v && docker compose up -d db            # empty database
@@ -49,476 +470,278 @@ gunzip -c backups/lisd-db-YYYYMMDD-HHMM.sql.gz | docker compose exec -T db psql 
 docker compose up -d                                         # start everything again
 ```
 
-Uploaded documents: `docker compose run --rm -v "$PWD/backups:/backups" api sh -c "tar -xzf /backups/lisd-uploads-….tar.gz -C /data"`.
-
-### Email
-
-Invoices, credit notes, receipts, quotations, statements, reminder letters, payment vouchers and
-withholding certificates have an **Email** button next to Print. The email body is the document as it
-prints, with an A4 **PDF** attached (rendered on the server by a headless Chromium with Thai fonts, offline —
-the document never fetches anything), and the sending is recorded on the record's history. Running the API
-outside Docker without Chromium, the page is attached as `.html` instead (set `CHROMIUM_PATH` to use a
-local Chrome).
-
-Out of the box every email goes to **Mailpit**, a catch-all mailbox in the stack — read them at
-<http://localhost:8025>; nothing reaches real people. To send for real, set `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `.env` and set `MAIL_CATCHALL_URL=` (empty).
-
-**Morning summary.** Under **My account** (the key icon in the header) anyone can give their email and tick
-**Send me the summary every morning**: after `DIGEST_HOUR` (default 07:00, Bangkok time) they get one email
-listing what's waiting on them — the same items as the header bell, each linking into the app at `APP_URL`.
-Days with nothing waiting send nothing. **Send me one now** sends it at once, to check it arrives.
-In demo mode a Senior Manager or supervisor can also run the whole morning pass at once with
-`POST /api/admin/digest/run` (same rules: once a day per person) instead of waiting for the hour.
+To restore the uploaded documents:
+`docker compose run --rm -v "$PWD/backups:/backups" api sh -c "tar -xzf /backups/lisd-uploads-….tar.gz -C /data"`.
 
 ### HTTPS on a real domain
 
-Point the domain's DNS at the server, then in `.env` set `DOMAIN=erp.example.com`,
-`SECURE_COOKIES=true` and `TRUST_PROXY_HOPS=2` (Caddy and nginx both sit in front of the API), and start
-with `docker compose --profile https up -d`. Caddy obtains and renews the
-certificate automatically and forwards to the app. Also set `APP_URL=https://erp.example.com` so links in
-emails point at it. Scanning lot labels with a phone's camera needs HTTPS (browsers only allow the camera on
-secure pages, and on `localhost`).
+1. Point the domain's DNS at the server.
+2. In `.env`, set `DOMAIN=erp.example.com`, `APP_URL=https://erp.example.com`, `SECURE_COOKIES=true` and
+   `TRUST_PROXY_HOPS=2`. The value is 2 because both Caddy and nginx sit in front of the API.
+3. Start with `docker compose --profile https up -d`.
 
-### Settings (`.env`)
+Caddy obtains and renews the certificate automatically, redirects HTTP to HTTPS, and turns on HSTS. Camera
+scanning needs HTTPS.
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `POSTGRES_PASSWORD` | — | Database password. |
-| `SESSION_SECRET` | — (required) | Signs login sessions; at least 32 random characters. |
-| `DEMO_MODE` | `true` | Enables the header user switcher and **Reset demo data**. Set `false` for real use. |
-| `ALLOW_GUEST` | follows `DEMO_MODE` | **Continue as guest** on the sign-in page: read-only, prices and credit hidden. Set `false` to require sign-in. |
-| `DEMO_PASSWORD` | `demo1234` | Password given to every seeded user on first start. |
-| `SECURE_COOKIES` | `false` | Set `true` when served over HTTPS. |
-| `WEB_PORT` | `8080` | Port the web app is published on. |
-| `API_PORT` | `3000` | Port the API is published on, for this machine only (used by `npm run dev`). |
-| `BACKUP_EVERY_HOURS` / `BACKUP_KEEP_DAYS` | `24` / `14` | Backup schedule and retention. |
-| `DOMAIN` | — | Domain for the optional HTTPS front end. |
-| `SMTP_*`, `MAIL_CATCHALL_URL` | local Mailpit | Outgoing email (see Email above). |
-| `MAIL_UI_PORT` | `8025` | Port of the Mailpit mailbox, for this machine only. |
-| `APP_URL` | `http://localhost:8080` | Where people open the app; links in emails point here. |
-| `DIGEST_HOUR` | `7` | Hour (Bangkok time) the morning summary email goes out. |
-| `REQUIRE_TWO_FACTOR_ROLES` | — | Roles that must use two-step sign-in, comma-separated, e.g. `seniorManager,supervisor`. Empty = optional for everyone. |
+### Before real use
 
-### Users and access
+- Set `DEMO_MODE=false`. That removes the user switcher, **Reset demo data** and the public user list, and
+  the sign-in page then asks for a username.
+- Change every password, and use real secrets in `.env`.
+- Set up real email and HTTPS.
+- Consider `REQUIRE_TWO_FACTOR_ROLES`.
+- Have an accountant check the tax settings and documents (see [Known limitations](#known-limitations)).
 
-**In the app:** sidebar → **Users & Access** (bottom). Senior Managers add users, change roles and names,
-set temporary passwords, and disable or re-enable accounts. Supervisors see the list read-only; other
-roles don't see the page (the API refuses them too). The page also shows **what each role can do** — the
-same permission table the server enforces.
+---
 
-- New users and password resets get a **temporary password** (generated, copyable); the person must choose
-  their own at their next sign-in before anything else works.
-- Everyone can **change their own password** from the key icon in the header. Changing or resetting a
-  password signs that account out on every other device.
+## Users, passwords and two-step sign-in
+
+**In the app:** sidebar → **Users & Access**.
+
+- **Managing users:** Senior Managers add users, change roles and names, set temporary passwords, unlock
+  accounts, reset two-step sign-in, and disable or re-enable accounts.
+- **Other roles:** supervisors see the list read-only. Other roles don't see the page, and the API refuses
+  them too.
+
+**Temporary passwords**
+- New users and password resets get a **temporary password**, generated and copyable.
+- The person must choose their own at their next sign-in before anything else works.
+
+**Changing your password**
+- Anyone can **change their own password** under **My account**, the key icon in the header.
+- Changing or resetting a password signs that account out on every other device.
+
+**Disabling accounts**
 - Accounts are **disabled, never deleted**, so the audit trail keeps every name. Disabling signs the person
-  out at once. You can't disable yourself or change your own role, and there is always at least one active
-  Senior Manager.
-- **Two-step sign-in:** under **My account → Two-step sign-in**, scan the QR code with an authenticator app
-  (Google Authenticator, Microsoft Authenticator, 1Password…) and type the code it shows. From then on,
-  signing in asks for the app's 6-digit code after the password. Each code works once; wrong codes count
-  towards the same lockout as wrong passwords. Turning it off needs the password. A Senior Manager can
-  **reset** it for someone who lost their phone (it signs them out). Roles listed in
-  `REQUIRE_TWO_FACTOR_ROLES` must set it up at their next sign-in, the way a temporary password works, and
-  can't turn it off. (In demo mode the header user switcher skips sign-in altogether, as it always has.)
-- Every change is recorded in the **Audit Trail** (record type "User"); passwords never are.
+  out at once.
+- You can't disable yourself or change your own role, and there is always at least one active Senior
+  Manager.
 
-**From the terminal** (e.g. to create the first account, or if nobody can sign in):
+**Two-step sign-in**
+- **Setting it up:** **My account → Two-step sign-in**, scan the QR code with an authenticator app (Google
+  Authenticator, Microsoft Authenticator, 1Password…) and type the code it shows. From then on, signing in
+  asks for the app's 6-digit code after the password.
+- **Codes:** each code works once, and wrong codes count towards the same lockout as wrong passwords.
+- **Turning it off** needs the password.
+- **Lost phone:** a Senior Manager can **reset** it for someone who lost their phone, which signs them out.
+- **Required roles:** roles listed in `REQUIRE_TWO_FACTOR_ROLES` must set it up at their next sign-in and
+  can't turn it off.
+- **Demo mode:** the header user switcher bypasses sign-in entirely, which is why `DEMO_MODE=false` is
+  needed for real use.
+
+**Audit trail:** every change is recorded (record type "User"); passwords never are.
+
+**From the terminal**, for example to create the first account, or if nobody can sign in:
 
 ```bash
 npm run add-user                        # asks for username, role, Thai and English name, and password
 npm run add-user -- --key nok --reset   # change an existing user's role, name or password
 ```
 
+---
+
 ## Architecture
 
 ```
 browser ──► web (nginx: built React app, proxies /api) ──► api (Node 22, Fastify) ──► db (PostgreSQL 16)
-                                                              │
-                                                              └─ uploads volume (attached documents)
+                                                              ├─ uploads volume (attached documents)
+                                                              ├─ Chromium (documents → PDF)
+                                                              └─ SMTP ──► mail (Mailpit, by default)
+backup (pg_dump + uploads archive → ./backups)        https (Caddy, optional profile) ──► web
 ```
 
-- **One copy of the business rules.** Every rule lives in `src/domain/` — approvals, stock and ledger
-  moves, credit/debit notes, validation, permissions — and the API runs it. The web app only displays
-  data and sends commands, so nothing can be bypassed from the browser.
-- **Commands.** Every write is `POST /api/commands/<name>` with `{ "args": [...] }`. The API checks the
-  input shape (zod), loads the data, runs the domain action, and saves the rows that changed, all in one
-  transaction that holds a database lock, so concurrent users can't oversell a lot or reuse an invoice
-  number. The response carries the new state, so the screen always matches the database.
-- **Server-side masking (NFR-03).** Roles without price access never receive cost prices, sales values,
-  discounts, credit figures, tax amounts, or money in the audit trail — the API zeroes them before
-  sending.
-- **Sign-in.** Users and scrypt password hashes are in the `users` table; sessions are signed httpOnly
-  cookies (12 hours). Outside demo mode nobody gets a list of usernames: the sign-in page asks for one.
-  Five wrong passwords lock an account (a made-up username "locks" the same way, so the answer reveals
-  nothing), and each address is limited to 100 failed sign-ins per 15 minutes — counted on the address
-  our own proxy saw (`TRUST_PROXY_HOPS`), not on a header a client could write.
-- **Hardening.** The app is served with a content security policy, no framing, and no MIME sniffing.
-  Uploaded documents must really be the PDF or image they claim to be. The supplier's invoice attached to
-  an import order is a price document: only roles with price access or that handle import paperwork
-  receive or download it. Emailed documents are rendered to PDF offline, with scripts off.
-- **Documents.** Uploaded PDFs/images (10 MB max) are stored on the `uploads` volume and served only to
-  signed-in users.
-- **Schema** — `server/sql/001_init.sql` onwards (`010_company_payment_branding.sql` is the latest). New migrations are
-  added as the next number; they run once, in order, at API start.
+- **Stack.** React 19, React Router, Tailwind CSS and Vite on the web side. Fastify 5, zod, postgres.js,
+  nodemailer and Playwright-driven Chromium on the API side. TypeScript throughout.
+- **One copy of the business rules.** Every rule lives in `src/domain/`: approvals, stock and ledger moves,
+  credit and debit notes, validation, permissions. The API runs that code. The web app only displays data
+  and sends commands, so nothing can be bypassed from the browser.
+- **Commands.** Every write is `POST /api/commands/<name>` with `{ "args": [...] }`. The API:
+  1. checks the input's shape (zod);
+  2. loads the data and runs the domain action;
+  3. saves only the rows that changed, in one transaction that holds a database lock.
+
+  The lock means two people can't oversell a lot or reuse an invoice number. The reply carries the new
+  state, so the screen always matches the database. There are 61 commands; see `server/src/commands.ts`.
+- **Books on demand.** The journal and trial balance are derived from the records (`src/domain/ledger.ts`)
+  each time they're asked for, so there is no second copy that could drift.
+- **Masking on the server.** Roles without price access never receive the hidden figures at all
+  (`server/src/mask.ts`).
+- **Sign-in.**
+  - **Accounts:** users and scrypt password hashes are in the `users` table, and sessions are signed
+    httpOnly cookies lasting 12 hours.
+  - **Lockout:** five wrong passwords lock an account for 15 minutes. A made-up username "locks" the same
+    way, so the answer doesn't reveal which usernames exist.
+  - **Rate limit:** each address is limited to 100 failed sign-ins per 15 minutes. The count uses the
+    address the app's own proxy saw, not a header a client could write.
+  - **Two-step sign-in:** this uses standard TOTP (RFC 6238). The short-lived ticket between the password
+    and the code is signed separately from sessions, so it can never stand in for one.
+- **Hardening.**
+  - **Headers:** content security policy, no framing, no MIME sniffing, and the camera allowed for the app
+    itself only.
+  - **Uploads** must really be the PDF or image they claim to be (10 MB maximum). They are stored on the
+    `uploads` volume and served only to signed-in users.
+  - **Supplier invoices** attached to import orders go only to roles with price access or that handle
+    import paperwork.
+  - **PDF rendering** happens offline, with scripts off.
+- **Schema.** Migrations are in `server/sql/` (`001_init.sql` to `011_opening_2fa_digest.sql`). They run
+  once each, in order, when the API starts; a new one is added as the next number.
+
+### API
 
 | Endpoint | |
 | --- | --- |
-| `POST /api/auth/login`, `/logout`, `GET /api/auth/me` | Sign in / out, current user |
+| `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` | Sign in and out; the current user |
+| `POST /api/auth/2fa/verify` | Second step of sign-in: the ticket from the password step plus the code |
+| `POST /api/auth/2fa/setup`, `/enable`, `/disable` | Set up, turn on and turn off your own two-step sign-in |
+| `POST /api/auth/password` | Change your own password |
 | `POST /api/auth/guest`, `GET /api/auth/options` | Continue as guest (when allowed); what the sign-in page may offer |
-| `POST /api/auth/switch` | Demo mode only: act as another user (not available to guests) |
-| `GET /api/state` | All current data, masked for the caller's role — except the stock ledger and audit log (below) |
-| `GET /api/audit`, `GET /api/stock-movements` | The audit log and stock ledger, filtered and a page at a time (`offset`, `limit`, filters) |
-| `GET /api/stock-movements/monthly` | Units in/out per month |
-| `GET /api/accounting/journal`, `/trial-balance` | The books, derived on the server (roles with price access only) |
-| `POST /api/commands/:name` | Any write (58 commands — see `server/src/commands.ts`) |
-| `POST /api/import-orders/:orderNo/documents` | Upload a document (multipart `kind`, `file`) |
-| `GET /api/files/:id` | Download a document |
-| `POST /api/admin/reset` | Demo mode only: reload the demo data |
+| `GET /api/users` | Demo mode only: the sign-in list |
+| `POST /api/auth/switch` | Demo mode only: act as another user |
+| `GET /api/state` | All current data, masked for the caller's role (except the stock ledger and audit log) |
+| `GET /api/audit`, `GET /api/stock-movements` | The audit log and stock ledger, filtered and a page at a time |
+| `GET /api/stock-movements/monthly` | Units in and out per month |
+| `GET /api/accounting/journal`, `GET /api/accounting/trial-balance` | The books (roles with price access) |
+| `POST /api/commands/:name` | Any business write (61 commands) |
+| `POST /api/import-orders/:orderNo/documents`, `GET /api/files/:id` | Upload (multipart `kind`, `file`) and download documents |
 | `POST /api/email`, `GET /api/email/status` | Email a document (roles with price access); whether email is set up |
+| `GET` / `POST /api/me/summary`, `POST /api/me/summary/send` | Your morning-email settings; send one now |
+| `GET /api/admin/users`, `POST /api/admin/users`, `PATCH /api/admin/users/:key` | List, add and change users |
+| `POST /api/admin/users/:key/password`, `POST /api/admin/users/:key/2fa/reset` | Temporary password; reset two-step sign-in |
+| `POST /api/admin/reset`, `POST /api/admin/digest/run` | Demo mode only: reload the demo data; run the morning email now |
 | `GET /api/health` | Health check |
 
-## Develop the web app with hot reload
+### Where things are
+
+| Path | What |
+| --- | --- |
+| `src/domain/` | Business rules (`actions.ts`), books (`ledger.ts`), finance helpers, notifications (`notices.ts`) |
+| `src/pages/`, `src/components/` | Screens and shared UI (the document kit is `TaxDocument.tsx`) |
+| `src/data/` | Types, roles and permissions, demo data |
+| `src/i18n/translations.ts` | Every Thai and English text |
+| `server/src/` | The API: routes, commands, sign-in, masking, email, PDF, morning email, two-step codes |
+| `server/sql/` | Database migrations |
+| `docker/` | nginx, security headers, Caddy, backup script |
+| `scripts/` | `npm run dev`, `npm run add-user` |
+| `tests/` | API and browser test suites |
+
+---
+
+## Development
+
+### Web app with hot reload
 
 ```bash
 npm install        # once
 npm run dev        # http://localhost:5173
 ```
 
-`npm run dev` gets everything it needs first: it creates `.env` with random secrets if there isn't one,
-starts Docker Desktop if it's closed (Windows/macOS), starts the database and API in Docker (rebuilding
-the API only when its code changed) and waits until they're healthy, then runs Vite. If the API is already
-up it goes straight to Vite. Ctrl+C stops Vite; the containers keep running — `npm run stop` stops them.
-`npm run dev:web` runs Vite alone.
+`npm run dev` gets everything it needs first:
+- creates `.env` with random secrets if there isn't one;
+- starts Docker Desktop if it's closed (Windows and macOS);
+- starts the database and API in Docker, rebuilding the API only when its code changed, and waits until
+  they're healthy;
+- then runs Vite. If the API is already up, it goes straight to Vite.
 
-The API is published on `127.0.0.1:3000` (this machine only) for this. If port 3000 is taken, set
+**Ctrl+C** stops Vite, but the containers keep running; `npm run stop` stops them. `npm run dev:web` runs
+Vite alone. The API is published on `127.0.0.1:3000`, this machine only; if port 3000 is taken, set
 `API_PORT` in `.env`.
 
-## Develop without Docker
+### Without Docker
 
 ```bash
-docker compose up -d db                     # or any PostgreSQL 16; expose it with the commented ports in docker-compose.yml
+docker compose up -d db                     # or any PostgreSQL 16 (expose it with the commented ports in docker-compose.yml)
 cd server && npm install && npm run dev     # API on :3000 (DATABASE_URL defaults to localhost:5433)
 npm install && npm run dev:web              # web on :5173, proxies /api to :3000
 ```
 
+### Checks
+
+```bash
+npm run lint                     # oxlint
+npm run build                    # typecheck and build the web app
+cd server && npm run typecheck   # typecheck the API
+```
+
+---
+
 ## Tests
 
 ```bash
-npm test                  # builds and starts the stack, then runs every suite (~10 minutes)
-npm run test:api          # API only (~1 minute)
+npm test                  # builds and starts the stack, then runs every suite (about 20 minutes)
+npm run test:api          # API suite only (about a minute)
 npm run test:e2e          # browser suites only
+npm test -- workflows     # one suite: api | workflows | guest | crawl | required2fa
 ```
 
+**The suites reset the demo data**, and remove the test accounts they create when they finish. The browser
+suites use an installed Chrome or Edge (set `CHROME_PATH` if it's somewhere unusual), and screenshots go to
+`tests/output/`.
+
+| Suite | Checks |
+| --- | --- |
+| `tests/api.test.mjs` | ~345 checks: permissions, validation, masking, concurrency, sales and import workflows, costing, payables, expenses and withholding, journals, month-end close, bank reconciliation, quotations, purchase requests, opening balances, two-step sign-in, the morning email, paging, and the accounting invariants (the books agree with stock, receivables, payables and tax withheld) |
+| `tests/e2e/workflows.mjs` | ~200 checks: the main workflows through the real UI, including printing, emailing, search, shortcuts, copy order, lot labels and **camera scanning** (with a simulated camera showing the real label) |
+| `tests/e2e/guest.mjs` | the read-only guest experience |
+| `tests/e2e/required-2fa.mjs` | restarts the API with two-step sign-in required for one role, checks the forced set-up, then restarts it as it was |
+| `tests/e2e/crawl.mjs` | every page as five roles, in both languages, at desktop and phone widths; fails on console errors, missing translations or a page that scrolls sideways |
+
 **CI** (`.github/workflows/ci.yml`): every push and pull request typechecks, lints and builds, then runs the
-API suite against the real Docker stack; the browser suites run nightly and on demand.
+API suite against the real Docker stack. The browser suites run nightly and on demand.
 
-**The suites reset the demo data.** The browser suites use an installed Chrome or Edge (set `CHROME_PATH`
-if it's somewhere unusual); screenshots go to `tests/output/`.
+---
 
-- `tests/api.test.mjs` — permissions, validation, masking, concurrency, sales/import workflows, costing,
-  payables, expenses and withholding, journals, month-end close, bank reconciliation, quotations, purchase
-  requests, opening balances, two-step sign-in, the morning summary email, paging, and the accounting
-  invariants (the books reconcile with stock, receivables, payables and tax withheld).
-- `tests/e2e/workflows.mjs` — the main workflows through the real UI, in a browser.
-- `tests/e2e/guest.mjs` — the read-only guest experience.
-- `tests/e2e/required-2fa.mjs` — restarts the API with two-step sign-in required for one role, checks the
-  forced set-up, then restarts it as it was.
-- `tests/e2e/crawl.mjs` — opens every page as five roles in both languages, at desktop and phone widths,
-  and fails on console errors, missing translations, or a page that scrolls sideways.
+## About the demo data
 
-## Modules
+The demo data comes from the source spreadsheet wherever it had the data. Where it didn't, values were
+reconstructed or invented, as noted here.
 
-The sidebar is organised like an ERP: each module splits into day-to-day **transactions**, the
-**master data** they run on, and read-only **reports**. Only modules a liquor importer/distributor actually
-needs are included — no manufacturing, service, or payroll.
+- **Order lines.** The 8 original import orders only had totals (SKU count, total value). Their lines were
+  reconstructed to match each order's original total.
+  - **Cost price:** the spreadsheet's cost price only makes sense as an all-in landed cost; with duty on
+    top, sales would run at a loss.
+  - **Supplier price:** each line's supplier price is therefore its share of the product's expected
+    supplier price, in the supplier's currency at the rate on the order date. The expected supplier price is
+    (cost − excise) ÷ (1 + duty).
+- **Licenses.** The two original import licenses (both expired) were kept as they are, rather than
+  adding a fake valid one.
+- **Customer balances.** The spreadsheet gives each customer's outstanding balance but only a few of the
+  invoices behind it. The rest is carried as brought-forward documents (OB-…), dated relative to the reset
+  so the aging report always shows a realistic mix.
+- **Stock.** The spreadsheet's stock figures hadn't deducted the sales already taken from each lot, and two
+  SKUs (Casa Roble Reposado, Riverside Craft Lager: 860 units) had stock but no lot.
+  - **Derivation:** product stock is now the sum of the lots, which is what can actually be picked and
+    traced.
+  - **Opening lots:** those two SKUs carry an opening lot (`LOT-OPEN-…`, received 2026-05-01, an assumed
+    date).
+  - **Ledger:** the stock ledger is rebuilt from the seed lots and sales, so every lot's movements add up.
+- **Dashboard KPIs** are computed live from the data, so the Dashboard never contradicts the module pages.
+  - **Lead time:** planned import lead time runs from order date to ETA, since actual arrival dates aren't
+    recorded.
+  - **Inventory value:** stock at cost plus approved orders in transit.
+  - **On-time delivery:** computed from orders delivered in the last 90 days against their planned
+    delivery date. With no such orders, it shows the spreadsheet's figure, labelled **Sample figure**.
+- **Invented for the demo:** warehouse addresses and capacities, reorder points, supplier contact emails
+  (on the `.example` domain), delivery note numbers (the spreadsheet only had tax invoice numbers),
+  product label history for 4 of the 12 SKUs, and the last three months of expenses and bank statement.
+- **Derived from what the app used before:** suppliers come from the original import orders, and tax
+  rates and price lists from the rates the app already used.
 
-| Module | Transactions | Master data | Reports |
-| --- | --- | --- | --- |
-| **Sales** | Quotations · Sales Orders · Receipts & Credit Notes · AR Aging | Customers · Price Lists | |
-| **Purchasing & Import** | Purchase Requests · Import Orders · Goods Receipts · Supplier Invoices & Payments | Suppliers · Licenses · Exchange Rates | |
-| **Inventory** | Stock Levels (by lot) · Stock Movements · Stock Counts · Stock Alerts · Lot Trace | Products · Warehouses · Reorder Policies | |
-| **Tax** | | Tax & Duty Rates · Company Profile | VAT Return (ภ.พ.30) · Withholding Tax (ภ.ง.ด.3/53) |
-| **Accounting** | Expenses · Manual Journals · Bank Reconciliation · Month-end Close · Opening Balances · Journal | | Trial Balance · Profit & Loss · Balance Sheet |
-
-Dashboard, Approvals, Calendar, Reports, Audit Trail, and Users & Access sit across all modules. The
-header bell lists what needs the signed-in person's attention (approvals and purchase requests waiting,
-late deliveries and arrivals, overdue invoices, supplier bills due, expiring licenses and quotations, low
-stock, withholding tax to remit, unmatched bank lines), by role.
-
-**Getting around.** **Search** (the box in the header, or **Ctrl K** / **/** anywhere) finds orders by
-number, tax invoice or delivery note, customers by name, ID or tax ID, lots, products, suppliers, quotations,
-purchase requests, receipts and expenses — arrow keys and Enter open one. **N** starts a new record on a list
-page and **?** lists the shortcuts. On an order, **Copy order** starts a new one for the same customer with the
-same products, quantities, prices and discounts (lots are picked again, oldest free stock first).
-
-**Lot labels and scanning.** Stock Levels, Lot Trace and a shipment's receiving card print **QR labels** for
-lots (choose how many copies). Scanning one with the scan button in Search opens that lot's trace, and on a
-**stock count** the scan button jumps to that lot's line. Scanning works with the camera in any current
-browser — phone, tablet or laptop; QR codes are read by the browser's own reader where it has one and by a
-small built-in reader elsewhere (Windows, iPhone). Browsers only allow the camera on HTTPS (or `localhost`).
-Any phone camera app also opens the label's link directly.
-
-**Going live: opening balances** (Accounting → Opening Balances). Import from spreadsheets what customers
-already owe (invoice by invoice, so it ages properly), the stock already on the shelves (lot, warehouse,
-received date, quantity and cost) and supplier bills still unpaid. Each row goes through the same checks as
-everything else and posts against Opening balance equity, so the books balance from day one; supplier bills
-brought forward are then paid like any other. Once the first month is closed they are fixed.
-
-How they connect:
-
-- **Price Lists** set each channel's price (a % on the suggested price, or a fixed price per SKU); new
-  sales orders pick it up automatically.
-- **Suppliers** fill in country, Incoterms, currency, payment terms, and manufacturer registration on new
-  import orders. Inactive suppliers can't be ordered from.
-- **Tax & Duty Rates** drive import duty (by HS Code prefix), excise, and VAT. Each order keeps the tax
-  calculated at the time, so a rate change only affects new or corrected orders.
-- **Warehouses** are chosen when receiving goods; one that still holds stock can't be deactivated.
-- **Stock Movements** is the stock ledger: every receipt, sale, return, and adjustment per lot. Each
-  lot's movements add up to its quantity on hand, and Lot Trace checks this.
-- **Stock Alerts** compares stock plus approved inbound orders against each **Reorder Policy**, and
-  links straight to a pre-filled import order for the preferred supplier.
-- **Lot Trace** follows a lot back to its import order, supplier, and customs declaration, and forward to
-  every customer who received it, with an exportable recall list.
-- **Receipts & Credit Notes** lists receipts (RC-), credit notes (CN-) and debit notes (DN-). Recording a
-  payment issues a receipt; marking an order Returned or Damaged issues a credit note; changing the value
-  of an already-invoiced order issues a credit or debit note against the original tax invoice rather than
-  rewriting it. Each invoice keeps the VAT rate it was issued at, so a later rate change never alters it.
-- **Collections** (on AR Aging): customers with overdue invoices, longest first, with the last reminder
-  sent. Each has a printable/emailable **statement of account** (opening balance, every invoice, note and
-  payment in the period with a running balance, closing balance = what they owe, and an aging summary) and
-  **reminder letters** in three levels (friendly, firm with 7 days, final notice), each recorded on the
-  customer's history. The statement is also on the customer page.
-- **Credit hold:** a customer whose oldest unpaid invoice is more than 60 days past due can still order,
-  but the order goes to a supervisor (the new-order screen says so before saving).
-- **Stock Counts:** start a count for a warehouse (it records what every lot should hold at that moment),
-  print a blind count sheet, enter what was counted, and post — every lot that differs is adjusted in one
-  go, the value goes to Inventory adjustments in the books, and sales made during the count aren't
-  mistaken for losses.
-- **AR Aging** splits what each customer owes into Not yet due / 1–30 / 31–60 / 61–90 / 90+ days past
-  due. Every invoice gets a due date from the customer's payment terms (Net N days) when it is issued;
-  payments settle the oldest-due items first, so each customer's open items always add up to their
-  outstanding balance. The customer page shows the same open items.
-- **Printed documents** share one layout: title and number/dates at the top, seller and buyer side by side in
-  identical boxes, every label in Thai with English beneath. Invoices, statements and reminder letters show
-  **how to pay** — the bank account and a **PromptPay QR code** with the amount filled in. Long documents
-  repeat their column headings and carry the document's title and "page n of N" on every page; totals
-  print once at the end. A tax invoice, receipt or credit/debit note can print **original and copy
-  together**. The company's **logo** goes on every document and, when switched on, its **authorised
-  signature and stamp** on the documents it issues (roles without price access never receive the
-  signature image). The **withholding certificate** follows the Revenue Department's 50 ทวิ layout: tax
-  IDs in boxes, the payee's line number on the month's ภ.ง.ด.3/53, the return-type and payment-type
-  checkboxes, the income rows, and copies 1 and 2.
-- **Spreadsheet exports** are Excel workbooks (.xlsx): Thai-and-English headings, amounts as numbers with
-  separators, dates as dates, IDs as text (tax IDs keep their leading zero), frozen heading row.
-- **Company Profile** holds the seller's name, address, tax ID, and branch printed on every tax document,
-  the bank account and PromptPay ID, the logo, signature and stamp,
-  and the **opening balances**: the day the books start and the cash in the bank that day (fixed once a
-  month has been closed).
-- **Exchange Rates** keep baht-per-unit for each currency with history. An import order is priced in its
-  supplier's currency and fixed at the rate on the day it's placed; its value is shown in both.
-- **Landed cost.** Receiving a shipment gives each lot its cost per unit: supplier price at the order's
-  rate + import duty + excise + a share of freight/insurance/clearing (entered at receipt). Each sale
-  line records the cost of the lot it came from, so margins use what the goods actually cost. A product's
-  *cost price* is its reference all-in landed cost; the expected supplier price is derived from it
-  ((cost − excise) ÷ (1 + duty)), and import lines are checked against that.
-- **Supplier Invoices & Payments** (accounts payable): record the supplier's invoice once goods are
-  received (billed for what arrived, due on the supplier's payment days), then pay it, in part or in full,
-  at the day's rate. The difference from the booked rate is an exchange gain or loss. Payables aging and
-  shipments still waiting for a bill are on the same page.
-- **Accounting.** Journal entries are generated from the records — invoices, credit/debit notes, receipts,
-  stock movements (cost of sales, returns, adjustments), goods receipts, supplier invoices and payments,
-  expenses — so the books can't disagree with the operational screens. The overview shows reconciliation
-  checks live: debits = credits, inventory account = stock × landed cost, receivables = what customers
-  owe, payables = unpaid supplier invoices. Opening balances (cash, receivables, stock) post to Opening
-  balance equity.
-- **Expenses**: rent, delivery, fees, utilities… paid from the bank, each to an expense account, with VAT
-  from the payee's tax invoice (reclaimable) and **withholding tax** (1/2/3/5%) kept back. Each prints a
-  **payment voucher** (ใบสำคัญจ่าย), and one with tax withheld a **withholding certificate** (50 ทวิ) for
-  the payee. Supplier payments print a voucher too. The P&L now runs down to net profit after operating
-  expenses.
-- **Withholding Tax**: what was withheld each month, split by form (ภ.ง.ด.53 companies, ภ.ง.ด.3
-  individuals), what's been remitted, and what's due by the 7th; exports the form attachments; **Remit**
-  records the payment to the Revenue Department.
-- **Manual Journals**: for what no record covers — accruals, owner's capital, corrections, bank charges.
-  Entries must balance and can't touch the accounts the records drive (receivables, inventory, VAT,
-  payables), so the reconciliation checks keep holding. A wrong entry is reversed, never edited.
-- **Month-end Close**: close a month once its returns are filed; nothing (expense, journal, supplier
-  invoice) can then be dated into it. Each open month shows what's still outstanding (unmatched bank
-  lines, withholding not remitted, goods awaiting a bill). The latest closed month can be reopened with a
-  reason.
-- **Bank Reconciliation**: import the bank's statement CSV (`date, description, amount, reference`, or
-  withdrawal/deposit columns; Thai Buddhist-year dates are understood). Lines already imported are
-  skipped; the rest are matched automatically to book entries with the same amount within 5 days. What's
-  left shows on both sides — on the statement but not in the books (record it as a journal, matched in one
-  step), and in the books but not on the statement.
-- **Quotations** (ใบเสนอราคา): priced like a sales order, printable, valid until a date; don't hold stock.
-  Accepted, they become a sales order at the quoted prices with lots picked oldest first — the usual
-  license, credit and discount checks still apply. Expired and declined ones stay on record; the win rate
-  is shown.
-- **Purchase Requests**: anyone in purchasing or the warehouse asks for stock (from Stock Alerts in one
-  click); a supervisor other than the requester approves or rejects; purchasing opens a pre-filled import
-  order from the request, which is then marked ordered.
-- **VAT Return** (ภ.พ.30): output tax from the month's tax invoices, credit and debit notes; input tax from
-  import VAT and expense tax invoices; the net payable or carried forward; plus the output and input tax
-  reports, exportable.
-- **Partial returns:** a delivered order can have some units sent back — they go back into their lot and a
-  credit note is issued for exactly those units. **Payments** can be applied to a chosen invoice (otherwise
-  oldest first). Units held by orders **waiting for approval** count as unavailable to other orders.
-- **CSV import** on Products and Customers: download a template, fill it in Excel, preview every row with
-  its problems, import the valid ones (each through the same rules as the form).
-- **Audit trail** entries that mention prices, credit, discounts, or payments are hidden from roles without
-  price access, the same rule as on-screen masking.
-
-## What's here
-
-- **Views that fit the data** — tables stay the default where people compare and filter (Customers,
-  with a credit-usage bar in the table; Audit Trail). Sales and Import Orders also have a **board** by
-  stage (finished orders: last 30 days only; the rest stay in the table) and a **calendar** of what's
-  ahead: planned deliveries and invoices still owed, or ETAs. Licenses default to a **validity timeline**
-  with Renew on each row. The **Calendar** page shows arrivals, deliveries, payments due and license
-  expiries; colour means the kind of event, a red outline means late, struck through means done, and each
-  kind keeps its own "late" and "coming up" counts. The Dashboard shows recent activity as a feed.
-- **Order progress** — sales orders show Ordered → (Approved) → Out for delivery → Delivered → Paid;
-  import orders Raised → Approved → Customs cleared → Received. Each step has the time and person, the
-  Delivered step shows the planned delivery date and Received the ETA (red when missed), and the Paid step
-  comes from receivables (shown only with price access). Status changes and rescheduling are on the same
-  card. Orders keep a real status history, and each sales order has a planned delivery date that dispatch
-  can reschedule (up to 90 days ahead).
-- **Dashboard** — KPIs, a real-time status list of every order, and exception lists (expiring licenses,
-  aging stock, overdue or blocked import orders, at-risk customers, orders ready to pick).
-- **Master data** — Products, Licenses, Customers, Inventory. Searchable tables, edit drawer, CSV export.
-- **Detail pages** for Import Orders, Sales Orders, and Customers, each with its own audit history.
-- **Import Orders** — new order form with 4 intake methods (API/Excel/Email are simulated, manual is real),
-  auto-calculated tax/duty/VAT, license checks, and a full workflow:
-  Staging → Approved (two different supervisors over ฿500k) → Customs Cleared (declaration no.) →
-  Received into a chosen warehouse. Line items can be corrected while in Staging, flagged, or Rejected —
-  correcting a rejected order resubmits it.
-- **Sales Orders** — multi-line: each line is a product, lot, quantity, price, and discount (two lines may
-  draw on the same lot; together they can't exceed it). License, credit limit, stock, and margin are
-  checked live as you build the order, and each line suggests the oldest lot with stock left (FIFO). Orders over the standard discount, over the credit limit, or priced
-  below cost go to the Supervisor approval queue — nothing is booked or invoiced until approved.
-- **Tax documents** — full Thai tax invoice (ใบกำกับภาษี, Revenue Code s.86/4): seller and buyer name,
-  address, 13-digit tax ID and head office/branch, invoice number and date, every line, VAT shown
-  separately, amount in words in Thai and English, original/copy. Delivery note and picking list (grouped
-  by warehouse) per order. Receipts, credit notes (ใบลดหนี้) and debit notes (ใบเพิ่มหนี้) print from
-  Receipts & Credit Notes; notes state the original invoice, original and correct value, VAT on the
-  difference, and the reason. Customer and company tax IDs are checked with the mod-11 check digit.
-- **Delivery** — status only moves forward (Pending → In Delivery → Delivered, or Returned/Damaged).
-  Returned restocks the lot and Returned/Damaged credit the customer back; both ask for confirmation.
-- **Accounts receivable** — record customer payments on the customer page. The outstanding balance only
-  moves through orders, returns, and payments; it can't be typed in.
-- **Approvals** — one queue for both Import and Sales Orders, with reject-with-reason and full name +
-  timestamp on every decision. Nobody can approve an order they raised themselves.
-- **Audit Trail** — every create/update/approve/reject/payment, attributed to the signed-in user and
-  recording old → new values. Searchable by record, user, or text; read from the server a page at a time;
-  CSV export of everything that matches.
-- **Reports** — net sales and gross margin, Sales by SKU/Channel/Customer, Inventory Value by pipeline
-  stage and by aging, plus a monthly tax & sales reconciliation. CSV export and print-to-PDF.
-- **Role switcher** in the header, covering all roles in the spec. Price/Credit/Discount are masked for
-  roles that shouldn't see them, and each action is limited to the roles that do that job (see below).
-- **Thai/English toggle**, all content bilingual.
-
-Everything is stored in PostgreSQL. In demo mode, **Reset demo data** in the sidebar reloads the original
-demo dataset. Its dates move with the calendar — license expiries, recent orders, the last three months
-of expenses and last month's bank statement — so a reset always shows the same situation (two licenses
-about to expire, a customer on credit hold, withholding due, a statement to reconcile) whenever it's run.
-
-## Business rules
-
-All writes go through `DataContext`, which checks the rule again even when the screen already
-prevented it, and returns a reason (shown as a red toast) instead of quietly doing the wrong thing:
-
-| Rule | Where it's enforced |
-| --- | --- |
-| Role permissions per action (`ROLE_PERMISSIONS` in `src/data/identities.ts`) | every action |
-| Raiser can't approve their own order; high-value imports need two *different* supervisors | approvals |
-| Approval re-checks stock and licenses at approval time, not just at entry | approvals |
-| Import validation (SKU, ABV, price, quantity, **and** license expiry/ETA/Type 5 cap) runs on create, on every correction, and on ETA change | import orders |
-| Over-discount / over-credit / below-cost sales need a supervisor, including when editing a booked order | sales orders |
-| Booked orders can be edited only until they ship; stock and balance move by the difference, line by line | sales orders |
-| Tax ID must be 13 digits with a valid check digit; branch 5 digits; address in Thai and English | customers, company |
-| Payment terms 0–365 days; due date = invoice date + terms | customers, sales orders |
-| Delivery status follows the lifecycle above; Returned/Damaged are final | sales orders |
-| Product stock changes only through receipts, sales, returns, and reasoned stock adjustments | inventory |
-| Renewing a license updates every customer holding it | licenses |
-| Lot numbers are unique; receipts total quantities per SKU across lines | receiving |
-| Units held by orders awaiting approval can't be promised to another order | sales orders |
-| An import order needs an exchange rate for its currency; it keeps the rate it was placed at | import orders |
-| One supplier invoice per received shipment; payments can't exceed what's owed | payables |
-| Five wrong passwords lock an account for 15 minutes (a Senior Manager can unlock it) | sign-in |
-| Nothing is dated into a closed month; months close in order and only the latest reopens, with a reason | accounting |
-| Journals balance and never touch receivables, inventory, VAT or payables; reversals, not edits | accounting |
-| Withholding needs the payee's valid tax ID; a month's tax is remitted once, after the month ends | expenses, tax |
-| A statement line matches one book entry of the same amount; re-imported lines are skipped | bank |
-| A quotation converts once, before it expires, only with enough free stock | quotations |
-| Orders for a customer with invoices over 60 days overdue need approval (credit hold) | sales orders |
-| One open count per warehouse; a count posts only when every lot is counted; differences are against the start of the count | stock counts |
-| One open purchase request per product; the requester can't approve it; only approved requests are ordered | purchase requests |
-
-Who can do what:
-
-| Role | Can do |
-| --- | --- |
-| Senior Manager | product prices, customer credit terms, open customers, price lists, company profile, exchange rates, supplier invoices & payments, expenses, journals, bank reconciliation, month-end close, users |
-| Order Officer | create/edit import orders, attach documents, products, suppliers, reorder policies, purchase requests |
-| Documentation Officer | attach documents, record customs clearance, add/renew licenses |
-| Warehouse Officer | receive goods, adjust stock, stock counts, update delivery status, warehouses, reorder policies, purchase requests |
-| Tax Officer | record customs clearance, tax & duty rates, exchange rates, expenses & withholding tax |
-| Sales Officer | quotations, create/edit sales orders, record payments, statements and payment reminders, open customers (credit terms start at 0) |
-| Distribution Officer | update delivery status |
-| Supervisor | everything above except managing users (they can view them) and closing months, plus approve/reject orders and purchase requests |
+---
 
 ## Known limitations
 
-- The tax formula is illustrative, not the real Excise/Customs tariff schedule.
-- There's no payroll or fixed-asset register: salaries and depreciation are entered as expenses or
-  journals. Withholding forms are produced as printable certificates and spreadsheet attachments, not
-  the Revenue Department's e-filing format. Bank statements are imported from CSV (no direct bank feed).
-- Thai e-Tax Invoice (XML) and e-Withholding files aren't produced; documents are printed or emailed as PDF.
-- The audit log and stock ledger — the records that grow without bound — are read a page at a time; the
-  rest of the data still comes in one `GET /api/state`, and each command reloads the data it works on.
-  That is simple and fast at this business's scale; a very large customer or order history would need the
-  same paging for those screens too.
-- Writes are serialised by one database lock — correct and simple, but one write at a time.
-
-## Data fidelity notes
-
-The 8 original orders in the spreadsheet only had aggregate totals (SKU count, total value), not
-line-item detail. Line items were reconstructed to match each order's original total at cost price.
-Because the spreadsheet's cost price only makes sense as an all-in landed cost (with duty on top, sales
-would run at a loss), each line's supplier price is the matching share of the product's expected supplier
-price, in the supplier's currency at the rate on the order date; an order's value is that goods value in
-baht. The two original import licenses (both expired) were kept as-is rather than adding a fake
-valid one.
-
-The spreadsheet gives each customer's outstanding balance but only a few of the invoices behind it. The
-rest is carried as "legacy invoice brought forward" documents (OB-…), dated relative to when the demo
-data is reset so the aging report always shows a realistic mix. A database created before this existed
-keeps its data; any balance its documents don't explain shows as one "brought forward" open item.
-
-**Stock reconciliation.** The source Products sheet's stock figures hadn't deducted the sales already
-taken from each lot (each SKU's figure was exactly *lots + units sold*), and two SKUs (Casa Roble Reposado,
-Riverside Craft Lager — 860 units) had stock but no lot at all. Product stock is now derived from the
-lots, which are what can actually be picked and traced, and those two SKUs carry an opening-balance lot
-(`LOT-OPEN-…`, received date assumed as 2026-05-01) so their stock is sellable and traceable.
-
-**Dashboard KPIs** are computed live wherever the data allows, so the Dashboard never contradicts the
-module pages: planned import lead time (order date → ETA, since actual arrival dates aren't recorded),
-share of import orders flagged at intake, inventory value (stock at cost + approved orders in transit —
-unapproved purchase orders aren't inventory), licenses expired or expiring within 30 days, tax & duty
-(excluding rejected orders), net sales over the last 90 days, annualised turnover, SKUs with stock older
-than 180 days, and outstanding customer credit. On-time delivery can't be computed (orders carry no
-promised delivery date), so it shows the source sheet's figure, labelled **Sample figure**.
-
-The new master data comes from what the spreadsheet already implied wherever possible. Suppliers come
-from the suppliers named on the original import orders, Tax & Duty Rates and Price Lists from the rates
-the app used before, and warehouse names from the original lookup. Some values are new and illustrative:
-warehouse addresses and capacities, reorder points and quantities, and supplier contact emails (on the
-`.example` domain). The opening stock ledger is rebuilt from the seed lots and seed sales so that every
-lot's movements add up to its current quantity. Lots that predate the system show "Opening balance" as
-their source.
-
-`deliveryNoteNo` on Sales Orders has no source in the spreadsheet (it only had a tax invoice number) — a
-delivery note number was generated so the print view has something to show. Product Label history has no
-source at all in the spreadsheet; it's invented data seeded for 4 of the 12 SKUs.
+- **Tax.** The duty and excise formula is illustrative, not the real Customs and Excise tariff schedule.
+  An accountant should check rates and documents before any real use.
+- **No e-filing.** No Thai e-Tax Invoice (XML) or e-Withholding files; documents are printed or emailed as
+  PDF, and withholding returns are produced as certificates and spreadsheet attachments.
+- **Not covered:** payroll and a fixed-asset register (salaries and depreciation are entered as expenses or
+  journals), a direct bank feed (statements are imported from CSV), and the API, Excel and email intake of
+  import orders, which are simulated.
+- **Scanning** reads QR codes in every browser; other barcodes (EAN, Code 128) only where the browser has
+  its own barcode reader.
+- **Scale.** The audit log and stock ledger are read a page at a time; the rest of the data comes in one
+  `GET /api/state`, and each command reloads what it works on. That is simple and fast at this business's
+  size, but a very large customer or order history would need the same paging for those screens. Writes
+  are serialised by one database lock: correct and simple, but one write at a time.
+- **Demo mode** is for demonstrations: anyone with the page can switch user and reset the data. Turn it
+  off for real use.
