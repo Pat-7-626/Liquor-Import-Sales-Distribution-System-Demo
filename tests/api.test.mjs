@@ -278,6 +278,16 @@ check(
 // A real case on paper: a 700 ml, 40% vodka with a ฿790 suggested retail price —
 // 790 ÷ 1.07 × 20% = 147.66 + 0.7 L × 40% × ฿255 = 71.40 → excise 219.06; + 10% Interior tax 21.91; + 7.5% funds 16.43.
 check("a bottle of vodka carries ฿257.40 of excise, Interior tax and fund levies", Math.abs(excisePerBottle - 257.4) < 0.01, excisePerBottle.toFixed(2));
+{
+  // Wine since 23 Feb 2024: no import duty, excise 5% + ฿1,000 per litre of pure alcohol. A 750 ml, 13.5%
+  // red with a ฿950 suggested retail price: 950 ÷ 1.07 × 5% = 44.39 + 0.75 L × 13.5% × ฿1,000 = 101.25
+  // → excise 145.64; + 10% Interior tax 14.56; + 7.5% funds 10.92 = ฿171.13.
+  const red = base.products.find((p) => p.sku === "SKU-1005");
+  const wine = ts.exciseRates.find((r) => r.kind === "wine");
+  const wineDuty = ts.dutyRates.find((r) => red.hsCode.startsWith(r.hsPrefix))?.dutyPercent;
+  const perBottle = ((red.suggestedPrice / 1.07) * (wine.valuePercent / 100) + 0.75 * (red.abv / 100) * wine.perLitreAlcohol) * 1.175;
+  check("wine: duty-free, and ฿171.13 of excise and levies on a ฿950 bottle (2024 rates)", wineDuty === 0 && wine.valuePercent === 5 && wine.perLitreAlcohol === 1000 && Math.abs(perBottle - 171.13) < 0.01, perBottle.toFixed(2));
+}
 const supplierThb = (vodka.costPrice - excisePerBottle) / (1 + dutyRate);
 const eurPrice = Math.round((supplierThb / eurRate) * 100) / 100;
 const io = await off.cmd("createImportOrder", {

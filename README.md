@@ -221,10 +221,11 @@ all modules.
 ### Tax
 
 - **Tax & Duty Rates** drive the import taxes, worked out the way Customs and the Excise Department do:
-  1. **Import duty** on the goods value, by HS Code. The defaults are the MFN rates: spirits and beer 60%,
-     wine 54%. FTA origins may pay less.
+  1. **Import duty** on the goods value, by HS Code. Wine has been duty-free since 23 February 2024;
+     spirits and beer default to 60% (MFN). FTA origins may pay less.
   2. **Excise** (Excise Act B.E. 2560) has two parts: a share of the suggested retail price before VAT, plus
-     baht per litre of pure alcohol. Defaults: spirits 20% + ฿255, wine 10% + ฿1,500, beer 22% + ฿430.
+     baht per litre of pure alcohol. Defaults: spirits 20% + ฿255 and beer 22% + ฿430 (2017 tariff), and
+     wine 5% + ฿1,000 (cut on 23 February 2024).
   3. **Collected with the excise:** the Interior Ministry tax (10% of the excise) and the fund levies
      (ThaiHealth 2%, Thai PBS 1.5%, sports 2%, elderly 2%).
   4. **Import VAT** is charged on goods + duty + excise + those levies, and is reclaimable.
@@ -749,8 +750,11 @@ reconstructed or invented, as noted here.
 ## Known limitations
 
 - **Tax rates.** Import taxes follow the real structure, but rates change by ministerial regulation and FTA
-  origins pay less duty. The defaults (MFN duty, the 2017 excise tariff) must be checked against the current
-  Customs and Excise rates, and an accountant should check the documents, before any real use.
+  origins pay less duty. The defaults were checked in October 2026 against published sources (wine's 2024 cut,
+  the 2017 tariff for spirits and beer, the Interior Ministry tax and the fund levies). The 60% duty on
+  spirits and beer couldn't be confirmed from an official source. A government plan to fold the fund levies
+  into ordinary excise was still a draft. Check the current Customs and Excise rates, and have an accountant
+  check the documents, before any real use.
 - **Accounting scope.** There is no year-end close (profit stays in "current year" on the balance sheet
   rather than rolling into retained earnings), no reverse-charge VAT (ภ.พ.36) on services bought from
   abroad, no post-dated cheque register, and no multi-branch or multi-company books.

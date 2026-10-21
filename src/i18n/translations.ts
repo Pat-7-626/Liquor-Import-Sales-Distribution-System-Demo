@@ -896,8 +896,8 @@ const dict = {
 
     // ── Tax rates ──
     taxRatesNote: {
-      th: "โครงสร้างตามที่กรมศุลกากรและกรมสรรพสามิตใช้ อัตราเริ่มต้นเป็นอัตราทั่วไป (MFN) และพิกัดภาษีสรรพสามิตปี 2560 — โปรดตรวจสอบอัตราปัจจุบันก่อนใช้งานจริง สินค้าจากประเทศคู่สัญญา FTA อาจเสียอากรต่ำกว่า การเปลี่ยนแปลงมีผลกับออเดอร์ใหม่และออเดอร์ที่แก้ไขรายการเท่านั้น",
-      en: "The structure Customs and Excise use. Defaults are the MFN duty rates and the 2017 excise tariff — check the current rates before real use; FTA origins may pay less duty. Changes apply to new orders and to orders whose lines are corrected; existing orders keep the tax already calculated.",
+      th: "โครงสร้างตามที่กรมศุลกากรและกรมสรรพสามิตใช้ อัตราเริ่มต้น: ไวน์ยกเว้นอากรขาเข้าและภาษีสรรพสามิต 5% + 1,000 บาท (ตั้งแต่ 23 ก.พ. 2567) สุรากลั่นและเบียร์ตามพิกัดปี 2560 และอากรอัตราทั่วไป (MFN) — โปรดตรวจสอบอัตราปัจจุบันก่อนใช้งานจริง สินค้าจากประเทศคู่สัญญา FTA อาจเสียอากรต่ำกว่า การเปลี่ยนแปลงมีผลกับออเดอร์ใหม่และออเดอร์ที่แก้ไขรายการเท่านั้น",
+      en: "The structure Customs and Excise use. Defaults: wine duty-free with excise at 5% + ฿1,000 (since 23 Feb 2024); spirits and beer at the 2017 excise tariff and MFN duty — check the current rates before real use; FTA origins may pay less duty. Changes apply to new orders and to orders whose lines are corrected; existing orders keep the tax already calculated.",
     },
     generalRates: { th: "อัตราทั่วไป", en: "General rates" },
     vatRate: { th: "ภาษีมูลค่าเพิ่ม (VAT)", en: "VAT" },
