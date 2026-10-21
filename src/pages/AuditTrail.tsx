@@ -33,7 +33,7 @@ const ACTION_DOT: Record<AuditAction, EventTone> = {
   rejected: "red",
   payment: "indigo",
 };
-const VIEWS = ["table", "feed"] as const;
+const VIEWS = ["feed", "table"] as const;
 type View = (typeof VIEWS)[number];
 const PAGE = 100;
 
@@ -89,7 +89,7 @@ export default function AuditTrail() {
   const [entityFilter, setEntityFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [actorFilter, setActorFilter] = useState("");
-  const [view, setView] = useViewMode<View>("audit", VIEWS, "table");
+  const [view, setView] = useViewMode<View>("audit", VIEWS, "feed");
   const q = useDebounced(search.trim());
 
   // The log grows forever, so the server filters and pages it. A change of filter starts at page one.
@@ -189,8 +189,8 @@ export default function AuditTrail() {
             value={view}
             onChange={setView}
             options={[
-              { value: "table", label: t("views.table"), icon: Table2 },
               { value: "feed", label: t("views.feed"), icon: ListTree },
+              { value: "table", label: t("views.table"), icon: Table2 },
             ]}
           />
         </div>

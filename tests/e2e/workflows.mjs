@@ -94,6 +94,13 @@ const bal0 = s0.customers.find((c) => c.customerId === "CUS-0005").outstandingBa
 const bal1 = s1.customers.find((c) => c.customerId === "CUS-0005").outstandingBalance;
 check("customer balance increased by net value", Math.abs(bal1 - bal0 - newSo.netValue) < 0.01);
 
+// Pages with several views open on the richer one; the plain table is always the last choice.
+for (const [path, first] of [["/sales-orders", "board"], ["/import-orders", "board"], ["/customers", "cards"], ["/audit-trail", "feed"], ["/licenses", "timeline"]]) {
+  await go(path);
+  const order = await page.locator("[role=radiogroup] [data-testid^=view-]").evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+  check(`${path} opens on ${first}, with Table last`, (await page.locator(`[data-testid=view-${first}][aria-checked=true]`).count()) === 1 && order.at(-1) === "view-table", order.join(","));
+}
+
 // Views: board and calendar render the same orders; the stepper shows real dates.
 await go("/sales-orders");
 await page.click("[data-testid=view-board]");
@@ -958,7 +965,7 @@ consoleProblems.length = 0;
   await go("/inventory");
   const lot = st0.inventory.find((i) => i.quantityRemaining > 0);
   await page.click(`[data-testid="label-${lot.lotBatch}"]`);
-  await page.waitForSelector("[data-testid=lot-label]", { timeout: 3000 }).catch(() => {});
+  await page.waitForSelector("[data-testid=lot-label] img", { timeout: 5000 }).catch(() => {});
   check("a lot label shows its QR code and lot number", (await page.locator("[data-testid=lot-label]").count()) === 1 && (await page.locator("[data-testid=lot-label] img").count()) === 1 && (await page.locator("[data-testid=lot-label]").innerText()).includes(lot.lotBatch));
   await page.fill("[data-testid=label-copies]", "4");
   await page.waitForTimeout(150);

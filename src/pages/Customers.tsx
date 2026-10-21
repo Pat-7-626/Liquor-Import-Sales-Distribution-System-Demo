@@ -24,7 +24,7 @@ import { RecordLink, paths } from "../components/RecordLink";
 
 const STATUS_OPTIONS = ["normal", "nearLimit", "overLimit", "noLicense"];
 
-const VIEWS = ["table", "cards"] as const;
+const VIEWS = ["cards", "table"] as const;
 type View = (typeof VIEWS)[number];
 const METER: Record<string, string> = { normal: "bg-emerald-500", nearLimit: "bg-amber-500", overLimit: "bg-rose-600", noLicense: "bg-gray-400" };
 
@@ -42,7 +42,7 @@ export default function Customers() {
   const [statusFilter, setStatusFilter] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editedIds, setEditedIds] = useState<Set<string>>(new Set());
-  const [view, setView] = useViewMode<View>("customers", VIEWS, "table");
+  const [view, setView] = useViewMode<View>("customers", VIEWS, "cards");
 
   const computed = useMemo(
     () =>
@@ -143,8 +143,8 @@ export default function Customers() {
             value={view}
             onChange={setView}
             options={[
-              { value: "table", label: t("views.table"), icon: Table2 },
               { value: "cards", label: t("views.cards"), icon: LayoutGrid },
+              { value: "table", label: t("views.table"), icon: Table2 },
             ]}
           />
         }
@@ -159,7 +159,7 @@ export default function Customers() {
               <article key={c.customerId} className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <RecordLink to={paths.customer(c.customerId)} className="block truncate font-semibold">
+                    <RecordLink to={paths.customer(c.customerId)} className="block truncate font-semibold" testid="customer-link">
                       {bi(c.name)}
                     </RecordLink>
                     <p className="text-xs text-gray-500">

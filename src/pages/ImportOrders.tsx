@@ -33,7 +33,7 @@ const STATUS_OPTIONS = [
   "rejected",
 ];
 
-const VIEWS = ["table", "board", "calendar"] as const;
+const VIEWS = ["board", "calendar", "table"] as const;
 type View = (typeof VIEWS)[number];
 
 const BOARD: { key: string; stages: string[]; tone: EventTone }[] = [
@@ -58,7 +58,7 @@ export default function ImportOrders() {
   const [statusFilter, setStatusFilter] = useState("");
   const [editingNo, setEditingNo] = useState<string | null>(null);
   const [editedNos, setEditedNos] = useState<Set<string>>(new Set());
-  const [view, setView] = useViewMode<View>("import-orders", VIEWS, "table");
+  const [view, setView] = useViewMode<View>("import-orders", VIEWS, "board");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -135,9 +135,9 @@ export default function ImportOrders() {
             value={view}
             onChange={setView}
             options={[
-              { value: "table", label: t("views.table"), icon: Table2 },
               { value: "board", label: t("views.board"), icon: Columns3 },
               { value: "calendar", label: t("views.calendar"), icon: CalendarDays },
+              { value: "table", label: t("views.table"), icon: Table2 },
             ]}
           />
         }

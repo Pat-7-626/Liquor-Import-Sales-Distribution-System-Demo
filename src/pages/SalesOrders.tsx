@@ -29,7 +29,7 @@ import { both } from "../i18n/translations";
 import { RecordLink, paths } from "../components/RecordLink";
 
 const STATUS_FILTER_OPTIONS = ["pendingApproval", "rejected", ...DELIVERY_STATUS_OPTIONS];
-const VIEWS = ["table", "board", "calendar"] as const;
+const VIEWS = ["board", "calendar", "table"] as const;
 type View = (typeof VIEWS)[number];
 
 /** Board columns, in the order an order moves through them. */
@@ -55,7 +55,7 @@ export default function SalesOrders() {
   const [editingNo, setEditingNo] = useState<string | null>(null);
   const [editedNos, setEditedNos] = useState<Set<string>>(new Set());
   const [docsOrderNo, setDocsOrderNo] = useState<string | null>(null);
-  const [view, setView] = useViewMode<View>("sales-orders", VIEWS, "table");
+  const [view, setView] = useViewMode<View>("sales-orders", VIEWS, "board");
   const [showDeliveries, setShowDeliveries] = useState(true);
   const [showDue, setShowDue] = useState(true);
   const invoiceStatus = useInvoiceStatus();
@@ -174,9 +174,9 @@ export default function SalesOrders() {
             value={view}
             onChange={setView}
             options={[
-              { value: "table", label: t("views.table"), icon: Table2 },
               { value: "board", label: t("views.board"), icon: Columns3 },
               { value: "calendar", label: t("views.calendar"), icon: CalendarDays },
+              { value: "table", label: t("views.table"), icon: Table2 },
             ]}
           />
         }

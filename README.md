@@ -300,6 +300,9 @@ all modules.
 - **CSV import** on Products and Customers, and for opening balances. Download a template, fill it in Excel,
   and preview every row with its problems before importing the valid rows. Each row goes through the same
   rules as the form.
+- **Views:** pages with more than one view open on the most useful one (Sales and Import Orders on the
+  board, Customers on cards, Audit Trail on the activity feed, Licenses on the timeline). **Table** is
+  always the last option, and each browser remembers the view you last chose on each page.
 - **Thai / English** everywhere, switchable at any time. Every screen also works at phone width.
 
 ---

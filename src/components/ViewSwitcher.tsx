@@ -10,7 +10,8 @@ export interface ViewOption<V extends string> {
 
 /** The chosen view per page, remembered in this browser (a convenience — falls back to the default). */
 export function useViewMode<V extends string>(page: string, options: readonly V[], fallback: V): [V, (v: V) => void] {
-  const key = `lisd-view-${page}`;
+  // "v2": Table moved to the end and stopped being the default, so earlier choices start over once.
+  const key = `lisd-view2-${page}`;
   const [view, setView] = useState<V>(() => {
     try {
       const saved = window.localStorage.getItem(key) as V | null;
@@ -30,7 +31,7 @@ export function useViewMode<V extends string>(page: string, options: readonly V[
   return [view, choose];
 }
 
-/** Segmented control: Table / Board / Calendar / … */
+/** Segmented control: Board / Calendar / … / Table — the table is always last. */
 export function ViewSwitcher<V extends string>({ value, onChange, options }: { value: V; onChange: (v: V) => void; options: ViewOption<V>[] }) {
   const { t } = useLanguage();
   return (
