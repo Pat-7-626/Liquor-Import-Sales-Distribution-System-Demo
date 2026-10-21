@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
+import { noText } from "../lib/text";
 import { FileText, Send } from "lucide-react";
 import { CustomerDocumentsModal } from "../components/CustomerDocuments";
 import { Dialog, DialogActions } from "../components/Dialog";
-import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
+import { FieldLabel, TextPair, selectClass } from "../components/FormKit";
 import { useRunAction } from "../lib/useRunAction";
 import { formatDate } from "../lib/format";
-import type { Customer } from "../data/types";
+import type { Bilingual, Customer } from "../data/types";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
 import { useData } from "../state/DataContext";
@@ -39,7 +40,7 @@ export default function ArAging() {
   const runAction = useRunAction();
   const { customers, salesOrders, arDocuments, arReminders, recordReminder } = useData();
   const [doc, setDoc] = useState<{ customer: Customer; tab: "statement" | "reminder"; level: 1 | 2 | 3 } | null>(null);
-  const [reminding, setReminding] = useState<{ customer: Customer; level: 1 | 2 | 3; note: string } | null>(null);
+  const [reminding, setReminding] = useState<{ customer: Customer; level: 1 | 2 | 3; note: Bilingual } | null>(null);
   const baht = (n: number) => `฿${formatCurrency(n, lang)}`;
   const today = todayIso();
 
@@ -228,7 +229,7 @@ export default function ArAging() {
                   </button>
                   {can("recordPayment") && (
                     <button
-                      onClick={() => setReminding({ customer: r.c, level: next, note: "" })}
+                      onClick={() => setReminding({ customer: r.c, level: next, note: noText() })}
                       className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-500"
                       data-testid={`remind-${r.c.customerId}`}
                     >
@@ -264,10 +265,10 @@ export default function ArAging() {
                 ))}
               </select>
             </label>
-            <label className="block">
+            <div className="block">
               <FieldLabel>{t("collect.note")}</FieldLabel>
-              <input value={reminding.note} onChange={(e) => setReminding({ ...reminding, note: e.target.value })} className={inputClass} placeholder={t("collect.notePlaceholder")} />
-            </label>
+              <TextPair value={reminding.note} onChange={(note) => setReminding({ ...reminding, note })} placeholder={both("collect.notePlaceholder")} testid="remind-note" />
+            </div>
             <p className="text-xs text-gray-500">{t("collect.explain")}</p>
             <DialogActions onCancel={() => setReminding(null)} submitLabel={t("collect.sendReminder")} testid="remind-save" />
           </form>

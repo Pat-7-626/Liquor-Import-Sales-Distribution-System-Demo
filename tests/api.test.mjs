@@ -526,6 +526,15 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   });
   const exDoc = ex.json.state?.expenses.find((x) => x.reference === "TT-API");
   check("tax officer records an expense with withholding", ex.json.result.ok && exDoc?.whtAmount === 300 && exDoc?.paid === 10400, JSON.stringify(ex.json.result).slice(0, 120));
+
+  // Free text is kept in Thai and English separately; either half may be empty.
+  check("text typed in one language is kept as that language", exDoc?.description?.en === "API test advisory" && exDoc.description.th === "");
+  const both = (await tax.cmd("recordExpense", { date: today, payee: "Two Languages", payeeTaxId: "", payeeType: "company", account: "6900", description: { th: "ค่าที่ปรึกษา", en: "Advisory" }, amount: 10, vat: 0, whtRate: 0, method: "cash", reference: "TL-1" })).json;
+  check("Thai and English are stored separately", JSON.stringify(both.state?.expenses.find((x) => x.reference === "TL-1")?.description) === JSON.stringify({ th: "ค่าที่ปรึกษา", en: "Advisory" }));
+  const legacy = (await tax.cmd("recordExpense", { date: today, payee: "Old Style", payeeTaxId: "", payeeType: "company", account: "6900", description: "ค่าน้ำ / Water", amount: 10, vat: 0, whtRate: 0, method: "cash", reference: "TL-2" })).json;
+  check("…and one 'ไทย / English' string is split into the two", JSON.stringify(legacy.state?.expenses.find((x) => x.reference === "TL-2")?.description) === JSON.stringify({ th: "ค่าน้ำ", en: "Water" }));
+  check("…but some text is still required", !(await tax.cmd("recordExpense", { date: today, payee: "x", payeeTaxId: "", payeeType: "company", account: "6900", description: { th: " ", en: "" }, amount: 10, vat: 0, whtRate: 0, method: "cash", reference: "" })).json.result.ok);
+  check("seeded text is stored in two languages", s0.purchaseRequests.every((r) => r.reason.th && r.reason.en) && s0.expenses.every((x) => x.description.th && x.description.en) && s0.company.bankName?.th === "ธนาคารกสิกรไทย" && s0.company.bankName?.en === "Kasikornbank");
   check("warehouse staff can't record expenses", !(await wh.cmd("recordExpense", { date: today, payee: "x", payeeTaxId: "", payeeType: "company", account: "6900", description: "x", amount: 1, vat: 0, whtRate: 0, method: "cash", reference: "" })).json.result.ok);
   const badTax = await tax.cmd("recordExpense", { date: today, payee: "No ID", payeeTaxId: "123", payeeType: "individual", account: "6600", description: "x", amount: 1000, vat: 0, whtRate: 3, method: "cash", reference: "" });
   check("withholding needs the payee's valid tax ID", !badTax.json.result.ok && /tax ID/.test(badTax.json.result.error.en));

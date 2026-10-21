@@ -304,6 +304,12 @@ all modules.
   board, Customers on cards, Audit Trail on the activity feed, Licenses on the timeline). **Table** is
   always the last option, and each browser remembers the view you last chose on each page.
 - **Thai / English** everywhere, switchable at any time. Every screen also works at phone width.
+- **Text people type** is kept in Thai and English separately: expense descriptions, journal memos,
+  quotation notes, purchase request reasons, reminder notes and the company's bank details.
+  - **Forms:** each of these has a TH and an EN box. One is enough; it then shows in both languages, for
+    text that's only ever written in one.
+  - **Screens** show the language you're using.
+  - **Printed documents** show Thai with English beneath.
 
 ---
 
@@ -586,7 +592,7 @@ backup (pg_dump + uploads archive → ./backups)        https (Caddy, optional p
   - **Supplier invoices** attached to import orders go only to roles with price access or that handle
     import paperwork.
   - **PDF rendering** happens offline, with scripts off.
-- **Schema.** Migrations are in `server/sql/` (`001_init.sql` to `011_opening_2fa_digest.sql`). They run
+- **Schema.** Migrations are in `server/sql/` (`001_init.sql` to `012_two_language_text.sql`). They run
   once each, in order, when the API starts; a new one is added as the next number.
 
 ### API

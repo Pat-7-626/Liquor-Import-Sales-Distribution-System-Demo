@@ -268,7 +268,7 @@ export default function Approvals() {
                   <span className="block text-xs text-gray-500">{r.sku}</span>
                 </td>
                 <td className={`${td} text-right tabular-nums`}>{r.quantity.toLocaleString()}</td>
-                <td className={`${td} max-w-xs whitespace-normal text-gray-600`}>{r.reason}</td>
+                <td className={`${td} max-w-xs whitespace-normal text-gray-600`}>{bi(r.reason)}</td>
                 <td className={td}>
                   <div className="flex items-center gap-2">
                     <button

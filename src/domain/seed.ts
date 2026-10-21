@@ -206,7 +206,7 @@ export function seedState(): Store {
         date: addDays(todayIso(), -10),
         level: 1,
         overdueAmount: 0,
-        note: "โทรแจ้งฝ่ายบัญชีลูกค้าแล้ว / Called their accounts team",
+        note: { th: "โทรแจ้งฝ่ายบัญชีลูกค้าแล้ว", en: "Called their accounts team" },
         actor: SALES_OFFICER_ACTOR,
       },
     ],
@@ -437,10 +437,10 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 function seedExpenses(): Expense[] {
   const months = recentMonths();
   const plan: Omit<Expense, "docNo" | "date" | "vat" | "whtAmount" | "paid" | "reference" | "actor">[] = [
-    { payee: "บริษัท สาทร พร็อพเพอร์ตี้ จำกัด", payeeTaxId: "0105545012345", payeeType: "company", account: "6200", description: "ค่าเช่าคลังสินค้าและสำนักงาน / Warehouse & office rent", amount: 85000, whtRate: 5, method: "transfer" },
-    { payee: "บริษัท ด่วนไว โลจิสติกส์ จำกัด", payeeTaxId: "0105551023451", payeeType: "company", account: "6400", description: "ค่าขนส่งสินค้าถึงลูกค้า / Delivery to customers", amount: 18000, whtRate: 1, method: "transfer" },
-    { payee: "สำนักงานบัญชี ตรงเวลา", payeeTaxId: "3101200345677", payeeType: "individual", account: "6600", description: "ค่าทำบัญชี / Bookkeeping fee", amount: 15000, whtRate: 3, method: "transfer" },
-    { payee: "การไฟฟ้านครหลวง", payeeTaxId: "0994000165510", payeeType: "company", account: "6300", description: "ค่าไฟฟ้า / Electricity", amount: 9800, whtRate: 0, method: "transfer" },
+    { payee: "บริษัท สาทร พร็อพเพอร์ตี้ จำกัด", payeeTaxId: "0105545012345", payeeType: "company", account: "6200", description: { th: "ค่าเช่าคลังสินค้าและสำนักงาน", en: "Warehouse & office rent" }, amount: 85000, whtRate: 5, method: "transfer" },
+    { payee: "บริษัท ด่วนไว โลจิสติกส์ จำกัด", payeeTaxId: "0105551023451", payeeType: "company", account: "6400", description: { th: "ค่าขนส่งสินค้าถึงลูกค้า", en: "Delivery to customers" }, amount: 18000, whtRate: 1, method: "transfer" },
+    { payee: "สำนักงานบัญชี ตรงเวลา", payeeTaxId: "3101200345677", payeeType: "individual", account: "6600", description: { th: "ค่าทำบัญชี", en: "Bookkeeping fee" }, amount: 15000, whtRate: 3, method: "transfer" },
+    { payee: "การไฟฟ้านครหลวง", payeeTaxId: "0994000165510", payeeType: "company", account: "6300", description: { th: "ค่าไฟฟ้า", en: "Electricity" }, amount: 9800, whtRate: 0, method: "transfer" },
   ];
   const out: Expense[] = [];
   months.forEach((m) => {
@@ -476,7 +476,7 @@ function seedJournals(): ManualJournal[] {
     out.push({
       entryNo: `JV-2026-${String(out.length + 1).padStart(4, "0")}`,
       date: paidOn,
-      memo: `นำส่งภาษีหัก ณ ที่จ่าย ${m} / Withholding tax remitted for ${m}`,
+      memo: { th: `นำส่งภาษีหัก ณ ที่จ่าย ${m}`, en: `Withholding tax remitted for ${m}` },
       lines: [
         { account: "2410", debit: amt, credit: 0 },
         { account: "1110", debit: 0, credit: amt },
@@ -490,7 +490,7 @@ function seedJournals(): ManualJournal[] {
     out.push({
       entryNo: `JV-2026-${String(out.length + 1).padStart(4, "0")}`,
       date: `${m}-28`,
-      memo: "ค่าธรรมเนียมธนาคาร / Bank charges",
+      memo: { th: "ค่าธรรมเนียมธนาคาร", en: "Bank charges" },
       lines: [
         { account: "6900", debit: 350, credit: 0 },
         { account: "1110", debit: 0, credit: 350 },
@@ -541,7 +541,7 @@ function seedQuotations(): Quotation[] {
     lines,
     netValue: r2(lines.reduce((s, l) => s + l.netValue, 0)),
     status,
-    notes: "",
+    notes: { th: "", en: "" },
     createdBy: SALES_OFFICER_ACTOR,
     ...extra,
   });
@@ -549,7 +549,7 @@ function seedQuotations(): Quotation[] {
     q("QT-2026-0001", "CUS-0005", "2026-07-28", "2026-08-11", [line("SKU-1002", 12, 5990, 8)], "accepted", { salesOrderNo: "SO-2026-3305" }),
     q("QT-2026-0002", "CUS-0004", addDays(today, -40), addDays(today, -26), [line("SKU-1009", 48, 590, 5)], "open"),
     q("QT-2026-0003", "CUS-0003", addDays(today, -3), addDays(today, 11), [line("SKU-1001", 24, 2241, 5), line("SKU-1007", 36, 711, 5)], "open", {
-      notes: "ราคารวม VAT · ส่งฟรีในกรุงเทพฯ / Prices include VAT · free delivery in Bangkok",
+      notes: { th: "ราคารวม VAT · ส่งฟรีในกรุงเทพฯ", en: "Prices include VAT · free delivery in Bangkok" },
     }),
   ];
 }
@@ -562,7 +562,7 @@ function seedPurchaseRequests(): PurchaseRequest[] {
       date: addDays(today, -2),
       sku: "SKU-1011",
       quantity: 60,
-      reason: "เหลือ 12 ขวด ใกล้หมด / Only 12 bottles left",
+      reason: { th: "เหลือ 12 ขวด ใกล้หมด", en: "Only 12 bottles left" },
       preferredSupplierId: "SUP-001",
       status: "pending",
       requestedBy: WAREHOUSE_OFFICER_ACTOR,
@@ -572,7 +572,7 @@ function seedPurchaseRequests(): PurchaseRequest[] {
       date: addDays(today, -6),
       sku: "SKU-1006",
       quantity: 240,
-      reason: "ลูกค้าร้านอาหารสั่งประจำ / Regular restaurant demand",
+      reason: { th: "ลูกค้าร้านอาหารสั่งประจำ", en: "Regular restaurant demand" },
       preferredSupplierId: "SUP-003",
       status: "approved",
       requestedBy: ORDER_OFFICER_ACTOR,

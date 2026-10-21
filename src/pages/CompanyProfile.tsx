@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { noText } from "../lib/text";
 import { Lock } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useData } from "../state/DataContext";
 import { useRole } from "../state/RoleContext";
 import type { CompanyProfile as Company } from "../data/types";
 import { PageHeader } from "../components/PageHeader";
-import { FieldLabel, inputClass } from "../components/FormKit";
+import { FieldLabel, TextPair, inputClass } from "../components/FormKit";
 import { SellerBlock } from "../components/TaxDocument";
 import { isValidThaiTaxId } from "../lib/business";
 import { useRunAction } from "../lib/useRunAction";
@@ -116,9 +117,18 @@ export default function CompanyProfile() {
             <h3 className="mb-1 text-sm font-semibold text-gray-900">{t("company.sectionPayment")}</h3>
             <p className="mb-3 text-xs text-gray-500">{t("company.paymentHint")}</p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {text(t("company.bankName"), draft.bankName ?? "", (v) => setDraft((d) => ({ ...d, bankName: v })), { placeholder: "ธนาคารกสิกรไทย / Kasikornbank" })}
-              {text(t("company.bankBranch"), draft.bankBranch ?? "", (v) => setDraft((d) => ({ ...d, bankBranch: v })))}
-              {text(t("company.bankAccountName"), draft.bankAccountName ?? "", (v) => setDraft((d) => ({ ...d, bankAccountName: v })))}
+              {(
+                [
+                  ["bankName", t("company.bankName"), { th: "ธนาคารกสิกรไทย", en: "Kasikornbank" }],
+                  ["bankBranch", t("company.bankBranch"), { th: "สาทร", en: "Sathorn" }],
+                  ["bankAccountName", t("company.bankAccountName"), undefined],
+                ] as const
+              ).map(([field, label, placeholder]) => (
+                <div key={field} className="sm:col-span-2">
+                  <FieldLabel>{label}</FieldLabel>
+                  <TextPair value={draft[field] ?? noText()} onChange={(v) => setDraft((d) => ({ ...d, [field]: v }))} placeholder={placeholder} testid={`company-${field}`} />
+                </div>
+              ))}
               {text(t("company.bankAccountNo"), draft.bankAccountNo ?? "", (v) => setDraft((d) => ({ ...d, bankAccountNo: v })), { placeholder: "123-4-56789-0" })}
               {text(t("company.promptPayId"), draft.promptPayId ?? "", (v) => setDraft((d) => ({ ...d, promptPayId: v })), {
                 invalid: !promptPayOk,
@@ -193,9 +203,9 @@ export default function CompanyProfile() {
                       address: draft.address,
                       phone: draft.phone,
                       email: draft.email,
-                      bankName: draft.bankName ?? "",
-                      bankBranch: draft.bankBranch ?? "",
-                      bankAccountName: draft.bankAccountName ?? "",
+                      bankName: draft.bankName ?? noText(),
+                      bankBranch: draft.bankBranch ?? noText(),
+                      bankAccountName: draft.bankAccountName ?? noText(),
                       bankAccountNo: draft.bankAccountNo ?? "",
                       promptPayId: draft.promptPayId ?? "",
                     }),

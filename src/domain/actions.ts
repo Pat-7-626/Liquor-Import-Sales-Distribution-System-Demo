@@ -74,6 +74,7 @@ import {
 } from "../lib/business";
 import type { Store } from "./store";
 import { makeId } from "./store";
+import { bothText, hasText, textIn, toText } from "../lib/text";
 import { ACCOUNTS, EXPENSE_ACCOUNTS, SYSTEM_ACCOUNTS, bankAmount, buildJournal } from "./ledger";
 import { WHT_RATES, firstOfMonth, lastOfMonth, suggestMatches, withholdingByMonth } from "./finance";
 
@@ -1463,7 +1464,11 @@ export function updateCompanyProfile(
   s: Store,
   ctx: Ctx,
   patch: Pick<CompanyProfile, "name" | "taxId" | "branch" | "address" | "phone" | "email"> &
-    Partial<Pick<CompanyProfile, "bankName" | "bankBranch" | "bankAccountName" | "bankAccountNo" | "promptPayId">>,
+    Partial<Pick<CompanyProfile, "bankAccountNo" | "promptPayId">> & {
+      bankName?: Bilingual | string;
+      bankBranch?: Bilingual | string;
+      bankAccountName?: Bilingual | string;
+    },
 ): ActionResult {
   const { company, setCompany, pushAudit, allowed } = bind(s, ctx);
 
@@ -1486,16 +1491,22 @@ export function updateCompanyProfile(
     address: { th: patch.address.th.trim(), en: patch.address.en.trim() },
     phone: patch.phone.trim(),
     email: patch.email.trim(),
-    bankName: (patch.bankName ?? company.bankName ?? "").trim(),
-    bankBranch: (patch.bankBranch ?? company.bankBranch ?? "").trim(),
-    bankAccountName: (patch.bankAccountName ?? company.bankAccountName ?? "").trim(),
+    bankName: toText(patch.bankName ?? company.bankName),
+    bankBranch: toText(patch.bankBranch ?? company.bankBranch),
+    bankAccountName: toText(patch.bankAccountName ?? company.bankAccountName),
     bankAccountNo: accountNo,
     promptPayId: promptPay,
   };
-  const changes = describeChanges(
-    { ...company, name: company.name.en, address: company.address.en },
-    { ...clean, name: clean.name.en, address: clean.address.en },
-  );
+  // Compared as one line each, so a change to either language shows.
+  const flat = (c: CompanyProfile) => ({
+    ...c,
+    name: c.name.en,
+    address: c.address.en,
+    bankName: bothText(c.bankName),
+    bankBranch: bothText(c.bankBranch),
+    bankAccountName: bothText(c.bankAccountName),
+  });
+  const changes = describeChanges(flat(company), flat(clean));
   if (changes.length === 0 && company.name.th === clean.name.th && company.address.th === clean.address.th) return OK;
   setCompany(clean);
   pushAudit({ entityType: "company", entityId: "COMPANY", action: "updated", summary: { th: `แก้ไขข้อมูลบริษัท ${changes.join("; ")}`, en: `Changed company profile ${changes.join("; ")}` } });
@@ -1847,7 +1858,8 @@ export interface ExpenseInput {
   payeeTaxId: string;
   payeeType: Expense["payeeType"];
   account: string;
-  description: string;
+  /** Thai and English, or one string (split if it reads "ไทย / English"). */
+  description: Bilingual | string;
   amount: number;
   vat: number;
   whtRate: number;
@@ -1869,8 +1881,8 @@ export function recordExpense(s: Store, ctx: Ctx, input: ExpenseInput): ActionRe
   const payee = input.payee.trim();
   if (!payee) return fail("กรุณาระบุผู้รับเงิน", "Enter who was paid");
   if (!EXPENSE_ACCOUNTS.some((a) => a.code === input.account)) return fail("กรุณาเลือกประเภทค่าใช้จ่าย", "Choose an expense account");
-  const description = input.description.trim();
-  if (!description) return fail("กรุณาระบุรายละเอียด", "Describe the expense");
+  const description = toText(input.description);
+  if (!hasText(description)) return fail("กรุณาระบุรายละเอียด", "Describe the expense");
   if (!(input.amount > 0 && input.amount < 1e10)) return fail("จำนวนเงินต้องมากกว่า 0", "Amount must be above 0");
   const amount = round2(input.amount);
   const vat = round2(input.vat);
@@ -1931,7 +1943,7 @@ export function remitWithholding(s: Store, ctx: Ctx, month: string, reference: s
     {
       entryNo,
       date: today,
-      memo: `นำส่งภาษีหัก ณ ที่จ่าย ${month} / Withholding tax remitted for ${month}${ref ? ` (${ref})` : ""}`,
+      memo: { th: `นำส่งภาษีหัก ณ ที่จ่าย ${month}${ref ? ` (${ref})` : ""}`, en: `Withholding tax remitted for ${month}${ref ? ` (${ref})` : ""}` },
       lines: [
         { account: "2410", debit: due.outstanding, credit: 0 },
         { account: "1110", debit: 0, credit: due.outstanding },
@@ -1956,7 +1968,8 @@ export function remitWithholding(s: Store, ctx: Ctx, month: string, reference: s
 
 export interface JournalInput {
   date: string;
-  memo: string;
+  /** Thai and English, or one string (split if it reads "ไทย / English"). */
+  memo: Bilingual | string;
   lines: { account: string; debit: number; credit: number }[];
   /** A statement line this entry explains — matched to it straight away. */
   bankLineId?: string | null;
@@ -1970,8 +1983,8 @@ export function postJournal(s: Store, ctx: Ctx, input: JournalInput): ActionResu
   if (!isIsoDate(input.date) || input.date > todayIso()) return fail("วันที่ต้องไม่เกินวันนี้", "The date can't be in the future");
   const open = checkOpenPeriod(company, input.date);
   if (!open.ok) return open;
-  const memo = input.memo.trim();
-  if (!memo) return fail("กรุณาระบุคำอธิบายรายการ", "Describe the entry");
+  const memo = toText(input.memo);
+  if (!hasText(memo)) return fail("กรุณาระบุคำอธิบายรายการ", "Describe the entry");
   if (input.lines.length < 2 || input.lines.length > 20) return fail("ต้องมี 2–20 บรรทัด", "An entry needs 2–20 lines");
   const lines = input.lines.map((l) => ({ account: l.account, debit: round2(l.debit || 0), credit: round2(l.credit || 0) }));
   for (const l of lines) {
@@ -2003,7 +2016,7 @@ export function postJournal(s: Store, ctx: Ctx, input: JournalInput): ActionResu
     entityId: entryNo,
     action: "created",
     sensitive: true,
-    summary: { th: `บันทึกรายการบัญชี ${entryNo}: ${memo} ฿${fmt(debit)}`, en: `Posted journal ${entryNo}: ${memo} ฿${fmt(debit)}` },
+    summary: { th: `บันทึกรายการบัญชี ${entryNo}: ${textIn(memo, "th")} ฿${fmt(debit)}`, en: `Posted journal ${entryNo}: ${textIn(memo, "en")} ฿${fmt(debit)}` },
   });
   return { ok: true, entryNo };
 }
@@ -2028,7 +2041,7 @@ export function reverseJournal(s: Store, ctx: Ctx, entryNo: string, reason: stri
     {
       entryNo: newNo,
       date: today,
-      memo: `กลับรายการ ${entryNo} / Reversal of ${entryNo}: ${why}`,
+      memo: { th: `กลับรายการ ${entryNo}: ${why}`, en: `Reversal of ${entryNo}: ${why}` },
       lines: j.lines.map((l) => ({ account: l.account, debit: l.credit, credit: l.debit })),
       kind: "manual",
       reverses: entryNo,
@@ -2144,7 +2157,8 @@ export interface QuotationInput {
   customerId: string;
   validUntil: string;
   lines: { sku: string; quantity: number; unitPrice: number; discountPercent: number }[];
-  notes: string;
+  /** Thai and English, or one string (split if it reads "ไทย / English"). */
+  notes: Bilingual | string;
 }
 
 export function createQuotation(s: Store, ctx: Ctx, input: QuotationInput): ActionResult & { quoteNo?: string } {
@@ -2175,7 +2189,7 @@ export function createQuotation(s: Store, ctx: Ctx, input: QuotationInput): Acti
     lines,
     netValue: sumLines(lines),
     status: "open",
-    notes: input.notes.trim(),
+    notes: toText(input.notes),
     createdBy: actorRef.current,
   };
   setQuotations((prev) => [quote, ...prev]);
@@ -2356,7 +2370,8 @@ export function cancelStockCount(s: Store, ctx: Ctx, countNo: string): ActionRes
 // ───────────────────────────── payment reminders ─────────────────────────────
 
 /** Records that a customer was reminded to pay what's overdue (the letter itself is printed or emailed). */
-export function recordReminder(s: Store, ctx: Ctx, customerId: string, level: number, note: string): ActionResult {
+export function recordReminder(s: Store, ctx: Ctx, customerId: string, level: number, noteInput: Bilingual | string): ActionResult {
+  const note = toText(noteInput);
   const { customers, salesOrders, arDocuments, setArReminders, pushAudit, allowed, actorRef } = bind(s, ctx);
 
   if (!allowed("recordPayment")) return DENIED;
@@ -2370,15 +2385,15 @@ export function recordReminder(s: Store, ctx: Ctx, customerId: string, level: nu
       .reduce((sum, i) => sum + i.open, 0),
   );
   if (overdue <= 0) return fail("ลูกค้ารายนี้ไม่มียอดค้างชำระเกินกำหนด", "This customer has nothing overdue");
-  setArReminders((prev) => [{ id: makeId(), customerId, date: today, level, overdueAmount: overdue, note: note.trim(), actor: actorRef.current }, ...prev]);
+  setArReminders((prev) => [{ id: makeId(), customerId, date: today, level, overdueAmount: overdue, note, actor: actorRef.current }, ...prev]);
   pushAudit({
     entityType: "customer",
     entityId: customerId,
     action: "updated",
     sensitive: true,
     summary: {
-      th: `ส่งหนังสือทวงถามครั้งที่ ${level} — ค้างชำระ ฿${fmt(overdue)}${note.trim() ? ` (${note.trim()})` : ""}`,
-      en: `Payment reminder ${level} sent — ฿${fmt(overdue)} overdue${note.trim() ? ` (${note.trim()})` : ""}`,
+      th: `ส่งหนังสือทวงถามครั้งที่ ${level} — ค้างชำระ ฿${fmt(overdue)}${hasText(note) ? ` (${textIn(note, "th")})` : ""}`,
+      en: `Payment reminder ${level} sent — ฿${fmt(overdue)} overdue${hasText(note) ? ` (${textIn(note, "en")})` : ""}`,
     },
   });
   return OK;
@@ -2389,7 +2404,8 @@ export function recordReminder(s: Store, ctx: Ctx, customerId: string, level: nu
 export interface PurchaseRequestInput {
   sku: string;
   quantity: number;
-  reason: string;
+  /** Thai and English, or one string (split if it reads "ไทย / English"). */
+  reason: Bilingual | string;
   preferredSupplierId: string | null;
 }
 
@@ -2400,8 +2416,8 @@ export function createPurchaseRequest(s: Store, ctx: Ctx, input: PurchaseRequest
   const product = products.find((p) => p.sku === input.sku);
   if (!product) return fail("ไม่พบสินค้า", "Product not found");
   if (!isWholePositive(input.quantity) || input.quantity > 100000) return fail("จำนวนต้องเป็นจำนวนเต็ม 1–100,000", "Quantity must be a whole number, 1–100,000");
-  const reason = input.reason.trim();
-  if (!reason) return fail("กรุณาระบุเหตุผล", "Say why it's needed");
+  const reason = toText(input.reason);
+  if (!hasText(reason)) return fail("กรุณาระบุเหตุผล", "Say why it's needed");
   if (input.preferredSupplierId && !suppliers.some((sp) => sp.supplierId === input.preferredSupplierId && sp.active)) return fail("ไม่พบผู้ขาย", "Supplier not found");
   const open = purchaseRequests.find((r) => r.sku === input.sku && (r.status === "pending" || r.status === "approved"));
   if (open) return fail(`มีคำขอซื้อ ${open.requestNo} ของสินค้านี้ค้างอยู่แล้ว`, `There's already an open request for this product (${open.requestNo})`);
@@ -2423,7 +2439,7 @@ export function createPurchaseRequest(s: Store, ctx: Ctx, input: PurchaseRequest
     entityType: "purchaseRequest",
     entityId: requestNo,
     action: "created",
-    summary: { th: `ขอซื้อ ${product.sku} × ${input.quantity} — ${reason}`, en: `Requested ${product.sku} × ${input.quantity} — ${reason}` },
+    summary: { th: `ขอซื้อ ${product.sku} × ${input.quantity} — ${textIn(reason, "th")}`, en: `Requested ${product.sku} × ${input.quantity} — ${textIn(reason, "en")}` },
   });
   return { ok: true, requestNo };
 }

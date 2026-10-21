@@ -2,6 +2,7 @@
 // a stock movement, a goods receipt, a supplier invoice, an expense — so the books can never disagree with
 // the screens that produced them. Only what no record covers (accruals, capital, corrections, tax
 // remittances) is posted by hand, as a manual journal. Every entry balances by construction.
+import { textIn } from "../lib/text";
 import type { Bilingual, SalesOrder } from "../data/types";
 import { splitVat } from "../lib/business";
 import type { Store } from "./store";
@@ -251,7 +252,7 @@ export function buildJournal(store: LedgerStore): JournalEntry[] {
       date: x.date,
       source: "expense",
       ref: x.docNo,
-      memo: { th: `${x.payee}: ${x.description}`, en: `${x.payee}: ${x.description}` },
+      memo: { th: `${x.payee}: ${textIn(x.description, "th")}`, en: `${x.payee}: ${textIn(x.description, "en")}` },
       lines: [dr(x.account, x.amount), dr("1410", x.vat), cr("2410", x.whtAmount), cr("1110", x.paid)],
       href: "/expenses",
     });
@@ -263,7 +264,7 @@ export function buildJournal(store: LedgerStore): JournalEntry[] {
       date: j.date,
       source: "manual",
       ref: j.entryNo,
-      memo: { th: j.memo, en: j.memo },
+      memo: { th: textIn(j.memo, "th"), en: textIn(j.memo, "en") },
       lines: j.lines.map((l) => ({ account: l.account, debit: r2(l.debit), credit: r2(l.credit) })),
       href: j.kind === "whtRemittance" ? "/tax/withholding" : "/accounting/manual-journals",
     });

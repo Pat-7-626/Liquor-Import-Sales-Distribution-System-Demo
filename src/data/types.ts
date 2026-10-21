@@ -493,7 +493,7 @@ export interface Expense {
   payeeType: "company" | "individual";
   /** Expense account (6xxx). */
   account: string;
-  description: string;
+  description: Bilingual;
   /** Before VAT. */
   amount: number;
   /** VAT on a tax invoice from the payee (reclaimable). */
@@ -538,7 +538,7 @@ export interface ArReminder {
   level: 1 | 2 | 3;
   /** What was overdue when it was sent. */
   overdueAmount: number;
-  note: string;
+  note: Bilingual;
   actor: Bilingual;
 }
 
@@ -546,7 +546,7 @@ export interface ArReminder {
 export interface ManualJournal {
   entryNo: string;
   date: string;
-  memo: string;
+  memo: Bilingual;
   lines: { account: string; debit: number; credit: number }[];
   kind: "manual" | "whtRemittance";
   /** For a tax remittance: the month ("YYYY-MM") whose withholding it pays. */
@@ -586,7 +586,7 @@ export interface Quotation {
   netValue: number;
   status: "open" | "accepted" | "declined";
   salesOrderNo?: string;
-  notes: string;
+  notes: Bilingual;
   createdBy: Bilingual;
 }
 
@@ -596,7 +596,7 @@ export interface PurchaseRequest {
   date: string;
   sku: string;
   quantity: number;
-  reason: string;
+  reason: Bilingual;
   preferredSupplierId: string | null;
   status: "pending" | "approved" | "rejected" | "ordered";
   requestedBy: Bilingual;
@@ -619,9 +619,9 @@ export interface CompanyProfile {
   /** Accounting months up to and including this date are closed: nothing can be dated into them. */
   closedThrough?: string;
   /** Where customers pay — printed on invoices, statements and reminders. */
-  bankName?: string;
-  bankBranch?: string;
-  bankAccountName?: string;
+  bankName?: Bilingual;
+  bankBranch?: Bilingual;
+  bankAccountName?: Bilingual;
   bankAccountNo?: string;
   /** PromptPay ID (13-digit tax ID or a mobile number) — a payment QR code is printed when set. */
   promptPayId?: string;

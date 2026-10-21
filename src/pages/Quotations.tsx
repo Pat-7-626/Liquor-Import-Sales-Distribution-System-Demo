@@ -1,3 +1,5 @@
+import { docText, hasText } from "../lib/text";
+import { noText } from "../lib/text";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ShoppingCart, Trash2, XCircle } from "lucide-react";
@@ -10,7 +12,7 @@ import { NewButton } from "../components/NewButton";
 import { Masked } from "../components/Masked";
 import { Dialog, DialogActions } from "../components/Dialog";
 import { TableContainer, EmptyRow, th, td } from "../components/Table";
-import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
+import { FieldLabel, TextPair, inputClass, selectClass } from "../components/FormKit";
 import { KpiTile } from "../components/charts";
 import { Both, BuyerBlock, DocDate, DocField, DocTh, DocumentHeader, PrintFrame, Signatures } from "../components/TaxDocument";
 import { useRunAction } from "../lib/useRunAction";
@@ -209,7 +211,7 @@ function QuotationDialog({ onClose }: { onClose: () => void }) {
   const [customerId, setCustomerId] = useState(active[0]?.customerId ?? "");
   const customer = customers.find((c) => c.customerId === customerId);
   const [validUntil, setValidUntil] = useState(addDays(todayIso(), 14));
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(noText);
   const priceFor = (sku: string) => {
     const p = products.find((x) => x.sku === sku);
     return p && customer ? computeChannelPrice(p, customer.channelType, priceLists) : (p?.suggestedPrice ?? 0);
@@ -322,10 +324,10 @@ function QuotationDialog({ onClose }: { onClose: () => void }) {
             </tr>
           </tfoot>
         </table>
-        <label className="block">
+        <div className="block">
           <FieldLabel>{t("qt.notes")}</FieldLabel>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass} />
-        </label>
+          <TextPair value={notes} onChange={setNotes} testid="qt-notes" />
+        </div>
         <p className="text-xs text-gray-500">{t("qt.noStockHeld")}</p>
         <DialogActions onCancel={onClose} submitLabel={t("qt.create")} disabled={!ok} testid="qt-save" />
       </form>
@@ -420,9 +422,11 @@ function QuotationPrint({ quote: q, onClose }: { quote: Quotation; onClose: () =
           <p className="text-gray-600">({englishBahtText(q.netValue)})</p>
         </Masked>
       </div>
-      {q.notes && (
+      {hasText(q.notes) && (
         <div className="mt-3">
-          <DocField label={{ th: "หมายเหตุ", en: "Notes" }}>{q.notes}</DocField>
+          <DocField label={{ th: "หมายเหตุ", en: "Notes" }}>
+            <Both {...docText(q.notes)} />
+          </DocField>
         </div>
       )}
       <p className="mt-3 text-xs text-gray-500">

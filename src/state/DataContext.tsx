@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
+  Bilingual,
   ChannelCode,
   ExchangeRate,
   CompanyProfile,
@@ -148,7 +149,7 @@ interface DataContextValue extends ClientState {
   convertQuotation: (quoteNo: string, plannedDeliveryDate?: string) => Result<{ order?: SalesOrder }>;
   createPurchaseRequest: (input: PurchaseRequestInput) => Result<{ requestNo?: string }>;
   decidePurchaseRequest: (requestNo: string, approve: boolean, note: string) => Result;
-  recordReminder: (customerId: string, level: number, note: string) => Result;
+  recordReminder: (customerId: string, level: number, note: Bilingual | string) => Result;
   startStockCount: (warehouse: string, note: string) => Result<{ countNo?: string }>;
   enterStockCount: (countNo: string, counts: { lotBatch: string; counted: number | null }[]) => Result;
   postStockCount: (countNo: string) => Result;

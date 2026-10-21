@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { both } from "../i18n/translations";
+import { hasText, noText } from "../lib/text";
 import { Link, useSearchParams } from "react-router-dom";
 import { Check, ShoppingBag, X } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
@@ -9,7 +11,7 @@ import { PageHeader } from "../components/PageHeader";
 import { NewButton } from "../components/NewButton";
 import { Dialog, DialogActions } from "../components/Dialog";
 import { TableContainer, EmptyRow, th, td } from "../components/Table";
-import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
+import { FieldLabel, TextPair, inputClass, selectClass } from "../components/FormKit";
 import { useRunAction } from "../lib/useRunAction";
 import { formatDate, formatNumber } from "../lib/format";
 import type { PurchaseRequest } from "../data/types";
@@ -90,7 +92,7 @@ export default function PurchaseRequests() {
                 </td>
                 <td className={`${td} text-right tabular-nums`}>{formatNumber(r.quantity, lang, 0)}</td>
                 <td className={`${td} max-w-xs whitespace-normal text-gray-600`}>
-                  {r.reason}
+                  {bi(r.reason)}
                   {r.decisionNote && <span className="block text-xs text-gray-500">↳ {r.decisionNote}</span>}
                 </td>
                 <td className={td}>
@@ -196,9 +198,9 @@ function RequestDialog({ sku: initialSku, qty, onClose }: { sku: string; qty: nu
   const [sku, setSku] = useState(products.some((p) => p.sku === initialSku) ? initialSku : (products[0]?.sku ?? ""));
   const [quantity, setQuantity] = useState(qty || policyOf(sku)?.reorderQty || 1);
   const [supplierId, setSupplierId] = useState(policyOf(sku)?.preferredSupplierId ?? "");
-  const [reason, setReason] = useState(initialSku ? t("pr.lowStockReason") : "");
+  const [reason, setReason] = useState(() => (initialSku ? both("pr.lowStockReason") : noText()));
   const product = products.find((p) => p.sku === sku);
-  const ok = sku && Number.isInteger(quantity) && quantity > 0 && reason.trim();
+  const ok = sku && Number.isInteger(quantity) && quantity > 0 && hasText(reason);
   return (
     <Dialog title={t("pr.new")} onClose={onClose}>
       <form
@@ -248,10 +250,10 @@ function RequestDialog({ sku: initialSku, qty, onClose }: { sku: string; qty: nu
               ))}
           </select>
         </label>
-        <label className="block">
+        <div className="block">
           <FieldLabel>{t("pr.reason")}</FieldLabel>
-          <input value={reason} onChange={(e) => setReason(e.target.value)} className={inputClass} data-testid="pr-reason" />
-        </label>
+          <TextPair value={reason} onChange={setReason} testid="pr-reason" />
+        </div>
         <DialogActions onCancel={onClose} submitLabel={t("pr.submit")} disabled={!ok} testid="pr-save" />
       </form>
     </Dialog>

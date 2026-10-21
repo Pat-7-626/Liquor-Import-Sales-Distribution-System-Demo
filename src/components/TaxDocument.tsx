@@ -1,3 +1,4 @@
+import { docText, hasText } from "../lib/text";
 import { useRef, type ReactNode } from "react";
 import { promptPayPayload } from "../lib/promptpay";
 import { QrCode } from "./QrCode";
@@ -268,9 +269,9 @@ export function PaymentBlock({ amount }: { amount: number }) {
         </p>
         {bank && (
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            <DocField label={{ th: "ธนาคาร", en: "Bank" }}>{company.bankName || "—"}</DocField>
-            <DocField label={{ th: "สาขา", en: "Branch" }}>{company.bankBranch || "—"}</DocField>
-            <DocField label={{ th: "ชื่อบัญชี", en: "Account name" }}>{company.bankAccountName || "—"}</DocField>
+            <DocField label={{ th: "ธนาคาร", en: "Bank" }}>{hasText(company.bankName) ? <Both {...docText(company.bankName)} /> : "—"}</DocField>
+            <DocField label={{ th: "สาขา", en: "Branch" }}>{hasText(company.bankBranch) ? <Both {...docText(company.bankBranch)} /> : "—"}</DocField>
+            <DocField label={{ th: "ชื่อบัญชี", en: "Account name" }}>{hasText(company.bankAccountName) ? <Both {...docText(company.bankAccountName)} /> : "—"}</DocField>
             <DocField label={{ th: "เลขที่บัญชี", en: "Account no." }}>
               <span className="font-medium tabular-nums">{bank}</span>
             </DocField>

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { hasText, noText, toText } from "../lib/text";
 import { CheckCircle2, FileText, Link2, Lock, Plus, Receipt, RotateCcw, Trash2, Unlink, Upload, Wand2, XCircle } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useBi } from "../lib/useBi";
@@ -8,7 +9,7 @@ import { PageHeader } from "../components/PageHeader";
 import { NewButton } from "../components/NewButton";
 import { Dialog, DialogActions } from "../components/Dialog";
 import { TableContainer, EmptyRow, th, td } from "../components/Table";
-import { FieldLabel, inputClass, selectClass } from "../components/FormKit";
+import { FieldLabel, TextPair, inputClass, selectClass } from "../components/FormKit";
 import { BarList, ChartCard, KpiTile } from "../components/charts";
 import { ExpenseVoucher, WithholdingCertificate } from "../components/FinanceDocuments";
 import { parseCsv, readCsvText } from "../components/CsvImport";
@@ -126,7 +127,7 @@ export function Expenses() {
             exportToExcel(
               "expenses",
               [both("fin.docNo"), both("erp.date"), both("fin.payee"), both("tax.taxId"), both("gl.account"), both("fin.description"), both("fin.amount"), both("vat.vat"), both("fin.wht"), both("fin.paid")],
-              shown.map((x) => [x.docNo, x.date, x.payee, x.payeeTaxId, `${x.account} ${accountName(x.account)}`, x.description, x.amount, x.vat, x.whtAmount, x.paid]),
+              shown.map((x) => [x.docNo, x.date, x.payee, x.payeeTaxId, `${x.account} ${accountName(x.account)}`, bi(x.description), x.amount, x.vat, x.whtAmount, x.paid]),
             )
           }
           className="ml-auto rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -159,7 +160,7 @@ export function Expenses() {
               </td>
               <td className={`${td} max-w-xs whitespace-normal`}>
                 {x.payee}
-                <span className="block text-xs text-gray-500">{x.description}</span>
+                <span className="block text-xs text-gray-500">{bi(x.description)}</span>
               </td>
               <td className={td}>
                 <span className="mr-1 font-mono text-xs text-gray-400">{x.account}</span>
@@ -203,7 +204,7 @@ function ExpenseDialog({ onClose }: { onClose: () => void }) {
     payeeTaxId: "",
     payeeType: "company",
     account: "6900",
-    description: "",
+    description: noText(),
     amount: 0,
     vat: 0,
     whtRate: 3,
@@ -216,7 +217,7 @@ function ExpenseDialog({ onClose }: { onClose: () => void }) {
   const wht = r2((f.amount * f.whtRate) / 100);
   const paid = r2(f.amount + vat - wht);
   const taxIdOk = !f.payeeTaxId || isValidThaiTaxId(f.payeeTaxId);
-  const ok = f.payee.trim() && f.description.trim() && f.amount > 0 && taxIdOk && (f.whtRate === 0 || isValidThaiTaxId(f.payeeTaxId));
+  const ok = f.payee.trim() && hasText(toText(f.description)) && f.amount > 0 && taxIdOk && (f.whtRate === 0 || isValidThaiTaxId(f.payeeTaxId));
   return (
     <Dialog title={t("fin.newExpense")} onClose={onClose} wide>
       <form
@@ -252,10 +253,10 @@ function ExpenseDialog({ onClose }: { onClose: () => void }) {
             ))}
           </select>
         </label>
-        <label className="block sm:col-span-2">
+        <div className="block sm:col-span-2">
           <FieldLabel>{t("fin.description")}</FieldLabel>
-          <input value={f.description} onChange={(e) => set({ description: e.target.value })} className={inputClass} data-testid="ex-description" />
-        </label>
+          <TextPair value={toText(f.description)} onChange={(v) => set({ description: v })} testid="ex-description" />
+        </div>
         <label className="block">
           <FieldLabel>{t("fin.amountExVat")}</FieldLabel>
           <input type="number" step="0.01" min={0} value={f.amount || ""} onChange={(e) => set({ amount: Number(e.target.value) })} className={inputClass} data-testid="ex-amount" />
@@ -324,6 +325,7 @@ function ExpenseDialog({ onClose }: { onClose: () => void }) {
 
 export function Withholding() {
   const { t, lang } = useLanguage();
+  const bi = useBi();
   const { can } = useRole();
   const runAction = useRunAction();
   const { expenses, manualJournals, remitWithholding } = useData();
@@ -345,7 +347,7 @@ export function Withholding() {
         .filter((x) => x.date.startsWith(month) && x.whtAmount > 0 && x.payeeType === payeeType)
         // The same order the certificates number their "line no. on the return".
         .sort((a, b) => a.date.localeCompare(b.date) || a.docNo.localeCompare(b.docNo))
-        .map((x, i) => [i + 1, x.payee, x.payeeTaxId, x.date, x.description, `${x.whtRate}%`, x.amount, x.whtAmount]),
+        .map((x, i) => [i + 1, x.payee, x.payeeTaxId, x.date, bi(x.description), `${x.whtRate}%`, x.amount, x.whtAmount]),
     );
 
   return (
@@ -515,7 +517,7 @@ export function ManualJournals() {
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${j.kind === "whtRemittance" ? "bg-amber-50 text-amber-700" : "bg-gray-100 text-gray-600"}`}>
                     {j.kind === "whtRemittance" ? t("fin.kindWht") : j.reverses ? t("fin.kindReversal") : t("fin.kindManual")}
                   </span>
-                  <span className="text-gray-700">{j.memo}</span>
+                  <span className="text-gray-700">{bi(j.memo)}</span>
                 </span>
                 <span className="flex items-center gap-2 text-xs text-gray-500">
                   {bi(j.actor)} · {baht(total)}
@@ -587,7 +589,8 @@ function JournalDialog({ onClose, bankLine }: { onClose: () => void; bankLine?: 
   const { postJournal } = useData();
   const usable = ACCOUNTS.filter((a) => !SYSTEM_ACCOUNTS.includes(a.code));
   const [date, setDate] = useState(bankLine?.date ?? todayIso());
-  const [memo, setMemo] = useState(bankLine?.description ?? "");
+  // A statement line's description is a starting point; it goes in the language it's written in.
+  const [memo, setMemo] = useState(() => toText(bankLine?.description ?? ""));
   const [lines, setLines] = useState<DraftLine[]>(
     bankLine
       ? bankLine.amount < 0
@@ -608,7 +611,7 @@ function JournalDialog({ onClose, bankLine }: { onClose: () => void; bankLine?: 
   const debit = r2(lines.reduce((s, l) => s + n(l.debit), 0));
   const credit = r2(lines.reduce((s, l) => s + n(l.credit), 0));
   const linesOk = lines.every((l) => (n(l.debit) > 0) !== (n(l.credit) > 0) && n(l.debit) >= 0 && n(l.credit) >= 0);
-  const ok = memo.trim() && lines.length >= 2 && linesOk && debit === credit && debit > 0;
+  const ok = hasText(memo) && lines.length >= 2 && linesOk && debit === credit && debit > 0;
   const setLine = (i: number, patch: Partial<DraftLine>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
   return (
@@ -628,10 +631,10 @@ function JournalDialog({ onClose, bankLine }: { onClose: () => void; bankLine?: 
             <input type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} className={inputClass} />
             <span className="mt-1 block text-xs text-gray-500">{formatDate(date, lang)}</span>
           </label>
-          <label className="block sm:col-span-2">
+          <div className="block sm:col-span-2">
             <FieldLabel>{t("gl.memo")}</FieldLabel>
-            <input value={memo} onChange={(e) => setMemo(e.target.value)} className={inputClass} data-testid="jv-memo" />
-          </label>
+            <TextPair value={memo} onChange={setMemo} testid="jv-memo" />
+          </div>
         </div>
         <table className="w-full text-sm">
           <thead>

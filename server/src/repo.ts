@@ -3,6 +3,8 @@
  * a before/after snapshot and writes only what changed (upserts, plus child-row replacement for the
  * changed parents). Commands run load → action → save inside one locked transaction (see commands.ts).
  */
+import { toText } from "../../src/lib/text.ts";
+import type { Bilingual } from "../../src/data/types.ts";
 import type { JSONValue } from "postgres";
 import type {
   StockCount,
@@ -343,9 +345,9 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
       openingDate: (co?.opening_date as string) ?? "2026-04-30",
       openingBank: (co?.opening_bank as number) ?? 0,
       ...(co?.closed_through ? { closedThrough: co.closed_through as string } : {}),
-      bankName: (co?.bank_name as string) ?? "",
-      bankBranch: (co?.bank_branch as string) ?? "",
-      bankAccountName: (co?.bank_account_name as string) ?? "",
+      bankName: textFrom(co?.bank_name),
+      bankBranch: textFrom(co?.bank_branch),
+      bankAccountName: textFrom(co?.bank_account_name),
       bankAccountNo: (co?.bank_account_no as string) ?? "",
       promptPayId: (co?.promptpay_id as string) ?? "",
       logo: (co?.logo as string) ?? "",
@@ -361,7 +363,7 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
         payeeTaxId: r.payee_tax_id as string,
         payeeType: r.payee_type as Expense["payeeType"],
         account: r.account as string,
-        description: r.description as string,
+        description: textFrom(r.description),
         amount: r.amount as number,
         vat: r.vat as number,
         whtRate: r.wht_rate as number,
@@ -377,7 +379,7 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
         clean({
           entryNo: r.entry_no as string,
           date: r.date as string,
-          memo: r.memo as string,
+          memo: textFrom(r.memo),
           lines: r.lines as ManualJournal["lines"],
           kind: r.kind as ManualJournal["kind"],
           period: r.period as string | undefined,
@@ -408,7 +410,7 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
           netValue: r.net_value as number,
           status: r.status as Quotation["status"],
           salesOrderNo: r.sales_order_no as string | undefined,
-          notes: r.notes as string,
+          notes: textFrom(r.notes),
           createdBy: r.created_by as Quotation["createdBy"],
         }),
     ),
@@ -433,7 +435,7 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
         date: r.date as string,
         level: r.level as ArReminder["level"],
         overdueAmount: r.overdue_amount as number,
-        note: r.note as string,
+        note: textFrom(r.note),
         actor: r.actor as ArReminder["actor"],
       }),
     ),
@@ -444,7 +446,7 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
           date: r.date as string,
           sku: r.sku as string,
           quantity: r.quantity as number,
-          reason: r.reason as string,
+          reason: textFrom(r.reason),
           preferredSupplierId: (r.preferred_supplier_id as string | null) ?? null,
           status: r.status as PurchaseRequest["status"],
           requestedBy: r.requested_by as PurchaseRequest["requestedBy"],
@@ -483,6 +485,8 @@ export const auditFromRow = (r: Row): AuditEntry =>
 
 // ───────────────────────────── rows ─────────────────────────────
 
+/** Two-language text columns (jsonb); anything older or odd comes back through the same split as typed text. */
+const textFrom = (v: unknown) => toText(v as string | Bilingual | null);
 const json = (db: Db, v: unknown) => (v === undefined || v === null ? null : db.json(v as JSONValue));
 
 const productRow = (p: Product) => ({
@@ -652,7 +656,7 @@ const expenseRow = (db: Db, x: Expense) => ({
   payee_tax_id: x.payeeTaxId,
   payee_type: x.payeeType,
   account: x.account,
-  description: x.description,
+  description: json(db, x.description),
   amount: x.amount,
   vat: x.vat,
   wht_rate: x.whtRate,
@@ -665,7 +669,7 @@ const expenseRow = (db: Db, x: Expense) => ({
 const journalRow = (db: Db, j: ManualJournal) => ({
   entry_no: j.entryNo,
   date: j.date,
-  memo: j.memo,
+  memo: json(db, j.memo),
   lines: json(db, j.lines),
   kind: j.kind,
   period: j.period ?? null,
@@ -690,7 +694,7 @@ const quotationRow = (db: Db, q: Quotation) => ({
   net_value: q.netValue,
   status: q.status,
   sales_order_no: q.salesOrderNo ?? null,
-  notes: q.notes,
+  notes: json(db, q.notes),
   created_by: json(db, q.createdBy),
 });
 const requestRow = (db: Db, r: PurchaseRequest) => ({
@@ -698,7 +702,7 @@ const requestRow = (db: Db, r: PurchaseRequest) => ({
   date: r.date,
   sku: r.sku,
   quantity: r.quantity,
-  reason: r.reason,
+  reason: json(db, r.reason),
   preferred_supplier_id: r.preferredSupplierId,
   status: r.status,
   requested_by: json(db, r.requestedBy),
@@ -775,9 +779,9 @@ export async function saveStore(db: Db, before: Store, after: Store) {
         opening_date: c.openingDate,
         opening_bank: c.openingBank,
         closed_through: c.closedThrough ?? null,
-        bank_name: c.bankName ?? "",
-        bank_branch: c.bankBranch ?? "",
-        bank_account_name: c.bankAccountName ?? "",
+        bank_name: json(db, toText(c.bankName)),
+        bank_branch: json(db, toText(c.bankBranch)),
+        bank_account_name: json(db, toText(c.bankAccountName)),
         bank_account_no: c.bankAccountNo ?? "",
         promptpay_id: c.promptPayId ?? "",
         logo: c.logo ?? "",
@@ -878,7 +882,7 @@ export async function saveStore(db: Db, before: Store, after: Store) {
       date: r.date,
       level: r.level,
       overdue_amount: r.overdueAmount,
-      note: r.note,
+      note: json(db, r.note),
       actor: json(db, r.actor),
     })),
   );

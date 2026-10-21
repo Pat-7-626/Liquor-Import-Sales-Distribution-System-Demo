@@ -13,6 +13,8 @@ const id = z.string().trim().min(1).max(64);
 const num = z.number().finite();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const bi = z.object({ th: str, en: str });
+/** Free text in Thai and English (either may be empty), or one string — split if it reads "ไทย / English". */
+const text = (max = 500) => z.union([z.string().trim().max(max), z.object({ th: z.string().trim().max(max), en: z.string().trim().max(max) })]);
 const channel = z.enum(["distributor", "retailWholesale", "restaurantBar", "online"]);
 const country = z.enum(["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan"]);
 const line = z.object({ sku: z.string().max(64), abv: num, qty: num, unitPrice: num });
@@ -40,9 +42,9 @@ const COMMANDS = {
         address: bi,
         phone: str,
         email: str,
-        bankName: z.string().max(100).optional(),
-        bankBranch: z.string().max(100).optional(),
-        bankAccountName: z.string().max(150).optional(),
+        bankName: text(100).optional(),
+        bankBranch: text(100).optional(),
+        bankAccountName: text(150).optional(),
         bankAccountNo: z.string().max(30).optional(),
         promptPayId: z.string().max(20).optional(),
       }),
@@ -87,7 +89,7 @@ const COMMANDS = {
         payeeTaxId: z.string().trim().max(20),
         payeeType: z.enum(["company", "individual"]),
         account: z.string().max(10),
-        description: str,
+        description: text(),
         amount: num,
         vat: num,
         whtRate: num,
@@ -102,7 +104,7 @@ const COMMANDS = {
     args: z.tuple([
       z.object({
         date,
-        memo: str,
+        memo: text(),
         lines: z.array(z.object({ account: z.string().max(10), debit: num, credit: num })).min(2).max(20),
         bankLineId: id.nullable().optional(),
       }),
@@ -124,7 +126,7 @@ const COMMANDS = {
         customerId: id,
         validUntil: date,
         lines: z.array(z.object({ sku: id, quantity: num, unitPrice: num, discountPercent: num })).min(1).max(50),
-        notes: str,
+        notes: text(),
       }),
     ]),
     run: A.createQuotation,
@@ -132,7 +134,7 @@ const COMMANDS = {
   declineQuotation: { args: z.tuple([id, str]), run: A.declineQuotation },
   convertQuotation: { args: z.union([z.tuple([id]), z.tuple([id, date])]), run: A.convertQuotation },
   createPurchaseRequest: {
-    args: z.tuple([z.object({ sku: id, quantity: num, reason: str, preferredSupplierId: id.nullable() })]),
+    args: z.tuple([z.object({ sku: id, quantity: num, reason: text(), preferredSupplierId: id.nullable() })]),
     run: A.createPurchaseRequest,
   },
   decidePurchaseRequest: { args: z.tuple([id, z.boolean(), str]), run: A.decidePurchaseRequest },
@@ -140,7 +142,7 @@ const COMMANDS = {
   enterStockCount: { args: z.tuple([id, z.array(z.object({ lotBatch: id, counted: num.nullable() })).min(1).max(2000)]), run: A.enterStockCount },
   postStockCount: { args: z.tuple([id]), run: A.postStockCount },
   cancelStockCount: { args: z.tuple([id]), run: A.cancelStockCount },
-  recordReminder: { args: z.tuple([id, z.number().int(), z.string().trim().max(300)]), run: A.recordReminder },
+  recordReminder: { args: z.tuple([id, z.number().int(), text(300)]), run: A.recordReminder },
   returnSalesLines: {
     args: z.tuple([id, z.array(z.object({ line: z.number().int().min(0).max(49), quantity: num })).min(1).max(50), z.string().trim().max(200)]),
     run: A.returnSalesLines,

@@ -1918,6 +1918,12 @@ const dict = {
     title: { th: "บัญชีของฉัน", en: "My account" },
   },
 
+  text: {
+    thai: { th: "ภาษาไทย", en: "Thai" },
+    english: { th: "ภาษาอังกฤษ", en: "English" },
+    oneIsEnough: { th: "กรอกภาษาเดียวก็ได้ — จะแสดงข้อความนั้นทั้งสองภาษา", en: "One language is enough — it then shows in both" },
+  },
+
   twoFactor: {
     title: { th: "ยืนยันสองขั้นตอน", en: "Two-step sign-in" },
     short: { th: "2 ขั้นตอน", en: "2-step" },

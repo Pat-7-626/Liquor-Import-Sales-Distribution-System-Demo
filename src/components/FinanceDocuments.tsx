@@ -1,3 +1,4 @@
+import { docText } from "../lib/text";
 import type { ReactNode } from "react";
 import type { ApDocument, Expense } from "../data/types";
 import { useData } from "../state/DataContext";
@@ -93,7 +94,7 @@ export function ExpenseVoucher({ expense: x, onClose }: { expense: Expense; onCl
               <>
                 <span className="mr-2 align-top font-mono text-xs text-gray-400">{x.account}</span>
                 <Both th={account?.name.th ?? x.account} en={account?.name.en ?? ""} />
-                <span className="block text-xs text-gray-500">{x.description}</span>
+                <Both {...docText(x.description)} className="block text-xs text-gray-500" />
               </>
             ),
             amount: x.amount,
@@ -228,7 +229,7 @@ export function WithholdingCertificate({ expense: x, onClose }: { expense: Expen
       .filter((e) => e.date.startsWith(x.date.slice(0, 7)) && e.whtAmount > 0 && e.payeeType === x.payeeType)
       .sort((a, b) => a.date.localeCompare(b.date) || a.docNo.localeCompare(b.docNo))
       .findIndex((e) => e.docNo === x.docNo) + 1;
-  const what = INCOME_TYPE[x.account] ?? { th: x.description, en: x.description };
+  const what = INCOME_TYPE[x.account] ?? docText(x.description);
   const sign = Boolean(company.printSignature && company.signature);
 
   const copy = (no: 1 | 2) => (
