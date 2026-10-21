@@ -222,7 +222,7 @@ export function GlobalSearch() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-500 shadow-sm hover:border-gray-300"
+        className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-500 shadow-sm hover:border-gray-300"
         aria-label={t("search.open")}
         data-testid="search-open"
       >

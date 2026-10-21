@@ -472,8 +472,8 @@ export default function ImportOrderDetail() {
                       <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{t("products.col.packageSize")}</th>
                       <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{t("newImportOrder.lineAbv")}</th>
                       <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{t("newImportOrder.lineQty")}</th>
-                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500 whitespace-nowrap">{t("newImportOrder.lineUnitPrice")}</th>
-                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500 whitespace-nowrap">{t("importOrderDetail.lineTotal")}</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500 whitespace-nowrap">{`${t("newImportOrder.lineUnitPrice").replace(/\s*\(.*\)$/, "")} (${currency})`}</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500 whitespace-nowrap">{`${t("importOrderDetail.lineTotal").replace(/\s*\(.*\)$/, "")} (${currency})`}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">

@@ -1435,8 +1435,8 @@ const dict = {
     plTitle: { th: "งบกำไรขาดทุน", en: "Profit & Loss" },
     plSubtitle: { th: "รายได้และค่าใช้จ่ายในช่วงเวลาที่เลือก", en: "Income and expenses for the period" },
     plNote: {
-      th: "ยอดขายไม่รวม VAT ต้นทุนขายคือต้นทุนนำเข้าจริงของล็อตที่ขาย ระบบนี้ยังไม่บันทึกค่าใช้จ่ายดำเนินงาน (เงินเดือน ค่าเช่า ฯลฯ)",
-      en: "Sales exclude VAT; cost of sales is the landed cost of the lots actually sold. Operating expenses (salaries, rent…) aren't recorded in this system.",
+      th: "ยอดขายไม่รวม VAT ต้นทุนขายคือต้นทุนนำเข้าจริงของล็อตที่ขาย ค่าใช้จ่ายดำเนินงานมาจากหน้าค่าใช้จ่ายและรายการบัญชีที่บันทึกเอง",
+      en: "Sales exclude VAT; cost of sales is the landed cost of the lots actually sold. Operating expenses come from Expenses and manual journals.",
     },
     bsTitle: { th: "งบแสดงฐานะการเงิน", en: "Balance Sheet" },
     bsSubtitle: { th: "สินทรัพย์ หนี้สิน และส่วนของเจ้าของ ณ วันที่เลือก", en: "Assets, liabilities and equity at a date" },
@@ -1455,8 +1455,8 @@ const dict = {
     payable: { th: "ภาษีที่ต้องชำระ", en: "Tax payable" },
     credit: { th: "ภาษีชำระเกิน (ยกไป)", en: "Excess tax (carried forward)" },
     note: {
-      th: "ภาษีขายจากใบกำกับภาษี ใบลดหนี้ และใบเพิ่มหนี้ที่ออกในเดือน · ภาษีซื้อจากภาษีนำเข้าตามใบขนสินค้า",
-      en: "Output tax from the tax invoices, credit and debit notes issued in the month; input tax is import VAT on customs entries.",
+      th: "ภาษีขายจากใบกำกับภาษี ใบลดหนี้ และใบเพิ่มหนี้ที่ออกในเดือน · ภาษีซื้อจากภาษีนำเข้าตามใบขนสินค้า และภาษีตามใบกำกับภาษีค่าใช้จ่าย",
+      en: "Output tax from the tax invoices, credit and debit notes issued in the month; input tax is import VAT on customs entries and VAT on expense tax invoices.",
     },
     outputReport: { th: "รายงานภาษีขาย", en: "Output tax report" },
     inputReport: { th: "รายงานภาษีซื้อ", en: "Input tax report" },
@@ -1464,7 +1464,7 @@ const dict = {
     party: { th: "ชื่อผู้ซื้อ / ผู้ขาย", en: "Customer / supplier" },
     base: { th: "มูลค่าสินค้า", en: "Value" },
     vat: { th: "ภาษี", en: "VAT" },
-    customsEntry: { th: "เลขที่ใบขนสินค้า", en: "Customs entry" },
+    customsEntry: { th: "ใบขนสินค้า / ใบกำกับภาษี", en: "Customs entry / tax invoice" },
   },
 
   returns: {
