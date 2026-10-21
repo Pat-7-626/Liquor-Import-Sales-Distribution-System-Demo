@@ -265,7 +265,19 @@ const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toIS
 const eurRate = base.exchangeRates.filter((r) => r.currency === "EUR" && r.effectiveDate <= today).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0].rate;
 const vodka = base.products.find((p) => p.sku === "SKU-1007");
 const dutyRate = (base.taxSettings.dutyRates.filter((r) => vodka.hsCode.startsWith(r.hsPrefix)).sort((a, b) => b.hsPrefix.length - a.hsPrefix.length)[0]?.dutyPercent ?? base.taxSettings.defaultDutyPercent) / 100;
-const excisePerBottle = 40 * base.taxSettings.exciseThbPerAbvLiter * (vodka.packageSize / 1000);
+// Excise worked out by hand the Excise Department's way (Excise Act B.E. 2560): a share of the suggested
+// retail price before VAT + baht per litre of pure alcohol; Interior Ministry tax and fund levies on top.
+const ts = base.taxSettings;
+const spirits = ts.exciseRates.find((r) => r.kind === "spirits");
+const exciseOnly = (vodka.suggestedPrice / (1 + ts.vatPercent / 100)) * (spirits.valuePercent / 100) + (vodka.packageSize / 1000) * 0.4 * spirits.perLitreAlcohol;
+const excisePerBottle = exciseOnly * (1 + ts.localTaxPercent / 100 + ts.fundsPercent / 100);
+check(
+  "default rates follow the Thai structure (MFN duty; 2017 excise tariff; Interior tax 10%; funds 7.5%)",
+  dutyRate === 0.6 && spirits.valuePercent === 20 && spirits.perLitreAlcohol === 255 && ts.localTaxPercent === 10 && ts.fundsPercent === 7.5,
+);
+// A real case on paper: a 700 ml, 40% vodka with a ฿790 suggested retail price —
+// 790 ÷ 1.07 × 20% = 147.66 + 0.7 L × 40% × ฿255 = 71.40 → excise 219.06; + 10% Interior tax 21.91; + 7.5% funds 16.43.
+check("a bottle of vodka carries ฿257.40 of excise, Interior tax and fund levies", Math.abs(excisePerBottle - 257.4) < 0.01, excisePerBottle.toFixed(2));
 const supplierThb = (vodka.costPrice - excisePerBottle) / (1 + dutyRate);
 const eurPrice = Math.round((supplierThb / eurRate) * 100) / 100;
 const io = await off.cmd("createImportOrder", {
@@ -273,6 +285,18 @@ const io = await off.cmd("createImportOrder", {
   intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: "SKU-1007", abv: 40, qty: 100, unitPrice: eurPrice }],
   logistics: { manufacturerRegNo: "SE-VOD-0093", blAwbNumber: "T1", origin: "Stockholm", destination: "Bangkok", currency: "EUR", paymentTerms: "T/T" }, importLicenseNo: null,
 });
+{
+  // Customs' arithmetic for 100 bottles: duty on the goods; excise + levies; VAT on all of it together.
+  const t = io.json.result.order?.tax ?? io.json.state?.importOrders.find((o) => o.lineItems?.[0]?.unitPrice === eurPrice)?.tax;
+  const goods = 100 * eurPrice * eurRate;
+  const duty = goods * dutyRate;
+  const vat = (goods + duty + 100 * excisePerBottle) * 0.07;
+  check(
+    "import order tax: duty, excise, Interior tax, funds and import VAT as Customs works them out",
+    t && Math.abs(t.importDuty - duty) <= 1 && Math.abs(t.exciseTax - 100 * exciseOnly) <= 1 && Math.abs(t.localTax - 10 * exciseOnly) <= 1 && Math.abs(t.funds - 7.5 * exciseOnly) <= 1 && Math.abs(t.vat - vat) <= 2 && t.exciseStampCount === 100,
+    JSON.stringify(t),
+  );
+}
 const ioNo = io.json.result.order?.orderNo;
 check("import order created; backdated order date ignored", io.json.result.ok && io.json.result.order.orderDate !== "2020-01-01", ioNo);
 check(
@@ -357,6 +381,37 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   const equity = tb.accounts.filter((a) => a.code >= "3" && a.code < "4").reduce((s, a) => s + a.balance, 0);
   const profit = tb.accounts.filter((a) => a.code >= "4" && a.code < "5").reduce((s, a) => s + a.balance, 0) - tb.accounts.filter((a) => a.code >= "5").reduce((s, a) => s + a.balance, 0);
   check("balance sheet balances (assets = liabilities + equity + profit)", Math.abs(assets - liab - equity - profit) < 0.05, `${assets.toFixed(2)} vs ${(liab + equity + profit).toFixed(2)}`);
+  {
+    // The VAT return from the source documents, month by month, the way the Revenue Code works it: each
+    // invoice's VAT at its own rate (price includes VAT), credit notes take theirs back, debit notes add;
+    // input tax is import VAT on what arrived plus VAT on expense tax invoices.
+    const journal = (await sup.call("GET", "/api/accounting/journal")).json;
+    const split = (gross, rate) => { const base = Math.round((gross / (1 + rate / 100)) * 100) / 100; return gross - base; };
+    const rateOf = (orderNo) => st2.salesOrders.find((o) => o.orderNo === orderNo)?.invoice?.vatPercent ?? st2.taxSettings.vatPercent;
+    const months = [...new Set(journal.map((e) => e.date.slice(0, 7)))];
+    const bad = [];
+    for (const m of months) {
+      const inM = (d) => d && d.startsWith(m);
+      const output =
+        st2.salesOrders.filter((o) => o.invoice && inM(o.invoiceDate)).reduce((x, o) => x + split(o.invoice.netValue, o.invoice.vatPercent), 0) -
+        st2.arDocuments.filter((d) => d.type === "creditNote" && inM(d.date)).reduce((x, d) => x + split(d.amount, rateOf(d.reference)), 0) +
+        st2.arDocuments.filter((d) => d.type === "debitNote" && inM(d.date)).reduce((x, d) => x + split(d.amount, rateOf(d.reference)), 0);
+      const input =
+        st2.expenses.filter((x) => inM(x.date)).reduce((x, e) => x + e.vat, 0) +
+        st2.importOrders
+          .filter((o) => o.receiving && inM(o.receiving.receivedDate))
+          .reduce((x, o) => {
+            const ordered = o.lineItems.reduce((y, l) => y + l.qty * l.unitPrice, 0);
+            const got = o.receiving.lines.reduce((y, l) => y + l.receivedQty * (o.lineItems.find((li) => li.sku === l.sku)?.unitPrice ?? 0), 0);
+            return x + (ordered > 0 ? Math.round((o.tax?.vat ?? 0) * (got / ordered) * 100) / 100 : 0);
+          }, 0);
+      const books = (code, side) => journal.filter((e) => e.date.startsWith(m)).reduce((x, e) => x + e.lines.filter((l) => l.account === code).reduce((y, l) => y + l[side], 0), 0);
+      const outBooks = books("2210", "credit") - books("2210", "debit");
+      const inBooks = books("1410", "debit");
+      if (Math.abs(output - outBooks) > 0.05 || Math.abs(input - inBooks) > 0.05) bad.push(`${m}: out ${output.toFixed(2)}/${outBooks.toFixed(2)} in ${input.toFixed(2)}/${inBooks.toFixed(2)}`);
+    }
+    check("every month's VAT return agrees with the invoices, notes, imports and expenses behind it", months.length > 0 && bad.length === 0, bad.slice(0, 3).join("; "));
+  }
   check("roles without price access can't read the books", (await wh.call("GET", "/api/accounting/trial-balance")).status === 403);
   check("restricted roles get payables amounts masked", (await fullState(wh)).apDocuments.every((d) => d.amount === 0 && d.amountThb === 0));
   check("restricted roles get lot costs masked", (await fullState(wh)).inventory.every((i) => !i.unitCost));

@@ -155,6 +155,7 @@ const dict = {
   },
 
   products: {
+    unitsPerPack: { th: "จำนวนต่อแพ็ก (ขวด/กระป๋อง)", en: "Units per pack (bottles/cans)" },
     title: { th: "สินค้า / SKU", en: "Products / SKU" },
     subtitle: {
       th: "ข้อมูลหลักสินค้าสุรา ใช้เป็นฐานอ้างอิงในออเดอร์นำเข้าและออเดอร์ขาย",
@@ -318,8 +319,8 @@ const dict = {
     exciseStampCount: { th: "จำนวนแสตมป์สรรพสามิตที่ต้องใช้", en: "Excise Stamps Required" },
     noTax: { th: "ยังไม่มีการคำนวณภาษีสำหรับออเดอร์นี้", en: "No tax breakdown calculated for this order" },
     taxDisclaimer: {
-      th: "สูตรคำนวณอย่างง่ายสำหรับสาธิต ไม่ใช่อัตราภาษีจริงของกรมสรรพสามิต/ศุลกากร",
-      en: "Illustrative demo formula — not the real Excise/Customs tariff schedule",
+      th: "คำนวณตามโครงสร้างของกรมศุลกากรและกรมสรรพสามิต ด้วยอัตราในหน้าอัตราภาษีและอากร — ภาษีมูลค่าเพิ่มคิดจากมูลค่าสินค้า + อากร + ภาษีสรรพสามิต + ภาษีเพื่อมหาดไทยและเงินบำรุงกองทุน",
+      en: "Worked out the way Customs and Excise do, at the rates on the Tax & Duty Rates page; import VAT is on goods + duty + excise + Interior Ministry tax and fund levies",
     },
 
     noLineItems: { th: "ไม่มีรายละเอียดรายการสินค้าสำหรับออเดอร์นี้", en: "No line-item detail recorded for this order" },
@@ -895,13 +896,29 @@ const dict = {
 
     // ── Tax rates ──
     taxRatesNote: {
-      th: "อัตราตัวอย่างเพื่อสาธิต ไม่ใช่พิกัดอัตราจริง การเปลี่ยนแปลงมีผลกับออเดอร์ใหม่และออเดอร์ที่แก้ไขรายการเท่านั้น — ออเดอร์เดิมเก็บภาษีที่คำนวณไว้แล้ว",
-      en: "Illustrative rates, not the real tariff. Changes apply to new orders and to orders whose lines are corrected — existing orders keep the tax already calculated.",
+      th: "โครงสร้างตามที่กรมศุลกากรและกรมสรรพสามิตใช้ อัตราเริ่มต้นเป็นอัตราทั่วไป (MFN) และพิกัดภาษีสรรพสามิตปี 2560 — โปรดตรวจสอบอัตราปัจจุบันก่อนใช้งานจริง สินค้าจากประเทศคู่สัญญา FTA อาจเสียอากรต่ำกว่า การเปลี่ยนแปลงมีผลกับออเดอร์ใหม่และออเดอร์ที่แก้ไขรายการเท่านั้น",
+      en: "The structure Customs and Excise use. Defaults are the MFN duty rates and the 2017 excise tariff — check the current rates before real use; FTA origins may pay less duty. Changes apply to new orders and to orders whose lines are corrected; existing orders keep the tax already calculated.",
     },
     generalRates: { th: "อัตราทั่วไป", en: "General rates" },
     vatRate: { th: "ภาษีมูลค่าเพิ่ม (VAT)", en: "VAT" },
     exciseRate: { th: "ภาษีสรรพสามิต", en: "Excise tax" },
-    exciseUnit: { th: "บาท / ABV% / ลิตร", en: "THB / ABV% / L" },
+    exciseHint: {
+      th: "อัตราตามมูลค่า (% ของราคาขายปลีกแนะนำก่อน VAT) บวกอัตราตามปริมาณ (บาทต่อลิตรแอลกอฮอล์บริสุทธิ์)",
+      en: "Value rate (% of the suggested retail price before VAT) plus quantity rate (baht per litre of pure alcohol)",
+    },
+    exciseKind: { th: "ประเภท", en: "Kind" },
+    exciseValue: { th: "ตามมูลค่า", en: "By value" },
+    excisePerLitre: { th: "ตามปริมาณ", en: "By quantity" },
+    perLitreUnit: { th: "บาท/ลิตร", en: "THB/L" },
+    kind: {
+      spirits: { th: "สุรากลั่น", en: "Spirits" },
+      wine: { th: "ไวน์", en: "Wine" },
+      beer: { th: "เบียร์", en: "Beer" },
+    },
+    localTax: { th: "ภาษีเพื่อมหาดไทย", en: "Interior Ministry tax" },
+    funds: { th: "เงินบำรุงกองทุน (สสส. ไทยพีบีเอส กกท. ผู้สูงอายุ)", en: "Fund levies (ThaiHealth, Thai PBS, sports, elderly)" },
+    ofExcise: { th: "% ของภาษีสรรพสามิต", en: "% of excise" },
+    exciseAll: { th: "ภาษีสรรพสามิต (รวมภาษีมหาดไทยและกองทุน)", en: "Excise (incl. Interior tax & funds)" },
     defaultDuty: { th: "อากรขาเข้าเริ่มต้น", en: "Default import duty" },
     dutyByHs: { th: "อากรขาเข้าตามพิกัด HS", en: "Import duty by HS Code" },
     hsPrefix: { th: "รหัส HS (ขึ้นต้น)", en: "HS prefix" },

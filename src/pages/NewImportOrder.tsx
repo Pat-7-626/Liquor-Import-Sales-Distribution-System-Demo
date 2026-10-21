@@ -57,7 +57,7 @@ const TEMPLATES: Record<Exclude<IntakeMethod, "manual">, { supplierId: string; l
   api: {
     supplierId: "SUP-001",
     // Sized to come to over ฿500,000 at supplier prices, so it shows the two-supervisor approval.
-    lines: [newLine("SKU-1001", 43, 300, 1850), newLine("SKU-1003", 40, 500, 780)],
+    lines: [newLine("SKU-1001", 43, 450, 1850), newLine("SKU-1003", 40, 800, 780)],
     blAwbNumber: "MAEU-9284710",
     destination: "Bangkok Port, Thailand",
   },

@@ -320,6 +320,10 @@ export default function ImportOrderDetail() {
                 <Field label={t("importOrderDetail.exciseStampCount")} value={order.tax.exciseStampCount} />
                 <Field label={t("importOrderDetail.importDuty")} value={<Masked>฿{formatCurrency(order.tax.importDuty, lang)}</Masked>} />
                 <Field label={t("importOrderDetail.exciseTax")} value={<Masked>฿{formatCurrency(order.tax.exciseTax, lang)}</Masked>} />
+                {order.tax.localTax !== undefined && (
+                  <Field label={t("erp.localTax")} value={<Masked>฿{formatCurrency(order.tax.localTax, lang)}</Masked>} />
+                )}
+                {order.tax.funds !== undefined && <Field label={t("erp.funds")} value={<Masked>฿{formatCurrency(order.tax.funds, lang)}</Masked>} />}
                 <Field label={t("importOrderDetail.vat")} value={<Masked>฿{formatCurrency(order.tax.vat, lang)}</Masked>} />
                 <Field label={t("importOrderDetail.totalTax")} value={<Masked>฿{formatCurrency(order.tax.totalTax, lang)}</Masked>} />
               </div>

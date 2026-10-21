@@ -1375,17 +1375,26 @@ export function updateTaxSettings(s: Store, ctx: Ctx, settings: TaxSettings): Ac
 
   if (!allowed("manageTax")) return DENIED;
   const pct = (n: number) => n >= 0 && n <= 400;
-  if (!pct(settings.vatPercent) || !pct(settings.defaultDutyPercent) || !(settings.exciseThbPerAbvLiter >= 0))
+  if (!pct(settings.vatPercent) || !pct(settings.defaultDutyPercent) || !pct(settings.localTaxPercent) || !pct(settings.fundsPercent))
     return fail("อัตราต้องไม่ติดลบและไม่เกิน 400%", "Rates must be 0 or more (max 400%)");
+  const kinds = ["spirits", "wine", "beer"] as const;
+  if (!kinds.every((k) => settings.exciseRates.filter((r) => r.kind === k).length === 1) || settings.exciseRates.length !== kinds.length)
+    return fail("ต้องมีอัตราภาษีสรรพสามิตของสุรากลั่น ไวน์ และเบียร์อย่างละหนึ่ง", "Give one excise rate each for spirits, wine and beer");
+  if (settings.exciseRates.some((r) => !pct(r.valuePercent) || !(r.perLitreAlcohol >= 0 && r.perLitreAlcohol <= 100000)))
+    return fail("อัตราภาษีสรรพสามิตไม่ถูกต้อง", "An excise rate isn't valid");
   if (settings.dutyRates.some((r) => !/^\d{4}(\.\d{0,2})?$/.test(r.hsPrefix) || !pct(r.dutyPercent)))
     return fail("รหัส HS หรืออัตราอากรไม่ถูกต้อง", "An HS prefix or duty rate isn't valid");
   const prefixes = settings.dutyRates.map((r) => r.hsPrefix);
   if (new Set(prefixes).size !== prefixes.length) return fail("รหัส HS ซ้ำกัน", "Duplicate HS prefix");
   const changes = [
     ...describeChanges(
-      { vatPercent: taxSettings.vatPercent, exciseThbPerAbvLiter: taxSettings.exciseThbPerAbvLiter, defaultDutyPercent: taxSettings.defaultDutyPercent },
-      { vatPercent: settings.vatPercent, exciseThbPerAbvLiter: settings.exciseThbPerAbvLiter, defaultDutyPercent: settings.defaultDutyPercent },
+      { vatPercent: taxSettings.vatPercent, defaultDutyPercent: taxSettings.defaultDutyPercent, localTaxPercent: taxSettings.localTaxPercent, fundsPercent: taxSettings.fundsPercent },
+      { vatPercent: settings.vatPercent, defaultDutyPercent: settings.defaultDutyPercent, localTaxPercent: settings.localTaxPercent, fundsPercent: settings.fundsPercent },
     ),
+    ...settings.exciseRates
+      .map((r) => ({ r, o: taxSettings.exciseRates.find((x) => x.kind === r.kind) }))
+      .filter(({ r, o }) => o?.valuePercent !== r.valuePercent || o?.perLitreAlcohol !== r.perLitreAlcohol)
+      .map(({ r, o }) => `excise ${r.kind}: ${o ? `${o.valuePercent}% + ฿${o.perLitreAlcohol}/L` : "—"} → ${r.valuePercent}% + ฿${r.perLitreAlcohol}/L`),
     ...settings.dutyRates
       .filter((r) => taxSettings.dutyRates.find((o) => o.hsPrefix === r.hsPrefix)?.dutyPercent !== r.dutyPercent)
       .map((r) => `HS ${r.hsPrefix}: ${taxSettings.dutyRates.find((o) => o.hsPrefix === r.hsPrefix)?.dutyPercent ?? "—"} → ${r.dutyPercent}%`),

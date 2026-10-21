@@ -21,7 +21,8 @@ export default function TaxOverview() {
   );
   const sum = (k: "importDuty" | "exciseTax" | "vat" | "totalTax") => orders.reduce((s, o) => s + (o.tax?.[k] ?? 0), 0);
   const duty = sum("importDuty");
-  const excise = sum("exciseTax");
+  // Interior Ministry tax and fund levies are collected with the excise; counted with it so the parts add up.
+  const excise = orders.reduce((s, o) => s + (o.tax?.exciseTax ?? 0) + (o.tax?.localTax ?? 0) + (o.tax?.funds ?? 0), 0);
   const vat = sum("vat");
   const total = sum("totalTax");
   const importValue = orders.reduce((s, o) => s + o.totalValue, 0);
@@ -29,7 +30,7 @@ export default function TaxOverview() {
 
   const COMPONENTS = [
     { key: "importDuty", label: t("importOrderDetail.importDuty"), color: SERIES[0] },
-    { key: "exciseTax", label: t("importOrderDetail.exciseTax"), color: SERIES[1] },
+    { key: "exciseTax", label: t("erp.exciseAll"), color: SERIES[1] },
     { key: "vat", label: t("importOrderDetail.vat"), color: SERIES[2] },
   ] as const;
 
@@ -57,7 +58,7 @@ export default function TaxOverview() {
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <KpiTile label={t("importOrderDetail.totalTax")} value={baht(total)} sensitive hint={`${orders.length} ${t("viz.importOrders")}`} />
         <KpiTile label={t("importOrderDetail.importDuty")} value={baht(duty)} sensitive />
-        <KpiTile label={t("importOrderDetail.exciseTax")} value={baht(excise)} sensitive />
+        <KpiTile label={t("erp.exciseAll")} value={baht(excise)} sensitive />
         <KpiTile label={t("importOrderDetail.vat")} value={baht(vat)} sensitive />
         <KpiTile label={t("viz.tax.effectiveRate")} value={formatPercent(importValue ? total / importValue : 0, lang, 1)} sensitive hint={t("viz.tax.effectiveRateHint")} />
         <KpiTile label={t("importOrderDetail.exciseStampCount")} value={formatNumber(stamps, lang, 0)} hint={t("viz.tax.stampsHint")} />

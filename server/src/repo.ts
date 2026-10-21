@@ -129,6 +129,7 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
         category: r.category as Product["category"],
         abv: r.abv as number,
         packageSize: r.package_size as number,
+        unitsPerPack: (r.units_per_pack as number) ?? 1,
         unit: r.unit as Product["unit"],
         costPrice: r.cost_price as number,
         suggestedPrice: r.suggested_price as number,
@@ -204,8 +205,10 @@ export async function loadStore(db: Db, opts: { light?: boolean } = {}): Promise
       .sort((a, b) => channelOrder.indexOf(a.channel) - channelOrder.indexOf(b.channel)),
     taxSettings: {
       vatPercent: tax?.vat_percent as number,
-      exciseThbPerAbvLiter: tax?.excise_thb_per_abv_liter as number,
       defaultDutyPercent: tax?.default_duty_percent as number,
+      exciseRates: (tax?.excise_rates as TaxSettings["exciseRates"]) ?? [],
+      localTaxPercent: tax?.local_tax_percent as number,
+      fundsPercent: tax?.funds_percent as number,
       dutyRates: dutyRates.map((d) => ({ hsPrefix: d.hs_prefix as string, label: d.label as string, dutyPercent: d.duty_percent as number })),
     },
     reorderPolicies: reorder.map(
@@ -495,6 +498,7 @@ const productRow = (p: Product) => ({
   category: p.category,
   abv: p.abv,
   package_size: p.packageSize,
+  units_per_pack: Math.max(1, p.unitsPerPack ?? 1),
   unit: p.unit,
   cost_price: p.costPrice,
   suggested_price: p.suggestedPrice,
@@ -908,7 +912,14 @@ export async function saveStore(db: Db, before: Store, after: Store) {
 
 async function saveTaxSettings(db: Db, t: TaxSettings) {
   await upsert(db, "tax_settings", ["id"], [
-    { id: 1, vat_percent: t.vatPercent, excise_thb_per_abv_liter: t.exciseThbPerAbvLiter, default_duty_percent: t.defaultDutyPercent },
+    {
+      id: 1,
+      vat_percent: t.vatPercent,
+      default_duty_percent: t.defaultDutyPercent,
+      excise_rates: json(db, t.exciseRates),
+      local_tax_percent: t.localTaxPercent,
+      funds_percent: t.fundsPercent,
+    },
   ]);
   await db`delete from duty_rates`;
   await upsert(db, "duty_rates", ["hs_prefix"], t.dutyRates.map((r, i) => ({ hs_prefix: r.hsPrefix, label: r.label, duty_percent: r.dutyPercent, sort_order: i })));
@@ -927,7 +938,7 @@ export async function insertStore(db: Db, s: Store) {
     suppliers: [],
     warehouses: [],
     priceLists: [],
-    taxSettings: { vatPercent: NaN, exciseThbPerAbvLiter: NaN, defaultDutyPercent: NaN, dutyRates: [] },
+    taxSettings: { vatPercent: NaN, defaultDutyPercent: NaN, dutyRates: [], exciseRates: [], localTaxPercent: NaN, fundsPercent: NaN },
     reorderPolicies: [],
     stockMovements: [],
     arDocuments: [],

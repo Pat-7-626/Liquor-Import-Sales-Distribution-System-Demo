@@ -220,8 +220,17 @@ all modules.
 
 ### Tax
 
-- **Tax & Duty Rates** drive import duty (by HS Code prefix), excise and VAT. Each order keeps the tax
-  calculated at the time, so a rate change affects only new or corrected orders.
+- **Tax & Duty Rates** drive the import taxes, worked out the way Customs and the Excise Department do:
+  1. **Import duty** on the goods value, by HS Code. The defaults are the MFN rates: spirits and beer 60%,
+     wine 54%. FTA origins may pay less.
+  2. **Excise** (Excise Act B.E. 2560) has two parts: a share of the suggested retail price before VAT, plus
+     baht per litre of pure alcohol. Defaults: spirits 20% + ฿255, wine 10% + ฿1,500, beer 22% + ฿430.
+  3. **Collected with the excise:** the Interior Ministry tax (10% of the excise) and the fund levies
+     (ThaiHealth 2%, Thai PBS 1.5%, sports 2%, elderly 2%).
+  4. **Import VAT** is charged on goods + duty + excise + those levies, and is reclaimable.
+
+  One excise stamp is needed per bottle or can; a 6-pack counts six. Each order keeps the tax calculated at
+  the time, so a rate change affects only new or corrected orders.
 - **VAT Return (ภ.พ.30):** output tax from the month's tax invoices, credit notes and debit notes, input tax
   from import VAT and expense tax invoices, and the net amount payable or carried forward. The output and
   input tax reports can be exported.
@@ -710,7 +719,7 @@ reconstructed or invented, as noted here.
     top, sales would run at a loss.
   - **Supplier price:** each line's supplier price is therefore its share of the product's expected
     supplier price, in the supplier's currency at the rate on the order date. The expected supplier price is
-    (cost − excise) ÷ (1 + duty).
+    (cost − excise, Interior tax and levies) ÷ (1 + duty).
 - **Licenses.** The two original import licenses (both expired) were kept as they are, rather than
   adding a fake valid one.
 - **Customer balances.** The spreadsheet gives each customer's outstanding balance but only a few of the
@@ -739,8 +748,12 @@ reconstructed or invented, as noted here.
 
 ## Known limitations
 
-- **Tax.** The duty and excise formula is illustrative, not the real Customs and Excise tariff schedule.
-  An accountant should check rates and documents before any real use.
+- **Tax rates.** Import taxes follow the real structure, but rates change by ministerial regulation and FTA
+  origins pay less duty. The defaults (MFN duty, the 2017 excise tariff) must be checked against the current
+  Customs and Excise rates, and an accountant should check the documents, before any real use.
+- **Accounting scope.** There is no year-end close (profit stays in "current year" on the balance sheet
+  rather than rolling into retained earnings), no reverse-charge VAT (ภ.พ.36) on services bought from
+  abroad, no post-dated cheque register, and no multi-branch or multi-company books.
 - **No e-filing.** No Thai e-Tax Invoice (XML) or e-Withholding files; documents are printed or emailed as
   PDF, and withholding returns are produced as certificates and spreadsheet attachments.
 - **Not covered:** payroll and a fixed-asset register (salaries and depreciation are entered as expenses or

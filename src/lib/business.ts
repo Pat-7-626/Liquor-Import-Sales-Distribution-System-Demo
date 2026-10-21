@@ -7,6 +7,7 @@ import type {
   ImportOrder,
   ImportOrderLineItem,
   ImportOrderStatus,
+  ExciseKind,
   ImportTaxBreakdown,
   InventoryItem,
   InventoryStatus,
@@ -183,9 +184,42 @@ export interface LineValidation {
   priceOk: boolean;
 }
 
-/** Excise per unit (baht) for a product at an ABV. */
-export function excisePerUnit(product: Pick<Product, "packageSize">, abv: number, tax: Pick<TaxSettings, "exciseThbPerAbvLiter">): number {
-  return abv * tax.exciseThbPerAbvLiter * ((product.packageSize ?? 700) / 1000);
+/** The Excise Department's class for a category: wine, beer, or (everything distilled) spirits. */
+export function exciseKindOf(category: Product["category"]): ExciseKind {
+  return category === "redWine" || category === "whiteWine" ? "wine" : category === "beer" ? "beer" : "spirits";
+}
+
+/** Litres in one sale unit: a 6-pack of 330 ml cans is 1.98 L. */
+export const litresPerUnit = (product: Pick<Product, "packageSize" | "unitsPerPack">) => ((product.packageSize ?? 700) * Math.max(1, product.unitsPerPack ?? 1)) / 1000;
+
+export interface ExciseBreakdown {
+  /** Excise itself: value part + quantity part. */
+  excise: number;
+  /** Interior Ministry tax on the excise. */
+  localTax: number;
+  /** Fund levies on the excise. */
+  funds: number;
+  /** All three — what the importer pays on top of duty and VAT. */
+  total: number;
+}
+
+/**
+ * Excise per sale unit (baht), the way the Excise Department works it out: the value part is a share of the
+ * suggested retail price before VAT; the quantity part is baht per litre of pure alcohol (litres × ABV).
+ * Interior Ministry tax and the fund levies are percentages of that excise.
+ */
+export function excisePerUnit(
+  product: Pick<Product, "packageSize" | "unitsPerPack" | "category" | "suggestedPrice">,
+  abv: number,
+  tax: Pick<TaxSettings, "exciseRates" | "localTaxPercent" | "fundsPercent" | "vatPercent">,
+): ExciseBreakdown {
+  const rate = tax.exciseRates.find((r) => r.kind === exciseKindOf(product.category)) ?? { valuePercent: 0, perLitreAlcohol: 0 };
+  const retailExVat = (product.suggestedPrice ?? 0) / (1 + tax.vatPercent / 100);
+  const pureAlcohol = litresPerUnit(product) * (abv / 100);
+  const excise = retailExVat * (rate.valuePercent / 100) + pureAlcohol * rate.perLitreAlcohol;
+  const localTax = excise * (tax.localTaxPercent / 100);
+  const funds = excise * (tax.fundsPercent / 100);
+  return { excise, localTax, funds, total: excise + localTax + funds };
 }
 
 /**
@@ -195,7 +229,7 @@ export function excisePerUnit(product: Pick<Product, "packageSize">, abv: number
  */
 export function referencePurchasePrice(product: Product, tax: TaxSettings): number {
   const duty = dutyRateFor(product.hsCode, tax) / 100;
-  return Math.max(0, Math.round(((product.costPrice - excisePerUnit(product, product.abv, tax)) / (1 + duty)) * 100) / 100);
+  return Math.max(0, Math.round(((product.costPrice - excisePerUnit(product, product.abv, tax).total) / (1 + duty)) * 100) / 100);
 }
 
 /**
@@ -243,31 +277,43 @@ export function dutyRateFor(hsCode: string | undefined, tax: TaxSettings): numbe
   return match?.dutyPercent ?? tax.defaultDutyPercent;
 }
 
-/** FR-10/11: Excise Tax, Import Duty, VAT, and stamp count from ABV + quantity + HS Code (illustrative demo formula). */
-/** Duty, excise and import VAT in baht. Line prices are in the order's currency; `rate` converts them. */
+/**
+ * FR-10/11: what clearing an import order costs in tax, in baht, as Customs works it out:
+ * import duty on the goods value; excise (value + quantity parts) with the Interior Ministry tax and fund
+ * levies on it; and import VAT on goods + duty + excise + levies. One excise stamp per bottle or can.
+ * Line prices are in the order's currency; `rate` converts them.
+ */
 export function computeImportTax(lines: ImportOrderLineItem[], products: Product[], tax: TaxSettings, rate = 1): ImportTaxBreakdown {
   let importDuty = 0;
   let exciseTax = 0;
+  let localTax = 0;
+  let funds = 0;
   let exciseStampCount = 0;
 
   for (const line of lines) {
     const product = products.find((p) => p.sku.toLowerCase() === line.sku.trim().toLowerCase());
     importDuty += line.qty * line.unitPrice * rate * (dutyRateFor(product?.hsCode, tax) / 100);
-    const litersPerUnit = (product?.packageSize ?? 700) / 1000;
-    exciseTax += line.abv * tax.exciseThbPerAbvLiter * litersPerUnit * line.qty;
-    exciseStampCount += line.qty;
+    if (product) {
+      const e = excisePerUnit(product, line.abv, tax);
+      exciseTax += e.excise * line.qty;
+      localTax += e.localTax * line.qty;
+      funds += e.funds * line.qty;
+    }
+    exciseStampCount += line.qty * Math.max(1, product?.unitsPerPack ?? 1);
   }
 
   const lineValueTotal = lines.reduce((sum, l) => sum + l.qty * l.unitPrice * rate, 0);
-  const vat = (lineValueTotal + importDuty + exciseTax) * (tax.vatPercent / 100);
+  const vat = (lineValueTotal + importDuty + exciseTax + localTax + funds) * (tax.vatPercent / 100);
 
   return {
-    // Effective (value-weighted) rate — a mixed whisky + wine order isn't "30%" or "60%", it's in between.
+    // Effective (value-weighted) rate — a mixed whisky + wine order isn't "60%" or "54%", it's in between.
     dutyRatePercent: lineValueTotal > 0 ? Math.round((importDuty / lineValueTotal) * 1000) / 10 : tax.defaultDutyPercent,
     importDuty: Math.round(importDuty),
     exciseTax: Math.round(exciseTax),
+    localTax: Math.round(localTax),
+    funds: Math.round(funds),
     vat: Math.round(vat),
-    totalTax: Math.round(importDuty + exciseTax + vat),
+    totalTax: Math.round(importDuty + exciseTax + localTax + funds + vat),
     exciseStampCount,
   };
 }
@@ -318,7 +364,7 @@ export function landedUnitCosts(
     const goods = unitGoods(r.sku);
     const duty = goods * (dutyRateFor(product?.hsCode, tax) / 100);
     const abv = e && e.qty > 0 ? e.abvQty / e.qty : 0;
-    const excise = excisePerUnit({ packageSize: product?.packageSize ?? 700 }, abv, tax);
+    const excise = product ? excisePerUnit(product, abv, tax).total : 0;
     const extra = receivedGoods > 0 ? (additionalCostThb * goods) / receivedGoods : 0;
     out.set(r.sku, Math.round((goods + duty + excise + extra) * 100) / 100);
   }

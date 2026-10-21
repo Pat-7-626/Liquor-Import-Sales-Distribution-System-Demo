@@ -136,6 +136,7 @@ export default function Products() {
               <td className={`${td} font-mono text-xs text-gray-500`}>{p.hsCode}</td>
               <td className={td}>{p.abv}%</td>
               <td className={td}>
+                {(p.unitsPerPack ?? 1) > 1 ? `${p.unitsPerPack} × ` : ""}
                 {p.packageSize} ml · {t(`lookup.unit.${p.unit}`)}
               </td>
               <td className={td}>
@@ -208,10 +209,11 @@ export default function Products() {
           { key: "abv", label: t("products.col.abv"), type: "number", suffix: "%", min: 0, max: 75, step: 0.1 },
           { key: "packageSize", label: t("products.col.packageSize"), type: "number", suffix: "ml", min: 1 },
           { key: "unit", label: t("products.col.unit"), type: "select", options: UNITS.map((u) => ({ value: u, label: t(`lookup.unit.${u}`) })) },
+          { key: "unitsPerPack", label: t("products.unitsPerPack"), type: "number", min: 1, max: 100, step: 1 },
           { key: "costPrice", label: t("products.col.costPrice"), type: "number", suffix: "THB", min: 0 },
           { key: "suggestedPrice", label: t("products.col.suggestedPrice"), type: "number", suffix: "THB", min: 0 },
         ]}
-        values={{ sku: "", name: "", category: "whisky", hsCode: "", abv: 40, packageSize: 700, unit: "bottle", costPrice: 0, suggestedPrice: 0 }}
+        values={{ sku: "", name: "", category: "whisky", hsCode: "", abv: 40, packageSize: 700, unit: "bottle", unitsPerPack: 1, costPrice: 0, suggestedPrice: 0 }}
         onClose={() => setCreating(false)}
         onSave={async (v) => {
           const result = await createProduct({
@@ -222,6 +224,7 @@ export default function Products() {
             abv: Number(v.abv),
             packageSize: Number(v.packageSize),
             unit: v.unit as UnitCode,
+            unitsPerPack: v.unit === "pack" ? Math.max(1, Math.round(Number(v.unitsPerPack) || 1)) : 1,
             costPrice: Number(v.costPrice),
             suggestedPrice: Number(v.suggestedPrice),
           });

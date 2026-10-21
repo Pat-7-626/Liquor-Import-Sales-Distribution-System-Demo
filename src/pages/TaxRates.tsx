@@ -61,13 +61,37 @@ export default function TaxRates() {
               {numberInput(draft.vatPercent, (n) => setDraft((d) => ({ ...d, vatPercent: n })), "%")}
             </label>
             <label className="block">
-              <FieldLabel>{t("erp.exciseRate")}</FieldLabel>
-              {numberInput(draft.exciseThbPerAbvLiter, (n) => setDraft((d) => ({ ...d, exciseThbPerAbvLiter: n })), t("erp.exciseUnit"))}
-            </label>
-            <label className="block">
               <FieldLabel>{t("erp.defaultDuty")}</FieldLabel>
               {numberInput(draft.defaultDutyPercent, (n) => setDraft((d) => ({ ...d, defaultDutyPercent: n })), "%")}
             </label>
+            <label className="block">
+              <FieldLabel>{t("erp.localTax")}</FieldLabel>
+              {numberInput(draft.localTaxPercent, (n) => setDraft((d) => ({ ...d, localTaxPercent: n })), t("erp.ofExcise"))}
+            </label>
+            <label className="block">
+              <FieldLabel>{t("erp.funds")}</FieldLabel>
+              {numberInput(draft.fundsPercent, (n) => setDraft((d) => ({ ...d, fundsPercent: n })), t("erp.ofExcise"))}
+            </label>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm lg:col-span-3" data-testid="excise-rates">
+          <h3 className="text-sm font-semibold text-gray-900">{t("erp.exciseRate")}</h3>
+          <p className="mb-3 text-xs text-gray-500">{t("erp.exciseHint")}</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {draft.exciseRates.map((r, i) => (
+              <div key={r.kind} className="space-y-2 rounded-lg border border-gray-100 p-3">
+                <p className="text-sm font-medium text-gray-800">{t(`erp.kind.${r.kind}`)}</p>
+                <label className="block">
+                  <FieldLabel>{t("erp.exciseValue")}</FieldLabel>
+                  {numberInput(r.valuePercent, (n) => setDraft((d) => ({ ...d, exciseRates: d.exciseRates.map((x, j) => (j === i ? { ...x, valuePercent: n } : x)) })), "%")}
+                </label>
+                <label className="block">
+                  <FieldLabel>{t("erp.excisePerLitre")}</FieldLabel>
+                  {numberInput(r.perLitreAlcohol, (n) => setDraft((d) => ({ ...d, exciseRates: d.exciseRates.map((x, j) => (j === i ? { ...x, perLitreAlcohol: n } : x)) })), t("erp.perLitreUnit"))}
+                </label>
+              </div>
+            ))}
           </div>
         </div>
 

@@ -35,7 +35,7 @@ export function maskStore(s: Store, opts: { keepSupplierInvoices?: boolean } = {
       ...o,
       totalValue: 0,
       lineItems: o.lineItems?.map((l) => ({ ...l, unitPrice: 0 })),
-      tax: o.tax ? { ...o.tax, importDuty: 0, exciseTax: 0, vat: 0, totalTax: 0 } : o.tax,
+      tax: o.tax ? { ...o.tax, importDuty: 0, exciseTax: 0, localTax: 0, funds: 0, vat: 0, totalTax: 0 } : o.tax,
       // The supplier's invoice is a price document; packing lists, bills of lading and licenses are not.
       documents: opts.keepSupplierInvoices ? o.documents : o.documents?.filter((d) => d.kind !== "invoice"),
       // Validation notes quote the reference cost price ("deviates from ฿1,850") — scrub amounts.

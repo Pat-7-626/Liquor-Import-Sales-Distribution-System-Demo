@@ -33,6 +33,8 @@ export interface Product {
   abv: number;
   packageSize: number;
   unit: UnitCode;
+  /** Bottles or cans in one sale unit (a 6-pack is 6 × packageSize); 1 when sold singly. */
+  unitsPerPack?: number;
   costPrice: number;
   suggestedPrice: number;
   stockAvailable: number;
@@ -71,6 +73,10 @@ export interface ImportTaxBreakdown {
   dutyRatePercent: number;
   importDuty: number;
   exciseTax: number;
+  /** Interior Ministry tax on the excise (absent on orders calculated before it was shown separately). */
+  localTax?: number;
+  /** Fund levies on the excise. */
+  funds?: number;
   vat: number;
   totalTax: number;
   exciseStampCount: number;
@@ -421,11 +427,25 @@ export interface DutyRate {
 }
 
 /** FR-10/11: rates used when an import order's taxes are calculated. Stored per order at the time, so a change applies to new orders only. */
+/** The Excise Department's classes for liquor (Excise Act B.E. 2560): distilled spirits, wine, beer. */
+export type ExciseKind = "spirits" | "wine" | "beer";
+
+/** Excise on a kind of drink: a share of its suggested retail price (before VAT) plus baht per litre of pure alcohol. */
+export interface ExciseRate {
+  kind: ExciseKind;
+  valuePercent: number;
+  perLitreAlcohol: number;
+}
+
 export interface TaxSettings {
   vatPercent: number;
-  exciseThbPerAbvLiter: number;
   defaultDutyPercent: number;
   dutyRates: DutyRate[];
+  exciseRates: ExciseRate[];
+  /** Interior Ministry (local government) tax, collected with excise: a % of the excise. */
+  localTaxPercent: number;
+  /** Levies on liquor excise for public funds (ThaiHealth, Thai PBS, sports, elderly): together, a % of the excise. */
+  fundsPercent: number;
 }
 
 export interface ReorderPolicy {

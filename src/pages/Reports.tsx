@@ -148,7 +148,7 @@ export default function Reports() {
       if (!o.tax) continue;
       const row = get(o.orderDate.slice(0, 7));
       row.importDuty += o.tax.importDuty;
-      row.exciseTax += o.tax.exciseTax;
+      row.exciseTax += o.tax.exciseTax + (o.tax.localTax ?? 0) + (o.tax.funds ?? 0);
       row.vat += o.tax.vat;
       row.totalTax += o.tax.totalTax;
     }
@@ -401,7 +401,7 @@ export default function Reports() {
         onExport={() =>
           exportToExcel(
             "tax-sales-reconciliation",
-            [both("reports.colMonth"), both("reports.colSalesNetValue"), both("importOrderDetail.importDuty"), both("importOrderDetail.exciseTax"), both("importOrderDetail.vat"), both("importOrderDetail.totalTax")],
+            [both("reports.colMonth"), both("reports.colSalesNetValue"), both("importOrderDetail.importDuty"), both("erp.exciseAll"), both("importOrderDetail.vat"), both("importOrderDetail.totalTax")],
             byMonth.map((r) => [
               r.month,
               maskIfRestricted(r.salesNetValue, canViewSensitive),
@@ -420,7 +420,7 @@ export default function Reports() {
               <th className={th}>{t("reports.colMonth")}</th>
               <th className={th}>{t("reports.colSalesNetValue")}</th>
               <th className={th}>{t("importOrderDetail.importDuty")}</th>
-              <th className={th}>{t("importOrderDetail.exciseTax")}</th>
+              <th className={th}>{t("erp.exciseAll")}</th>
               <th className={th}>{t("importOrderDetail.vat")}</th>
               <th className={th}>{t("importOrderDetail.totalTax")}</th>
             </tr>

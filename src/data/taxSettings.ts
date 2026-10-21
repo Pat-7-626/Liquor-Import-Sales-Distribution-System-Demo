@@ -1,18 +1,37 @@
 import type { TaxSettings } from "./types";
 
-/** FR-10: illustrative rates (the values the app previously hard-coded) — not the real Thai tariff schedule. */
+/**
+ * FR-10: Thai import taxes on liquor, in the structure the Customs and Excise Departments use.
+ *
+ * - Import duty: the MFN (non-FTA) rate by HS heading. Goods from FTA partners (ASEAN, Australia, Chile,
+ *   Japan…) may pay less with a certificate of origin — set that rate here if every import qualifies.
+ * - Excise (Excise Act B.E. 2560, 2017 tariff): a share of the suggested retail price before VAT, plus
+ *   baht per litre of pure alcohol.
+ * - Collected with the excise: Interior Ministry tax (10% of the excise) and the fund levies — ThaiHealth 2%,
+ *   Thai PBS 1.5%, sports 2%, elderly 2% (7.5% together).
+ * - Import VAT on CIF + duty + excise + those levies.
+ *
+ * Rates change by ministerial regulation; check the current ones with the departments before relying on
+ * these figures.
+ */
 export const taxSettings: TaxSettings = {
   vatPercent: 7,
-  exciseThbPerAbvLiter: 6,
-  defaultDutyPercent: 30,
+  defaultDutyPercent: 60,
   dutyRates: [
-    { hsPrefix: "2208.3", label: "Whisky", dutyPercent: 30 },
-    { hsPrefix: "2208.9", label: "Tequila / other spirits", dutyPercent: 30 },
-    { hsPrefix: "2204.2", label: "Wine", dutyPercent: 60 },
-    { hsPrefix: "2208.6", label: "Vodka", dutyPercent: 30 },
-    { hsPrefix: "2208.5", label: "Gin", dutyPercent: 30 },
-    { hsPrefix: "2208.7", label: "Liqueur", dutyPercent: 30 },
-    { hsPrefix: "2208.4", label: "Rum", dutyPercent: 30 },
-    { hsPrefix: "2203.0", label: "Beer", dutyPercent: 20 },
+    { hsPrefix: "2208.3", label: "Whisky", dutyPercent: 60 },
+    { hsPrefix: "2208.9", label: "Tequila / other spirits", dutyPercent: 60 },
+    { hsPrefix: "2204.2", label: "Wine", dutyPercent: 54 },
+    { hsPrefix: "2208.6", label: "Vodka", dutyPercent: 60 },
+    { hsPrefix: "2208.5", label: "Gin", dutyPercent: 60 },
+    { hsPrefix: "2208.7", label: "Liqueur", dutyPercent: 60 },
+    { hsPrefix: "2208.4", label: "Rum", dutyPercent: 60 },
+    { hsPrefix: "2203.0", label: "Beer", dutyPercent: 60 },
   ],
+  exciseRates: [
+    { kind: "spirits", valuePercent: 20, perLitreAlcohol: 255 },
+    { kind: "wine", valuePercent: 10, perLitreAlcohol: 1500 },
+    { kind: "beer", valuePercent: 22, perLitreAlcohol: 430 },
+  ],
+  localTaxPercent: 10,
+  fundsPercent: 7.5,
 };

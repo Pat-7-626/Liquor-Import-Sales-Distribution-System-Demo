@@ -211,6 +211,7 @@ const COMMANDS = {
         abv: num,
         packageSize: num,
         unit: z.enum(["bottle", "pack"]),
+        unitsPerPack: z.number().int().min(1).max(100).optional(),
         costPrice: num,
         suggestedPrice: num,
         hsCode: str,
@@ -271,8 +272,10 @@ const COMMANDS = {
     args: z.tuple([
       z.object({
         vatPercent: num,
-        exciseThbPerAbvLiter: num,
         defaultDutyPercent: num,
+        exciseRates: z.array(z.object({ kind: z.enum(["spirits", "wine", "beer"]), valuePercent: num, perLitreAlcohol: num })).max(3),
+        localTaxPercent: num,
+        fundsPercent: num,
         dutyRates: z.array(z.object({ hsPrefix: z.string().max(10), label: str, dutyPercent: num })).max(100),
       }),
     ]),

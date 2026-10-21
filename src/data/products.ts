@@ -12,5 +12,5 @@ export const products: Product[] = [
   { sku: "SKU-1009", name: "Sakura Plum Liqueur", category: "liqueur", abv: 15, packageSize: 500, unit: "bottle", costPrice: 380, suggestedPrice: 590, stockAvailable: 210, status: "available", hsCode: "2208.70" },
   { sku: "SKU-1010", name: "Amber Harbor Rum Dark", category: "rum", abv: 40, packageSize: 700, unit: "bottle", costPrice: 560, suggestedPrice: 820, stockAvailable: 75, status: "available", hsCode: "2208.40" },
   { sku: "SKU-1011", name: "Golden Barrel Cask Reserve", category: "whisky", abv: 46, packageSize: 700, unit: "bottle", costPrice: 3100, suggestedPrice: 4390, stockAvailable: 12, status: "lowStock", hsCode: "2208.30" },
-  { sku: "SKU-1012", name: "Riverside Craft Lager 6-pack", category: "beer", abv: 5, packageSize: 330, unit: "pack", costPrice: 210, suggestedPrice: 320, stockAvailable: 560, status: "available", hsCode: "2203.00" },
+  { sku: "SKU-1012", name: "Riverside Craft Lager 6-pack", category: "beer", abv: 5, packageSize: 330, unit: "pack", unitsPerPack: 6, costPrice: 210, suggestedPrice: 320, stockAvailable: 560, status: "available", hsCode: "2203.00" },
 ];
