@@ -1,3 +1,4 @@
+import { exVat } from "../lib/business";
 import { useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { Upload, Pencil, Lock, Tags, X } from "lucide-react";
@@ -29,7 +30,7 @@ export default function Products() {
   const { t, lang } = useLanguage();
   const runAction = useRunAction();
   const { canViewSensitive, can } = useRole();
-  const { products: rows, updateProduct, createProduct } = useData();
+  const { products: rows, taxSettings, updateProduct, createProduct } = useData();
   const [importing, setImporting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [params] = useSearchParams();
@@ -145,8 +146,8 @@ export default function Products() {
               <td className={td}>
                 ฿{formatCurrency(p.suggestedPrice, lang)}
                 {canViewSensitive && p.costPrice > 0 && (
-                  <span className={`ml-1.5 text-xs ${p.suggestedPrice <= p.costPrice ? "text-rose-500" : "text-gray-400"}`}>
-                    ({Math.round(((p.suggestedPrice - p.costPrice) / p.suggestedPrice) * 100)}%)
+                  <span className={`ml-1.5 text-xs ${exVat(p.suggestedPrice, taxSettings.vatPercent) <= p.costPrice ? "text-rose-500" : "text-gray-400"}`}>
+                    ({Math.round((1 - p.costPrice / exVat(p.suggestedPrice, taxSettings.vatPercent)) * 100)}%)
                   </span>
                 )}
               </td>

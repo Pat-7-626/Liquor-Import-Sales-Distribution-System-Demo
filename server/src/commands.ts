@@ -16,14 +16,30 @@ const bi = z.object({ th: str, en: str });
 /** Free text in Thai and English (either may be empty), or one string — split if it reads "ไทย / English". */
 const text = (max = 500) => z.union([z.string().trim().max(max), z.object({ th: z.string().trim().max(max), en: z.string().trim().max(max) })]);
 const channel = z.enum(["distributor", "retailWholesale", "restaurantBar", "online"]);
-const country = z.enum(["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan"]);
+const country = z.enum(["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan", "australia", "italy", "chile"]);
 const line = z.object({ sku: z.string().max(64), abv: num, qty: num, unitPrice: num });
 
 /** Each command: a tuple schema for its arguments and the domain action it runs. */
 const COMMANDS = {
   updateProduct: { args: z.tuple([id, z.object({ costPrice: num, suggestedPrice: num })]), run: A.updateProduct },
   updateImportOrder: { args: z.tuple([id, z.object({ etaDate: date })]), run: A.updateImportOrder },
-  recordCustomsClearance: { args: z.tuple([id, str]), run: A.recordCustomsClearance },
+  recordCustomsClearance: {
+    args: z.union([
+      z.tuple([id, str]),
+      z.tuple([
+        id,
+        str,
+        z.object({
+          importDuty: num.min(0).optional(),
+          exciseTax: num.min(0).optional(),
+          localTax: num.min(0).optional(),
+          funds: num.min(0).optional(),
+          vat: num.min(0).optional(),
+        }),
+      ]),
+    ]),
+    run: A.recordCustomsClearance,
+  },
   updateLicense: { args: z.tuple([id, z.object({ expiryDate: date })]), run: A.updateLicense },
   updateCustomerTerms: {
     args: z.tuple([id, z.object({ creditLimit: num, standardDiscount: num, channelType: channel, creditTermDays: num })]),
@@ -178,6 +194,7 @@ const COMMANDS = {
         logistics: z.object({ manufacturerRegNo: str, blAwbNumber: str, origin: str, destination: str, currency: str, paymentTerms: str }),
         importLicenseNo: id.nullable(),
         purchaseRequestNo: id.nullable().optional(),
+        freightInsuranceThb: num.min(0).optional(),
       }),
     ]),
     run: A.createImportOrder,

@@ -15,7 +15,7 @@ export type InventoryStatus = "normal" | "agingStart" | "agingLong";
 
 export type CategoryCode = "whisky" | "tequila" | "redWine" | "whiteWine" | "vodka" | "gin" | "liqueur" | "rum" | "beer";
 export type UnitCode = "bottle" | "pack";
-export type CountryCode = "scotland" | "mexico" | "france" | "sweden" | "uk" | "jamaica" | "japan";
+export type CountryCode = "scotland" | "mexico" | "france" | "sweden" | "uk" | "jamaica" | "japan" | "australia" | "italy" | "chile";
 export type ChannelCode = "distributor" | "retailWholesale" | "restaurantBar" | "online";
 /** Warehouse Master code (e.g. "whA") — warehouses are master data, not a fixed list. */
 export type WarehouseCode = string;
@@ -80,6 +80,12 @@ export interface ImportTaxBreakdown {
   vat: number;
   totalTax: number;
   exciseStampCount: number;
+  /** Freight and insurance added to an FOB price to reach the customs value (baht); 0 when the price includes them. */
+  freightInsuranceThb?: number;
+  /** What duty and VAT are charged on: goods + freight + insurance (the CIF value), in baht. */
+  customsValueThb?: number;
+  /** Set once these are the figures Customs actually charged, not the estimate made when ordering. */
+  assessedAtCustoms?: boolean;
 }
 
 /** Section 6.1: logistics + financial fields the data spec calls for. */

@@ -24,6 +24,15 @@ const RECEIVING_ELIGIBLE_STATUSES = new Set(["approved", "customsCleared"]);
 const DOC_KINDS: DocumentKind[] = ["invoice", "packingList", "billOfLading", "importLicense", "other"];
 /** FR-05: line items may be corrected before approval — including after a rejection, which resubmits the order. */
 const LINES_EDITABLE_STATUSES = new Set(["staging", "issueDetected", "rejected"]);
+/** The amounts on a customs receipt, which replace the estimate at clearance. */
+const ASSESSED_FIELDS = [
+  { key: "importDuty", label: "importOrderDetail.importDuty" },
+  { key: "exciseTax", label: "importOrderDetail.exciseTax" },
+  { key: "localTax", label: "erp.localTax" },
+  { key: "funds", label: "erp.funds" },
+  { key: "vat", label: "importOrderDetail.vat" },
+] as const;
+type AssessedField = (typeof ASSESSED_FIELDS)[number]["key"];
 
 interface DraftLine extends ImportOrderLineItem {
   id: string;
@@ -45,7 +54,7 @@ export default function ImportOrderDetail() {
   const { t, lang } = useLanguage();
   const bi = useBi();
   const runAction = useRunAction();
-  const { can } = useRole();
+  const { can, canViewSensitive } = useRole();
   const {
     importOrders,
     licenses,
@@ -71,6 +80,7 @@ export default function ImportOrderDetail() {
   const [docFile, setDocFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [declarationNo, setDeclarationNo] = useState("");
+  const [assessed, setAssessed] = useState<Partial<Record<AssessedField, string>>>({});
   const [receivingWarehouse, setReceivingWarehouse] = useState<WarehouseCode>(warehouses.find((w) => w.active)?.code ?? "");
   // Freight, insurance and clearing paid for this shipment — spread over the lots' landed cost.
   const [freight, setFreight] = useState(0);
@@ -170,7 +180,15 @@ export default function ImportOrderDetail() {
   };
 
   const handleCustomsClearance = async () => {
-    if (await runAction(recordCustomsClearance(order.orderNo, declarationNo), t("erp.customsClearedToast"))) setDeclarationNo("");
+    const figures = Object.fromEntries(
+      Object.entries(assessed)
+        .filter(([, v]) => v?.trim())
+        .map(([k, v]) => [k, Number(v)]),
+    );
+    if (await runAction(recordCustomsClearance(order.orderNo, declarationNo, figures), t("erp.customsClearedToast"))) {
+      setDeclarationNo("");
+      setAssessed({});
+    }
   };
 
   const receivingValid = rows.every((r) => Number.isInteger(r.receivedQty) && r.receivedQty >= 0) && rows.some((r) => r.receivedQty > 0);
@@ -208,6 +226,28 @@ export default function ImportOrderDetail() {
             {t("erp.customsStepTitle")}
           </h3>
           <p className="mb-3 text-xs text-gray-500">{t("erp.customsStepHint")}</p>
+          {order.tax && can("recordCustomsClearance") && (
+            <div className="mb-3">
+              <p className="text-xs font-medium text-gray-700">{t("erp.customsAssessedTitle")}</p>
+              <p className="mb-2 text-xs text-gray-500">{t("erp.customsAssessedHint")}</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                {ASSESSED_FIELDS.map(({ key, label }) => (
+                  <label key={key} className="block">
+                    <FieldLabel>{t(label)}</FieldLabel>
+                    <input
+                      type="number"
+                      min={0}
+                      value={assessed[key] ?? ""}
+                      onChange={(e) => setAssessed((prev) => ({ ...prev, [key]: e.target.value }))}
+                      placeholder={canViewSensitive ? formatNumber(order.tax?.[key] ?? 0, lang, 0) : ""}
+                      className={inputClass}
+                      data-testid={`assessed-${key}`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-2">
             <label className="block">
               <FieldLabel>{t("importOrders.col.customsDeclarationNo")}</FieldLabel>
@@ -316,6 +356,12 @@ export default function ImportOrderDetail() {
           {order.tax ? (
             <>
               <div className="grid grid-cols-2 gap-4">
+                {order.tax.customsValueThb !== undefined && (
+                  <Field label={t("erp.customsValue")} value={<Masked>฿{formatCurrency(order.tax.customsValueThb, lang)}</Masked>} />
+                )}
+                {!!order.tax.freightInsuranceThb && (
+                  <Field label={t("erp.freightInsurance")} value={<Masked>฿{formatCurrency(order.tax.freightInsuranceThb, lang)}</Masked>} />
+                )}
                 <Field label={t("importOrderDetail.dutyRate")} value={`${order.tax.dutyRatePercent}%`} />
                 <Field label={t("importOrderDetail.exciseStampCount")} value={order.tax.exciseStampCount} />
                 <Field label={t("importOrderDetail.importDuty")} value={<Masked>฿{formatCurrency(order.tax.importDuty, lang)}</Masked>} />
@@ -327,7 +373,9 @@ export default function ImportOrderDetail() {
                 <Field label={t("importOrderDetail.vat")} value={<Masked>฿{formatCurrency(order.tax.vat, lang)}</Masked>} />
                 <Field label={t("importOrderDetail.totalTax")} value={<Masked>฿{formatCurrency(order.tax.totalTax, lang)}</Masked>} />
               </div>
-              <p className="mt-3 text-xs text-gray-400">{t("importOrderDetail.taxDisclaimer")}</p>
+              <p className="mt-3 text-xs text-gray-400" data-testid="tax-basis">
+                {order.tax.assessedAtCustoms ? t("erp.customsAssessedNote") : t("importOrderDetail.taxDisclaimer")}
+              </p>
             </>
           ) : (
             <p className="text-sm text-gray-400">{t("importOrderDetail.noTax")}</p>

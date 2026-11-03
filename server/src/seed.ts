@@ -1,8 +1,8 @@
 import { GUEST_IDENTITY, IDENTITIES } from "../../src/data/identities.ts";
-import { seedStateWithStatement } from "../../src/domain/seed.ts";
+import { seedState } from "../../src/domain/seed.ts";
 import { company as seedCompany } from "../../src/data/company.ts";
 import { customers as seedCustomers } from "../../src/data/customers.ts";
-import { exchangeRates as seedRates } from "../../src/data/exchangeRates.ts";
+import { exchangeRatesFrom } from "../../src/data/exchangeRates.ts";
 import { hashPassword } from "./auth.ts";
 import { config } from "./config.ts";
 import { sql, type Tx } from "./db.ts";
@@ -10,7 +10,7 @@ import { ALL_TABLES, insertStore } from "./repo.ts";
 
 /** Loads the demo dataset into empty business tables. */
 async function seedBusinessData(tx: Tx) {
-  await insertStore(tx, seedStateWithStatement());
+  await insertStore(tx, seedState());
 }
 
 async function seedUsers(tx: Tx) {
@@ -39,7 +39,7 @@ async function backfillDetails(tx: Tx) {
   // A database from before currencies: start it with the demo rate history so orders can be valued.
   const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from exchange_rates`;
   if (n === 0)
-    for (const r of seedRates) await tx`insert into exchange_rates (currency, effective_date, rate) values (${r.currency}, ${r.effectiveDate}, ${r.rate})`;
+    for (const r of exchangeRatesFrom(seedCompany.openingDate)) await tx`insert into exchange_rates (currency, effective_date, rate) values (${r.currency}, ${r.effectiveDate}, ${r.rate})`;
   const [co] = await tx`select 1 from company where id = 1`;
   if (!co) {
     await tx`

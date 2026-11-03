@@ -319,8 +319,8 @@ const dict = {
     exciseStampCount: { th: "จำนวนแสตมป์สรรพสามิตที่ต้องใช้", en: "Excise Stamps Required" },
     noTax: { th: "ยังไม่มีการคำนวณภาษีสำหรับออเดอร์นี้", en: "No tax breakdown calculated for this order" },
     taxDisclaimer: {
-      th: "คำนวณตามโครงสร้างของกรมศุลกากรและกรมสรรพสามิต ด้วยอัตราในหน้าอัตราภาษีและอากร — ภาษีมูลค่าเพิ่มคิดจากมูลค่าสินค้า + อากร + ภาษีสรรพสามิต + ภาษีเพื่อมหาดไทยและเงินบำรุงกองทุน",
-      en: "Worked out the way Customs and Excise do, at the rates on the Tax & Duty Rates page; import VAT is on goods + duty + excise + Interior Ministry tax and fund levies",
+      th: "ประมาณการ คำนวณตามโครงสร้างของกรมศุลกากรและกรมสรรพสามิต ด้วยอัตราในหน้าอัตราภาษีและอากร — ภาษีมูลค่าเพิ่มคิดจากมูลค่าสินค้า + อากร + ภาษีสรรพสามิต + ภาษีเพื่อมหาดไทยและเงินบำรุงกองทุน",
+      en: "Estimate, worked out the way Customs and Excise do at the rates on the Tax & Duty Rates page; duty is on the customs value (CIF), and import VAT on customs value + duty + excise + Interior Ministry tax and fund levies",
     },
 
     noLineItems: { th: "ไม่มีรายละเอียดรายการสินค้าสำหรับออเดอร์นี้", en: "No line-item detail recorded for this order" },
@@ -653,6 +653,9 @@ const dict = {
       uk: { th: "อังกฤษ", en: "United Kingdom" },
       jamaica: { th: "จาเมกา", en: "Jamaica" },
       japan: { th: "ญี่ปุ่น", en: "Japan" },
+      australia: { th: "ออสเตรเลีย", en: "Australia" },
+      italy: { th: "อิตาลี", en: "Italy" },
+      chile: { th: "ชิลี", en: "Chile" },
     },
     channel: {
       distributor: { th: "ตัวแทนจำหน่าย", en: "Distributor" },
@@ -1109,6 +1112,21 @@ const dict = {
       th: "บันทึกเลขใบขนสินค้าเมื่อสินค้าผ่านพิธีการศุลกากร จากนั้นคลังสินค้าจะรับเข้าได้",
       en: "Record the customs declaration number once the goods clear customs; the warehouse can then receive them.",
     },
+    customsAssessedTitle: { th: "ยอดภาษีตามใบเสร็จศุลกากร", en: "Amounts on the customs receipt" },
+    customsAssessedHint: {
+      th: "กรอกยอดที่ถูกเรียกเก็บจริง ช่องที่เว้นว่างจะใช้ยอดประมาณการ",
+      en: "Enter what was actually charged. Anything left blank keeps the estimate.",
+    },
+    customsAssessedNote: {
+      th: "ยอดตามที่กรมศุลกากรเรียกเก็บจริง บันทึกเมื่อผ่านพิธีการ",
+      en: "The amounts Customs actually charged, recorded at clearance.",
+    },
+    customsValue: { th: "ราคาศุลกากร (CIF)", en: "Customs value (CIF)" },
+    freightInsurance: { th: "ค่าขนส่งและประกันภัยถึงไทย (บาท)", en: "Freight and insurance to Thailand (baht)" },
+    freightInsuranceHint: {
+      th: "ศุลกากรคิดอากรและ VAT จากราคา CIF ราคา FOB ยังไม่รวมค่าเหล่านี้ จึงต้องกรอกยอดประมาณการ",
+      en: "Customs charges duty and VAT on the CIF value. An FOB price leaves these out, so enter an estimate.",
+    },
     markCustomsCleared: { th: "บันทึกผ่านพิธีการ", en: "Mark cleared" },
     customsClearedToast: { th: "บันทึกผ่านพิธีการศุลกากรแล้ว", en: "Customs clearance recorded" },
     receiveIntoWarehouse: { th: "รับเข้าคลัง", en: "Receive into warehouse" },
@@ -1454,6 +1472,7 @@ const dict = {
     inputVat: { th: "ภาษีซื้อ", en: "Input tax" },
     payable: { th: "ภาษีที่ต้องชำระ", en: "Tax payable" },
     credit: { th: "ภาษีชำระเกิน (ยกไป)", en: "Excess tax (carried forward)" },
+    broughtForward: { th: "ภาษีชำระเกินยกมา", en: "Excess tax brought forward" },
     note: {
       th: "ภาษีขายจากใบกำกับภาษี ใบลดหนี้ และใบเพิ่มหนี้ที่ออกในเดือน · ภาษีซื้อจากภาษีนำเข้าตามใบขนสินค้า และภาษีตามใบกำกับภาษีค่าใช้จ่าย",
       en: "Output tax from the tax invoices, credit and debit notes issued in the month; input tax is import VAT on customs entries and VAT on expense tax invoices.",

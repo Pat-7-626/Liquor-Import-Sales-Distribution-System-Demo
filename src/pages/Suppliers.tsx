@@ -18,7 +18,7 @@ import { nextOrderNumber } from "../lib/business";
 import { both } from "../i18n/translations";
 import { RecordLink } from "../components/RecordLink";
 
-const COUNTRIES: CountryCode[] = ["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan"];
+const COUNTRIES: CountryCode[] = ["scotland", "mexico", "france", "sweden", "uk", "jamaica", "japan", "australia", "italy", "chile"];
 const OPEN_STATUSES = new Set(["staging", "pendingApproval", "approved", "customsCleared", "issueDetected"]);
 
 export default function Suppliers() {

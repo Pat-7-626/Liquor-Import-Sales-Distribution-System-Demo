@@ -9,7 +9,7 @@ import { TableContainer, th, td } from "../components/Table";
 import { Masked } from "../components/Masked";
 import { inputClass } from "../components/FormKit";
 import { formatCurrency } from "../lib/format";
-import { computeChannelPrice } from "../lib/business";
+import { computeChannelPrice, exVat } from "../lib/business";
 import { exportToExcel } from "../lib/export";
 import { useRunAction } from "../lib/useRunAction";
 import { both } from "../i18n/translations";
@@ -18,7 +18,7 @@ export default function PriceLists() {
   const { t, lang } = useLanguage();
   const runAction = useRunAction();
   const { can, canViewSensitive } = useRole();
-  const { priceLists, products, updatePriceList, setPriceOverride } = useData();
+  const { priceLists, products, taxSettings, updatePriceList, setPriceOverride } = useData();
   const editable = can("managePricing");
 
   const [pctDrafts, setPctDrafts] = useState<Partial<Record<ChannelCode, string>>>({});
@@ -118,7 +118,7 @@ export default function PriceLists() {
               {priceLists.map((l) => {
                 const price = computeChannelPrice(p, l.channel, priceLists);
                 const fixed = l.overrides[p.sku] !== undefined;
-                const belowCost = canViewSensitive && price < p.costPrice;
+                const belowCost = canViewSensitive && exVat(price, taxSettings.vatPercent) < p.costPrice;
                 const isEditing = overrideCell?.channel === l.channel && overrideCell.sku === p.sku;
                 if (isEditing)
                   return (

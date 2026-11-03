@@ -50,9 +50,10 @@ await page.click('button[type=submit]');
 await page.waitForSelector("text=Executive Dashboard");
 
 // 1. Every route renders for every identity without errors / missing translations
+const someLot = (await state()).inventory.find((i) => i.quantityRemaining > 0).lotBatch;
 const routes = ["/", "/products", "/import-orders", "/import-orders/new", "/import-orders/IMP-2026-0142", "/licenses", "/customers",
   "/customers/CUS-0001", "/sales-orders", "/sales-orders/new", "/sales-orders/SO-2026-3301", "/inventory", "/reports", "/approvals", "/audit-trail",
-  "/suppliers", "/warehouses", "/price-lists", "/tax-rates", "/reorder-policies", "/stock-movements", "/stock-alerts", "/lot-trace?lot=LOT-A2607-01",
+  "/suppliers", "/warehouses", "/price-lists", "/tax-rates", "/reorder-policies", "/stock-movements", "/stock-alerts", `/lot-trace?lot=${someLot}`,
   "/goods-receipts", "/receipts"];
 for (const id of ["manager", "orderOfficer", "docOfficer", "whOfficer", "taxOfficer", "salesOfficer", "distOfficer", "somchai"]) {
   await as(id);
@@ -184,6 +185,16 @@ await drawer.locator('button:has-text("Cancel")').click();
 // 6. Import flow: officer creates → supervisor approves → doc officer clears customs → warehouse receives
 await as("orderOfficer");
 await go("/import-orders/new");
+{
+  // Freight is only asked for when the price leaves it out.
+  const terms = page.locator('select:has(option[value="FOB"])').first();
+  const was = await terms.inputValue();
+  await terms.selectOption("FOB");
+  const onFob = await page.locator("[data-testid=freight-insurance]").count();
+  await terms.selectOption("CIF");
+  check("new import order asks for freight on FOB, not on CIF", onFob === 1 && (await page.locator("[data-testid=freight-insurance]").count()) === 0);
+  await terms.selectOption(was);
+}
 await page.click('button:has-text("API / EDI")');
 await page.click("[data-testid=submit-io-btn]");
 await page.waitForURL("**/import-orders");
@@ -212,10 +223,12 @@ check("warehouse can't receive before customs", (await page.locator('button:has-
 await as("docOfficer");
 await go(`/import-orders/${io.orderNo}`);
 await page.fill('input[placeholder="A0011-26-00000"]', "A0011-26-12345");
+await page.fill("[data-testid=assessed-vat]", "12345");
 await page.click('button:has-text("Mark cleared")');
 await page.waitForTimeout(200);
 let s8 = await state();
 check("customs clearance recorded", s8.importOrders.find((o) => o.orderNo === io.orderNo).status === "customsCleared");
+check("…with the VAT typed from the customs receipt", s8.importOrders.find((o) => o.orderNo === io.orderNo).tax.vat === 12345 && s8.importOrders.find((o) => o.orderNo === io.orderNo).tax.assessedAtCustoms === true);
 await as("whOfficer");
 await go(`/import-orders/${io.orderNo}`);
 const p1001Before = s8.products.find((p) => p.sku === "SKU-1001").stockAvailable;
@@ -234,15 +247,15 @@ check("lot numbers unique", new Set(lots).size === lots.length);
 const imp143 = s9.importOrders.find((o) => o.orderNo === "IMP-2026-0143");
 console.log("      IMP-2026-0143 status:", imp143.status);
 
-// 8. Payment
+// 8. Payment (from the biggest account, so there's always 100,000 owed)
 await as("salesOfficer");
-await go("/customers/CUS-0002");
-const balBefore = (await state()).customers.find((c) => c.customerId === "CUS-0002").outstandingBalance;
+await go("/customers/CUS-0001");
+const balBefore = (await state()).customers.find((c) => c.customerId === "CUS-0001").outstandingBalance;
 await page.locator('input[type=number]').first().fill("100000");
 await page.click('button:has-text("Record")');
 await page.waitForTimeout(200);
 let s10 = await state();
-check("payment reduces outstanding balance", s10.customers.find((c) => c.customerId === "CUS-0002").outstandingBalance === balBefore - 100000);
+check("payment reduces outstanding balance", Math.abs(s10.customers.find((c) => c.customerId === "CUS-0001").outstandingBalance - (balBefore - 100000)) < 0.01, `${balBefore}`);
 check("payment logged in audit", s10.auditLog[0].action === "payment");
 
 // 9. License renewal unblocks customer (CUS-0004's license expired)
@@ -284,7 +297,7 @@ let m0 = await state();
 check("stock ledger reconciles for every lot after workflows", ledgerOk(m0),
   m0.inventory.filter((i) => m0.stockMovements.filter((m) => m.lotBatch === i.lotBatch).reduce((a, m) => a + m.quantity, 0) !== i.quantityRemaining).map((i) => i.lotBatch).join(","));
 check("return issued a credit note", m0.arDocuments.some((d) => d.type === "creditNote" && d.reference === newSo.orderNo));
-check("payment issued a receipt", m0.arDocuments.some((d) => d.type === "payment" && d.customerId === "CUS-0002" && /^RC-\d{4}-0001$/.test(d.docNo)));
+check("payment issued a receipt", m0.arDocuments.some((d) => d.type === "payment" && d.customerId === "CUS-0001" && d.amount === 100000 && /^RC-\d{4}-\d{4}$/.test(d.docNo)));
 
 // Price list drives sales price
 await as("manager");
@@ -328,6 +341,16 @@ check("warehouse created", (await state()).warehouses.some((w) => w.code === "wh
 
 // Stock alert → prefilled import order → approve → customs → receive into whD
 await as("orderOfficer");
+{
+  // The replay orders ahead of need, so some days show no alert: put one product at its reorder point.
+  const now = await state();
+  const policy = now.reorderPolicies.find((r) => now.suppliers.some((x) => x.supplierId === r.preferredSupplierId && x.active));
+  const stock = now.products.find((x) => x.sku === policy.sku).stockAvailable;
+  const inbound = now.importOrders.filter((o) => !o.receiving && o.status !== "rejected").flatMap((o) => o.lineItems ?? []).filter((l) => l.sku === policy.sku).reduce((n, l) => n + l.qty, 0);
+  const args = [{ sku: policy.sku, reorderPoint: stock + inbound + 10, reorderQty: policy.reorderQty, preferredSupplierId: policy.preferredSupplierId }];
+  const saved = await page.evaluate((body) => fetch("/api/commands/saveReorderPolicy", { method: "POST", headers: { "content-type": "application/json" }, body }).then((r) => r.status), JSON.stringify({ args }));
+  if (saved !== 200) throw new Error(`saveReorderPolicy failed: ${saved}`);
+}
 await go("/stock-alerts");
 const alertLink = page.locator('a[href*="import-orders/new?"]').first();
 const href = await alertLink.getAttribute("href");
@@ -441,7 +464,8 @@ check("inactive supplier hidden from new orders", !supplierOpts.some((o) => o.in
   // Moving a lot between warehouses is recorded in the ledger for both warehouses.
   await as("whOfficer");
   await go("/inventory");
-  const lotRow = page.locator('tr:has-text("LOT-A2607-03")');
+  const moveLot = (await state()).inventory.filter((i) => i.warehouse === "whA" && i.quantityRemaining > 0).sort((a, b) => a.lotBatch.localeCompare(b.lotBatch))[0].lotBatch;
+  const lotRow = page.locator(`tr:has-text("${moveLot}")`);
   await lotRow.locator('button:has-text("Adjust")').click();
   const ad = page.locator("[role=dialog]:not([inert])");
   await ad.locator("select").selectOption("whB");
@@ -449,7 +473,7 @@ check("inactive supplier hidden from new orders", !supplierOpts.some((o) => o.in
   await ad.locator('button:has-text("Save")').click();
   await page.waitForTimeout(200);
   const st2 = await state();
-  const tm = st2.stockMovements.filter((m) => m.lotBatch === "LOT-A2607-03" && m.reference.includes("→"));
+  const tm = st2.stockMovements.filter((m) => m.lotBatch === moveLot && m.reference.includes("→"));
   check("warehouse transfer recorded out of A and into B", tm.some((m) => m.warehouse === "whA" && m.quantity < 0) && tm.some((m) => m.warehouse === "whB" && m.quantity > 0));
 
   // Audit summaries with money are hidden from roles without price access.
@@ -505,6 +529,23 @@ consoleProblems.length = 0;
   check("journal lists entries from the records", (await page.locator("[data-testid=journal-entry]").count()) > 10);
   await go("/tax/vat-return");
   check("VAT return shows output and input tax", (await page.locator("[data-testid=vat-output]").count()) === 1 && (await page.locator("[data-testid=vat-input]").count()) === 1);
+  {
+    // Month by month: excess input tax carries into the next return until output tax has used it up.
+    const figure = async (id) => Number((await page.locator(`[data-testid=${id}] td`).last().innerText()).replace(/[^\d.]/g, ""));
+    const months = (await page.locator("[data-testid=vat-month] option").evaluateAll((os) => os.map((o) => o.value))).sort();
+    let expected = 0;
+    let sawCredit = false;
+    let chained = true;
+    for (const m of months) {
+      await page.selectOption("[data-testid=vat-month]", m);
+      const carried = await figure("vat-brought-forward");
+      if (Math.abs(carried - expected) > 0.02) chained = false;
+      const excess = /Excess/.test(await page.locator("[data-testid=vat-net]").innerText());
+      expected = excess ? await figure("vat-net") : 0;
+      sawCredit ||= excess;
+    }
+    check("VAT credit carries forward from one month's return to the next", chained && sawCredit, months.join(","));
+  }
 
   await as("whOfficer");
   await go("/");
@@ -516,7 +557,8 @@ consoleProblems.length = 0;
   await as("manager");
   await go("/payables");
   const st0 = await state();
-  const openInv = st0.apDocuments.find((d) => d.type === "invoice" && d.importOrderNo === "IMP-2026-0146");
+  const paidOn = (inv) => st0.apDocuments.filter((d) => d.type === "payment" && d.appliesTo === inv.docNo).reduce((a, d) => a + d.amount, 0);
+  const openInv = st0.apDocuments.find((d) => d.type === "invoice" && d.amount - paidOn(d) > 100);
   await page.click(`[data-testid=pay-${openInv.docNo}]`);
   await page.fill("[data-testid=ap-amount]", "100");
   await page.click("[data-testid=ap-pay-save]");
@@ -629,12 +671,14 @@ consoleProblems.length = 0;
   check("withholding certificate (50 Tawi) prints with both tax IDs", cert.includes("หนังสือรับรองการหักภาษี ณ ที่จ่าย") && boxes.includes("0105545012345") && boxes.includes(st1.company.taxId), boxes.join(","));
   await page.locator('#print-modal-root button[aria-label="Close"]').click();
 
-  // Remit last month's withholding.
+  // Remit last month's withholding (the demo's tax officer does it by the 7th; before that it's still due).
   await go("/tax/withholding");
-  await page.click(`[data-testid=remit-${lastMonth}]`);
-  await page.fill("[data-testid=remit-ref]", "RD-UI-1");
-  await page.click("[data-testid=remit-save]");
-  await page.waitForTimeout(500);
+  if ((await page.locator(`[data-testid=remit-${lastMonth}]`).count()) > 0) {
+    await page.click(`[data-testid=remit-${lastMonth}]`);
+    await page.fill("[data-testid=remit-ref]", "RD-UI-1");
+    await page.click("[data-testid=remit-save]");
+    await page.waitForTimeout(500);
+  }
   check("last month's withholding remitted from the screen", /Remitted/.test(await page.locator(`[data-testid=wht-month][data-month="${lastMonth}"]`).innerText()));
 
   // A manual journal, then reversing it.
@@ -665,11 +709,11 @@ consoleProblems.length = 0;
   // Bank: explain the bank charge, import a line.
   await go("/accounting/bank");
   const unmatched0 = await page.locator("[data-testid=bank-unmatched]").count();
-  check("bank reconciliation shows what the statement has that the books don't", unmatched0 === 2, String(unmatched0));
-  const chargeLine = (await state()).bankLines.find((l) => l.description === "BANK CHARGE");
+  check("bank reconciliation shows what the statement has that the books don't", unmatched0 >= 2, String(unmatched0));
+  const chargeLine = (await state()).bankLines.find((l) => /CHARGE/.test(l.description) && !l.matchedEntryId);
   await page.click(`[data-testid=explain-${chargeLine.id}]`);
   await dlg.locator("[data-testid=jv-memo-th]").fill("");
-  await dlg.locator("[data-testid=jv-memo-en]").fill("Bank charge September");
+  await dlg.locator("[data-testid=jv-memo-en]").fill("Bank charge");
   await page.click("[data-testid=jv-save]");
   await page.waitForTimeout(600);
   check("explaining a statement line posts and matches it", (await page.locator("[data-testid=bank-unmatched]").count()) === unmatched0 - 1);
@@ -681,16 +725,30 @@ consoleProblems.length = 0;
   await page.waitForTimeout(600);
   check("imported line shows as unmatched", (await page.locator("[data-testid=bank-unmatched]").count()) === unmatched0);
 
-  // Close July, then reopen it.
+  // Last month: reopen it and close it again (or close it, then reopen it, if it isn't closed yet).
   await go("/accounting/closing");
-  await page.click("[data-testid=close-2026-07]");
-  await page.waitForTimeout(500);
-  check("manager closes a month from the screen", (await page.locator('[data-testid=period][data-month="2026-07"]').getAttribute("data-closed")) === "true" && (await page.locator('[data-testid=period][data-month="2026-06"]').getAttribute("data-closed")) === "true");
-  await page.click("[data-testid=reopen-2026-07]");
-  await page.fill("[data-testid=reopen-reason]", "UI test");
-  await page.click("[data-testid=reopen-save]");
-  await page.waitForTimeout(500);
-  check("…and reopens it with a reason", (await page.locator('[data-testid=period][data-month="2026-07"]').getAttribute("data-closed")) === "false");
+  const closedOf = async (m) => (await page.locator(`[data-testid=period][data-month="${m}"]`).getAttribute("data-closed")) === "true";
+  const reopen = async (m) => {
+    await page.click(`[data-testid=reopen-${m}]`);
+    await page.fill("[data-testid=reopen-reason]", "UI test");
+    await page.click("[data-testid=reopen-save]");
+    await page.waitForTimeout(500);
+  };
+  const close = async (m) => {
+    await page.click(`[data-testid=close-${m}]`);
+    await page.waitForTimeout(500);
+  };
+  if (await closedOf(lastMonth)) {
+    await reopen(lastMonth);
+    check("…a month reopens with a reason", !(await closedOf(lastMonth)));
+    await close(lastMonth);
+    check("manager closes a month from the screen", await closedOf(lastMonth));
+  } else {
+    await close(lastMonth);
+    check("manager closes a month from the screen", await closedOf(lastMonth));
+    await reopen(lastMonth);
+    check("…and reopens it with a reason", !(await closedOf(lastMonth)));
+  }
 
   await go("/company");
   check("opening balances are set in the company profile", (await page.locator("[data-testid=opening-balances]").count()) === 1 && (await page.locator("[data-testid=opening-bank]").inputValue()) === "4000000");
@@ -699,18 +757,23 @@ consoleProblems.length = 0;
   await go("/expenses");
   check("roles without price access don't see expenses", (await page.locator("text=Restricted").count()) > 0 && (await page.locator("[data-testid=expense-row]").count()) === 0);
 
-  // A quotation, converted into a sales order.
+  // A quotation, converted into a sales order — for a product with stock to spare and nothing on request.
+  const sq = await state();
+  const heldQ = new Map();
+  for (const o of sq.salesOrders) if (o.approvalStatus === "pendingApproval") for (const l of o.lines) heldQ.set(l.sku, (heldQ.get(l.sku) ?? 0) + l.quantity);
+  const qtSku = ["SKU-1007", ...sq.products.map((p) => p.sku)].find((k) => (sq.products.find((p) => p.sku === k)?.stockAvailable ?? 0) - (heldQ.get(k) ?? 0) >= 24);
+  const prSku = sq.products.map((p) => p.sku).find((k) => !sq.purchaseRequests.some((r) => r.sku === k && (r.status === "pending" || r.status === "approved")));
   await as("salesOfficer");
   await go("/quotations");
   await page.click('button:has-text("New quotation")');
   await page.selectOption("[data-testid=qt-customer]", "CUS-0004");
   check("quotation form warns when the customer's license has expired", (await page.locator("[data-testid=qt-license-warning]").count()) === 1);
   await page.selectOption("[data-testid=qt-customer]", "CUS-0003");
-  await page.locator("[data-testid=qt-line] select").first().selectOption("SKU-1007");
+  await page.locator("[data-testid=qt-line] select").first().selectOption(qtSku);
   await page.locator("[data-testid=qt-line] input").first().fill("12");
   await page.click("[data-testid=qt-save]");
   await page.waitForTimeout(500);
-  const qt = (await state()).quotations.find((q) => q.lines[0]?.sku === "SKU-1007" && q.lines[0].quantity === 12);
+  const qt = (await state()).quotations.find((q) => q.lines[0]?.sku === qtSku && q.lines[0].quantity === 12 && q.status === "open");
   check("sales officer issues a quotation from the screen", Boolean(qt) && qt.status === "open");
   await page.click(`[data-testid=convert-${qt.quoteNo}]`);
   await page.click("[data-testid=convert-save]");
@@ -720,11 +783,11 @@ consoleProblems.length = 0;
 
   // A purchase request from the warehouse, approved, then ordered.
   await as("whOfficer");
-  await go("/purchase-requests?sku=SKU-1007&qty=48");
-  check("arriving from a stock alert opens the request form for that product", (await page.locator("[data-testid=pr-sku]").inputValue()) === "SKU-1007");
+  await go(`/purchase-requests?sku=${prSku}&qty=48`);
+  check("arriving from a stock alert opens the request form for that product", (await page.locator("[data-testid=pr-sku]").inputValue()) === prSku);
   await page.click("[data-testid=pr-save]");
   await page.waitForTimeout(500);
-  const pr = (await state()).purchaseRequests.find((r) => r.sku === "SKU-1007" && r.status === "pending");
+  const pr = (await state()).purchaseRequests.find((r) => r.sku === prSku && r.status === "pending");
   check("warehouse officer asks for stock", Boolean(pr) && pr.quantity === 48);
   await as("somchai");
   await go("/purchase-requests");
@@ -782,11 +845,12 @@ consoleProblems.length = 0;
   await page.locator('#print-modal-root button[aria-label="Close"]').click();
 
   // A reminder: recorded, then the letter opens.
+  const reminders0 = (await state()).arReminders.filter((r) => r.customerId === "CUS-0006").length;
   await page.click("[data-testid=remind-CUS-0006]");
   await page.click("[data-testid=remind-save]");
   await page.waitForTimeout(500);
   check("sending a reminder opens the letter", (await page.locator("[data-testid=reminder-table]").count()) === 1);
-  check("…and records it", (await state()).arReminders.filter((r) => r.customerId === "CUS-0006").length === 2);
+  check("…and records it", (await state()).arReminders.filter((r) => r.customerId === "CUS-0006").length === reminders0 + 1);
   await page.locator('#print-modal-root button[aria-label="Close"]').click();
 
   await go("/customers/CUS-0005");
@@ -961,6 +1025,7 @@ consoleProblems.length = 0;
   check("? lists the shortcuts", (await page.locator('[role=dialog][aria-label="Keyboard shortcuts"]').count()) === 1);
   await page.keyboard.press("Escape");
   await go("/sales-orders");
+  await page.waitForSelector("[data-shortcut=new]", { timeout: 5000 }).catch(() => {});
   await page.keyboard.press("n");
   await page.waitForURL(/\/sales-orders\/new/, { timeout: 5000 }).catch(() => {});
   check("n starts a new record on a list page", page.url().endsWith("/sales-orders/new"), page.url());
@@ -988,8 +1053,11 @@ consoleProblems.length = 0;
   await page.keyboard.press("Escape");
   await page.locator('#print-modal-root button[aria-label="Close"]').click().catch(() => {});
 
-  // Opening balances, imported from a spreadsheet.
+  // Opening balances, imported from a spreadsheet. They go in before any month is closed, and the demo's
+  // months are, so reopen them for this test.
   await as("manager");
+  for (let i = 0; i < 24 && (await state()).company.closedThrough; i++)
+    await page.evaluate(() => fetch("/api/commands/reopenPeriod", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ args: ["UI test: opening balances"] }) }));
   await go("/opening-balances");
   check("Opening balances page lists the three kinds", (await page.locator("[data-testid^=opening-]:is(section)").count()) === 3);
   await page.click("[data-testid=opening-import-receivables]");
@@ -1153,7 +1221,14 @@ consoleProblems.length = 0;
   await p4.selectOption("[data-testid=count-warehouse]", "whA");
   await p4.click("[data-testid=count-start]");
   await p4.waitForSelector("[data-testid=stock-count][data-status=open]", { timeout: 5000 });
-  const countNo = await p4.locator("[data-testid=stock-count][data-status=open]").first().getAttribute("data-count");
+  // The demo may have another warehouse's count in progress: use the one just started, once it's saved.
+  let started;
+  for (let i = 0; i < 20 && !started; i++) {
+    started = (await state()).stockCounts.find((c) => c.status === "open" && c.warehouse === "whA");
+    if (!started) await p4.waitForTimeout(250);
+  }
+  const countNo = started?.countNo;
+  await p4.waitForSelector(`[data-testid=stock-count][data-count="${countNo}"]`, { timeout: 5000 }).catch(() => {});
   await p4.evaluate((src) => (window.__cameraShows = src), qr);
   await p4.click(`[data-testid=count-scan-${countNo}]`);
   await p4.waitForFunction((l) => document.activeElement?.closest("[data-lot]")?.getAttribute("data-lot") === l, lot.lotBatch, { timeout: 10000 }).catch(() => {});
@@ -1240,7 +1315,7 @@ consoleProblems.length = 0;
 }
 await go("/stock-alerts");
 await page.screenshot({ path: out("alerts.png"), fullPage: true });
-await go("/lot-trace?lot=LOT-A2607-01");
+await go(`/lot-trace?lot=${someLot}`);
 await page.screenshot({ path: out("lot.png"), fullPage: true });
 
 await browser.close();

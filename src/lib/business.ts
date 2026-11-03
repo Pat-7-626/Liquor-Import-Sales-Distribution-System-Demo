@@ -20,6 +20,7 @@ import type {
   SalesOrder,
   ExchangeRate,
 } from "../data/types";
+import { now } from "./clock";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -92,7 +93,7 @@ export function computeSalesNetValue(quantity: number, unitPrice: number, discou
 
 /** Mirrors the spreadsheet formula: days remaining / status recalculated live against today. */
 export function computeLicenseStatus(expiryDateIso: string): { daysRemaining: number; status: LicenseStatus } {
-  const today = new Date();
+  const today = now();
   today.setHours(0, 0, 0, 0);
   const expiry = new Date(expiryDateIso + "T00:00:00");
   const daysRemaining = Math.round((expiry.getTime() - today.getTime()) / DAY_MS);
@@ -123,7 +124,7 @@ export function computeCreditStatus(
 
 /** Mirrors the spreadsheet formula: stock age recalculated live against today. */
 export function computeInventoryAge(receivedDateIso: string): { ageDays: number; status: InventoryStatus } {
-  const today = new Date();
+  const today = now();
   today.setHours(0, 0, 0, 0);
   const received = new Date(receivedDateIso + "T00:00:00");
   const ageDays = Math.round((today.getTime() - received.getTime()) / DAY_MS);
@@ -150,7 +151,7 @@ export function addDays(iso: string, days: number): string {
 }
 
 export function todayIso(): string {
-  return toLocalIso(new Date());
+  return toLocalIso(now());
 }
 
 /**
@@ -279,20 +280,25 @@ export function dutyRateFor(hsCode: string | undefined, tax: TaxSettings): numbe
 
 /**
  * FR-10/11: what clearing an import order costs in tax, in baht, as Customs works it out:
- * import duty on the goods value; excise (value + quantity parts) with the Interior Ministry tax and fund
- * levies on it; and import VAT on goods + duty + excise + levies. One excise stamp per bottle or can.
- * Line prices are in the order's currency; `rate` converts them.
+ * import duty on the customs value (goods + freight + insurance, i.e. CIF); excise (value + quantity parts)
+ * with the Interior Ministry tax and fund levies on it; and import VAT on customs value + duty + excise +
+ * levies. One excise stamp per bottle or can. Line prices are in the order's currency; `rate` converts them.
+ * `freightInsuranceThb` is what an FOB price leaves out; a CIF price already includes it.
  */
-export function computeImportTax(lines: ImportOrderLineItem[], products: Product[], tax: TaxSettings, rate = 1): ImportTaxBreakdown {
+export function computeImportTax(lines: ImportOrderLineItem[], products: Product[], tax: TaxSettings, rate = 1, freightInsuranceThb = 0): ImportTaxBreakdown {
   let importDuty = 0;
   let exciseTax = 0;
   let localTax = 0;
   let funds = 0;
   let exciseStampCount = 0;
+  const lineValueTotal = lines.reduce((sum, l) => sum + l.qty * l.unitPrice * rate, 0);
+  const customsValue = lineValueTotal + freightInsuranceThb;
 
   for (const line of lines) {
     const product = products.find((p) => p.sku.toLowerCase() === line.sku.trim().toLowerCase());
-    importDuty += line.qty * line.unitPrice * rate * (dutyRateFor(product?.hsCode, tax) / 100);
+    const lineValue = line.qty * line.unitPrice * rate;
+    const lineCustomsValue = lineValue + (lineValueTotal > 0 ? (freightInsuranceThb * lineValue) / lineValueTotal : 0);
+    importDuty += lineCustomsValue * (dutyRateFor(product?.hsCode, tax) / 100);
     if (product) {
       const e = excisePerUnit(product, line.abv, tax);
       exciseTax += e.excise * line.qty;
@@ -302,12 +308,11 @@ export function computeImportTax(lines: ImportOrderLineItem[], products: Product
     exciseStampCount += line.qty * Math.max(1, product?.unitsPerPack ?? 1);
   }
 
-  const lineValueTotal = lines.reduce((sum, l) => sum + l.qty * l.unitPrice * rate, 0);
-  const vat = (lineValueTotal + importDuty + exciseTax + localTax + funds) * (tax.vatPercent / 100);
+  const vat = (customsValue + importDuty + exciseTax + localTax + funds) * (tax.vatPercent / 100);
 
   return {
     // Effective (value-weighted) rate — a mixed whisky + wine order isn't "60%" or "54%", it's in between.
-    dutyRatePercent: lineValueTotal > 0 ? Math.round((importDuty / lineValueTotal) * 1000) / 10 : tax.defaultDutyPercent,
+    dutyRatePercent: customsValue > 0 ? Math.round((importDuty / customsValue) * 1000) / 10 : tax.defaultDutyPercent,
     importDuty: Math.round(importDuty),
     exciseTax: Math.round(exciseTax),
     localTax: Math.round(localTax),
@@ -315,6 +320,8 @@ export function computeImportTax(lines: ImportOrderLineItem[], products: Product
     vat: Math.round(vat),
     totalTax: Math.round(importDuty + exciseTax + localTax + funds + vat),
     exciseStampCount,
+    freightInsuranceThb,
+    customsValueThb: Math.round(customsValue),
   };
 }
 
@@ -332,11 +339,13 @@ export const goodsValueThb = (lines: ImportOrderLineItem[], rate: number) => Mat
 
 /**
  * Landed cost per unit, in baht, of each SKU received on an import order: purchase price converted at the
- * order's rate, plus import duty and excise, plus a share of freight/insurance/clearing (`additionalCostThb`,
- * spread by goods value). Import VAT is left out — it's reclaimed, not part of what the stock cost.
+ * order's rate, plus import duty and excise (as Customs charged them, once recorded), plus a share of
+ * freight/insurance/clearing actually paid (`additionalCostThb`, spread by goods value). The freight on the
+ * order only sets the customs value, so it isn't counted again here. Import VAT is left out — it's
+ * reclaimed, not part of what the stock cost.
  */
 export function landedUnitCosts(
-  order: Pick<ImportOrder, "lineItems" | "exchangeRate">,
+  order: Pick<ImportOrder, "lineItems" | "exchangeRate" | "tax">,
   received: { sku: string; receivedQty: number }[],
   products: Product[],
   tax: TaxSettings,
@@ -355,18 +364,28 @@ export function landedUnitCosts(
     const e = perSku.get(sku);
     return e && e.qty > 0 ? (e.value / e.qty) * rate : 0;
   };
+  const orderedGoods = [...perSku.values()].reduce((sum, e) => sum + e.value * rate, 0);
+  const freight = order.tax?.freightInsuranceThb ?? 0;
+  const unitTaxes = (sku: string) => {
+    const e = perSku.get(sku);
+    const product = products.find((p) => p.sku === sku);
+    const goods = unitGoods(sku);
+    const customsValue = goods + (orderedGoods > 0 ? (freight * goods) / orderedGoods : 0);
+    const abv = e && e.qty > 0 ? e.abvQty / e.qty : 0;
+    return customsValue * (dutyRateFor(product?.hsCode, tax) / 100) + (product ? excisePerUnit(product, abv, tax).total : 0);
+  };
+  // Customs' own figures replace the estimate: each SKU keeps its share of the tax, scaled to what was charged.
+  const t = order.tax;
+  const estimatedTaxes = [...perSku].reduce((sum, [sku, e]) => sum + unitTaxes(sku) * e.qty, 0);
+  const chargedTaxes = t ? t.importDuty + t.exciseTax + (t.localTax ?? 0) + (t.funds ?? 0) : 0;
+  const taxFactor = t?.assessedAtCustoms && estimatedTaxes > 0 ? chargedTaxes / estimatedTaxes : 1;
   const receivedGoods = received.reduce((sum, r) => sum + unitGoods(r.sku) * r.receivedQty, 0);
   const out = new Map<string, number>();
   for (const r of received) {
     if (r.receivedQty <= 0 || out.has(r.sku)) continue;
-    const e = perSku.get(r.sku);
-    const product = products.find((p) => p.sku === r.sku);
     const goods = unitGoods(r.sku);
-    const duty = goods * (dutyRateFor(product?.hsCode, tax) / 100);
-    const abv = e && e.qty > 0 ? e.abvQty / e.qty : 0;
-    const excise = product ? excisePerUnit(product, abv, tax).total : 0;
     const extra = receivedGoods > 0 ? (additionalCostThb * goods) / receivedGoods : 0;
-    out.set(r.sku, Math.round((goods + duty + excise + extra) * 100) / 100);
+    out.set(r.sku, Math.round((goods + unitTaxes(r.sku) * taxFactor + extra) * 100) / 100);
   }
   return out;
 }
@@ -508,6 +527,9 @@ export function computeAvailableForSaleValue(inventory: InventoryItem[], product
   }, 0);
 }
 
+/** Sale prices include VAT and landed cost doesn't, so they're compared without the VAT. */
+export const exVat = (vatInclusivePrice: number, vatPercent: number) => vatInclusivePrice / (1 + vatPercent / 100);
+
 /**
  * FR-22/28: every reason a sales order needs a supervisor before it can book. Selling below landed
  * cost is included alongside over-standard discount and over-credit, since it's a margin control too.
@@ -520,6 +542,7 @@ export function salesApprovalReasons(input: {
   alreadyBooked?: number;
   /** How many days past due the customer's oldest unpaid invoice is (0 when nothing is overdue). */
   overdueDays?: number;
+  vatPercent: number;
 }): Bilingual[] {
   const reasons: Bilingual[] = [];
   if (input.lines.some((l) => l.discountPercent > input.customer.standardDiscount))
@@ -527,7 +550,7 @@ export function salesApprovalReasons(input: {
   const total = input.lines.reduce((sum, l) => sum + l.netValue, 0);
   const projected = input.customer.outstandingBalance - (input.alreadyBooked ?? 0) + total;
   if (projected > input.customer.creditLimit) reasons.push({ th: "เกินวงเงินเครดิตที่อนุมัติ", en: "Over approved credit limit" });
-  if (input.lines.some((l) => l.quantity > 0 && l.netValue / l.quantity < l.costPrice))
+  if (input.lines.some((l) => l.quantity > 0 && exVat(l.netValue / l.quantity, input.vatPercent) < l.costPrice))
     reasons.push({ th: "ราคาสุทธิต่ำกว่าต้นทุน", en: "Net price below cost" });
   if ((input.overdueDays ?? 0) > OVERDUE_HOLD_DAYS)
     reasons.push({ th: `มีใบแจ้งหนี้ค้างชำระเกิน ${OVERDUE_HOLD_DAYS} วัน`, en: `Invoices more than ${OVERDUE_HOLD_DAYS} days overdue` });

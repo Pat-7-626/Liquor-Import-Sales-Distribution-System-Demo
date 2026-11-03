@@ -30,6 +30,7 @@ import type {
   InventoryAdjustment,
   NewCustomerInput,
   NewImportOrderInput,
+  CustomsAssessment,
   NewLicenseInput,
   NewProductInput,
   NewSalesOrderInput,
@@ -62,6 +63,7 @@ export type {
   InventoryAdjustment,
   NewCustomerInput,
   NewImportOrderInput,
+  CustomsAssessment,
   NewLicenseInput,
   NewProductInput,
   NewSalesOrderInput,
@@ -90,7 +92,7 @@ interface DataContextValue extends ClientState {
 
   updateProduct: (sku: string, patch: Pick<Product, "costPrice" | "suggestedPrice">) => Result;
   updateImportOrder: (orderNo: string, patch: Pick<ImportOrder, "etaDate">) => Result;
-  recordCustomsClearance: (orderNo: string, declarationNo: string) => Result;
+  recordCustomsClearance: (orderNo: string, declarationNo: string, assessed?: CustomsAssessment) => Result;
   updateLicense: (licenseNo: string, patch: Pick<License, "expiryDate">) => Result;
   updateCustomerTerms: (
     customerId: string,

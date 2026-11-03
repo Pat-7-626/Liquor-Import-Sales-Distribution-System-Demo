@@ -1,7 +1,7 @@
 # Liquor Import, Sales & Distribution System
 
 A complete, bilingual (Thai / English) ERP demo for a company that imports wine, spirits and beer into
-Thailand and sells them to hotels, restaurants and shops. It covers the whole flow: import orders and
+Thailand and sells them to distributors, hotels, restaurants, bars, shops and online stores. It covers the whole flow: import orders and
 customs, lots and warehouses, sales orders and delivery, Thai tax documents, receivables and payables,
 and a general ledger that is always in step with the operational screens.
 
@@ -23,7 +23,7 @@ started together with Docker.
   it, with QR lot labels you can scan with a phone or laptop camera.
 - **Security**: hashed passwords, account lockout, optional or required two-step sign-in, a full audit
   trail, a content security policy, and an optional HTTPS front end.
-- **Tested**: about 570 automated checks across the API and a real browser, plus a crawl of every page for
+- **Tested**: about 600 automated checks across the API and a real browser, plus a crawl of every page for
   five roles in both languages at desktop and phone widths.
 
 ---
@@ -75,9 +75,10 @@ Or click **Continue as guest** to look around without an account: a guest can op
 change anything and never receives prices or credit figures. The server enforces both.
 
 In demo mode the header has a **user switcher** to jump between roles, and **Reset demo data** at the
-bottom of the sidebar reloads the original data. The demo's dates move with the calendar, so a reset always
-shows the same situation: two licenses about to expire, a customer on credit hold, withholding tax due and
-a bank statement to reconcile.
+bottom of the sidebar reloads the demo data: six months of trading up to yesterday, so a reset always shows a
+business in mid-stride — orders waiting for approval and on the road, shipments at sea and at customs,
+licenses about to expire, a customer on credit hold, a stock count in progress and bank fees to reconcile.
+See [About the demo data](#about-the-demo-data).
 
 Emails the app sends never reach real people: they land in a local test mailbox at
 **<http://localhost:8025>**.
@@ -178,8 +179,11 @@ all modules.
   supervisor other than the requester approves or rejects, in the Approvals queue. Purchasing then opens an
   import order pre-filled from the request.
 - **Import Orders** have four intake methods: manual, plus API, Excel and email, which are simulated.
-  - **Calculation:** duty, excise and VAT are calculated automatically, and licenses are checked (expiry,
-    ETA, Type 5 cap).
+  - **Calculation:** duty, excise and VAT are estimated automatically, and licenses are checked (expiry,
+    ETA, Type 5 cap). An FOB order also asks for freight and insurance, because Customs charges duty and
+    VAT on the CIF value.
+  - **Customs clearance** records the declaration number and what the customs receipt actually says was
+    charged. Those figures replace the estimate, and flow into the lots' landed cost and the input VAT.
   - **Workflow:** Staging → Approved → Customs cleared (with the declaration number) → Received into a
     chosen warehouse. Orders over ฿500,000 need **two different supervisors**.
   - **Corrections:** lines can be corrected in Staging, flagged or rejected, and correcting a rejected
@@ -187,8 +191,8 @@ all modules.
   - **Documents:** supplier invoice, packing list, bill of lading and import license (PDF or image) are
     attached to the order.
 - **Landed cost:** receiving a shipment gives each lot its cost per unit. That is the supplier price at the
-  order's exchange rate, plus import duty, excise, and a share of freight, insurance and clearing (entered at
-  receipt). Each sale line records the cost of the lot it came from, so margins use what the goods really
+  order's exchange rate, plus import duty and excise as Customs charged them, and a share of the freight,
+  insurance and clearing actually paid (entered at receipt). Each sale line records the cost of the lot it came from, so margins use what the goods really
   cost.
 - **Supplier Invoices & Payments** (accounts payable):
   - **Invoices:** recorded once goods are received, billed for what arrived, and due on the supplier's
@@ -221,19 +225,20 @@ all modules.
 ### Tax
 
 - **Tax & Duty Rates** drive the import taxes, worked out the way Customs and the Excise Department do:
-  1. **Import duty** on the goods value, by HS Code. Wine has been duty-free since 23 February 2024;
+  1. **Import duty** on the customs value (goods + freight + insurance, i.e. CIF), by HS Code. Wine has been duty-free since 23 February 2024;
      spirits and beer default to 60% (MFN). FTA origins may pay less.
   2. **Excise** (Excise Act B.E. 2560) has two parts: a share of the suggested retail price before VAT, plus
      baht per litre of pure alcohol. Defaults: spirits 20% + ฿255 and beer 22% + ฿430 (2017 tariff), and
      wine 5% + ฿1,000 (cut on 23 February 2024).
   3. **Collected with the excise:** the Interior Ministry tax (10% of the excise) and the fund levies
      (ThaiHealth 2%, Thai PBS 1.5%, sports 2%, elderly 2%).
-  4. **Import VAT** is charged on goods + duty + excise + those levies, and is reclaimable.
+  4. **Import VAT** is charged on the customs value + duty + excise + those levies, and is reclaimable.
 
   One excise stamp is needed per bottle or can; a 6-pack counts six. Each order keeps the tax calculated at
   the time, so a rate change affects only new or corrected orders.
 - **VAT Return (ภ.พ.30):** output tax from the month's tax invoices, credit notes and debit notes, input tax
-  from import VAT and expense tax invoices, and the net amount payable or carried forward. The output and
+  from import VAT and expense tax invoices, excess tax brought forward from earlier months, and the net amount
+  payable or carried forward (it assumes no refund was claimed). The output and
   input tax reports can be exported.
 - **Withholding Tax:** what was withheld each month, split by form (ภ.ง.ด.53 for companies, ภ.ง.ด.3 for
   individuals), what has been remitted, and what is due by the 7th. It exports the form attachments, and
@@ -602,7 +607,7 @@ backup (pg_dump + uploads archive → ./backups)        https (Caddy, optional p
   - **Supplier invoices** attached to import orders go only to roles with price access or that handle
     import paperwork.
   - **PDF rendering** happens offline, with scripts off.
-- **Schema.** Migrations are in `server/sql/` (`001_init.sql` to `012_two_language_text.sql`). They run
+- **Schema.** Migrations are in `server/sql/` (`001_init.sql` to `014_wine_tax_2024.sql`). They run
   once each, in order, when the API starts; a new one is added as the next number.
 
 ### API
@@ -633,7 +638,7 @@ backup (pg_dump + uploads archive → ./backups)        https (Caddy, optional p
 
 | Path | What |
 | --- | --- |
-| `src/domain/` | Business rules (`actions.ts`), books (`ledger.ts`), finance helpers, notifications (`notices.ts`) |
+| `src/domain/` | Business rules (`actions.ts`), books (`ledger.ts`), finance helpers, notifications (`notices.ts`), the demo data (`demoHistory.ts`, replayed through the rules) |
 | `src/pages/`, `src/components/` | Screens and shared UI (the document kit is `TaxDocument.tsx`) |
 | `src/data/` | Types, roles and permissions, demo data |
 | `src/i18n/translations.ts` | Every Thai and English text |
@@ -698,8 +703,8 @@ suites use an installed Chrome or Edge (set `CHROME_PATH` if it's somewhere unus
 
 | Suite | Checks |
 | --- | --- |
-| `tests/api.test.mjs` | ~345 checks: permissions, validation, masking, concurrency, sales and import workflows, costing, payables, expenses and withholding, journals, month-end close, bank reconciliation, quotations, purchase requests, opening balances, two-step sign-in, the morning email, paging, and the accounting invariants (the books agree with stock, receivables, payables and tax withheld) |
-| `tests/e2e/workflows.mjs` | ~200 checks: the main workflows through the real UI, including printing, emailing, search, shortcuts, copy order, lot labels and **camera scanning** (with a simulated camera showing the real label) |
+| `tests/api.test.mjs` | ~360 checks: permissions, validation, masking, concurrency, sales and import workflows, costing, payables, expenses and withholding, journals, month-end close, bank reconciliation, quotations, purchase requests, opening balances, two-step sign-in, the morning email, paging, and the accounting invariants (the books agree with stock, receivables, payables and tax withheld) |
+| `tests/e2e/workflows.mjs` | ~205 checks: the main workflows through the real UI, including printing, emailing, search, shortcuts, copy order, lot labels and **camera scanning** (with a simulated camera showing the real label) |
 | `tests/e2e/guest.mjs` | the read-only guest experience |
 | `tests/e2e/required-2fa.mjs` | restarts the API with two-step sign-in required for one role, checks the forced set-up, then restarts it as it was |
 | `tests/e2e/crawl.mjs` | every page as five roles, in both languages, at desktop and phone widths; fails on console errors, missing translations or a page that scrolls sideways |
@@ -711,56 +716,106 @@ API suite against the real Docker stack. The browser suites run nightly and on d
 
 ## About the demo data
 
-The demo data comes from the source spreadsheet wherever it had the data. Where it didn't, values were
-reconstructed or invented, as noted here.
+The demo is **six months of a liquor importer's business**, from the first day of the month five months ago to
+yesterday, so it is current whenever it's reset. It isn't typed in: `src/domain/demoHistory.ts` replays it
+through the same business rules the screens use, each step done by the person whose job it is, on the day it
+happens. Every order, lot, invoice, payment, journal and audit line therefore follows the system's own rules,
+and a step the rules refuse stops the seed with an error. The choices come from a fixed random sequence, so a
+reset on the same day always gives the same data; the counts below vary a little with the day.
 
-- **Order lines.** The 8 original import orders only had totals (SKU count, total value). Their lines were
-  reconstructed to match each order's original total.
-  - **Cost price:** the spreadsheet's cost price only makes sense as an all-in landed cost; with duty on
-    top, sales would run at a loss.
-  - **Supplier price:** each line's supplier price is therefore its share of the product's expected
-    supplier price, in the supplier's currency at the rate on the order date. The expected supplier price is
-    (cost − excise, Interior tax and levies) ÷ (1 + duty).
-- **Licenses.** The two original import licenses (both expired) were kept as they are, rather than
-  adding a fake valid one.
-- **Customer balances.** The spreadsheet gives each customer's outstanding balance but only a few of the
-  invoices behind it. The rest is carried as brought-forward documents (OB-…), dated relative to the reset
-  so the aging report always shows a realistic mix.
-- **Stock.** The spreadsheet's stock figures hadn't deducted the sales already taken from each lot, and two
-  SKUs (Casa Roble Reposado, Riverside Craft Lager: 860 units) had stock but no lot.
-  - **Derivation:** product stock is now the sum of the lots, which is what can actually be picked and
-    traced.
-  - **Opening lots:** those two SKUs carry an opening lot (`LOT-OPEN-…`, received 2026-05-01, an assumed
-    date).
-  - **Ledger:** the stock ledger is rebuilt from the seed lots and sales, so every lot's movements add up.
-- **Dashboard KPIs** are computed live from the data, so the Dashboard never contradicts the module pages.
-  - **Lead time:** planned import lead time runs from order date to ETA, since actual arrival dates aren't
-    recorded.
-  - **Inventory value:** stock at cost plus approved orders in transit.
-  - **On-time delivery:** computed from orders delivered in the last 90 days against their planned
-    delivery date. With no such orders, it shows the spreadsheet's figure, labelled **Sample figure**.
-- **Invented for the demo:** warehouse addresses and capacities, reorder points, supplier contact emails
-  (on the `.example` domain), delivery note numbers (the spreadsheet only had tax invoice numbers),
-  product label history for 4 of the 12 SKUs, and the last three months of expenses and bank statement.
-- **Derived from what the app used before:** suppliers come from the original import orders, and tax
-  rates and price lists from the rates the app already used.
+**What's in it**
+
+- **Master data:** 24 products, 11 suppliers in 10 countries, 25 customers across the four channels, from Bangkok
+  to the north, northeast, east and south, with their liquor licenses, 3 warehouses, price lists and reorder points.
+- **Go-live:** the bank balance, stock on the shelves (by lot, at landed cost), what customers owed (invoice
+  by invoice from the old system) and two suppliers' unpaid bills, entered as opening balances.
+- **About 150 to 180 sales orders, depending on the reset date:** approvals (a few rejected, a rejected discount re-entered at standard terms),
+  quotations accepted, declined or left to lapse, deliveries (a few late or rescheduled), returns, partial
+  returns, goods damaged in delivery, edits with credit notes, and payments (some late, some in two parts, by
+  transfer or cheque) with reminders at rising levels.
+- **About 40 import orders:** purchase requests, a weekly reorder review that fills a container per supplier,
+  prices keyed in wrong and corrected, one order sent back for a better price, two-level approval over
+  ฿500,000, ETAs moved when ships are late, customs clearance, receiving (now and then short), supplier
+  invoices, and payments at the day's exchange rate.
+- **Every month:** rent, freight, utilities and services with VAT and withholding tax; withholding remitted
+  by the 7th; salaries; stock counts; the bank statement reconciled (imported every Monday, SWIFT and account
+  fees explained); the month closed on the 10th. Exchange rates every week.
+- **Once:** a new supplier and its two wines, a craft-beer bar and a boutique hotel opened as customers (the
+  hotel's credit terms still to be set), a credit limit raised, a price change, a distributor promotion,
+  license renewals, and an accrual posted wrong and corrected by reversal.
+- **Open today:** orders waiting for approval, to ship and on the road; a purchase request to decide; an import
+  order with a validation issue and one waiting for its second sign-off; overdue invoices and a customer on credit hold; licenses
+  about to expire or lapsed; a stock count in progress; bank fees and a transfer still to reconcile.
+
+**From the source spreadsheet**
+
+- Customers **CUS-0001…0007**: names, channels, licenses, credit limits and discounts. What they owed is
+  what was brought forward at go-live, less the spreadsheet's own sales (booked in the system below).
+- Products **SKU-1001…1012**: names, categories, ABV, sizes, cost and suggested prices.
+- Import orders **IMP-2026-0142…0149** and sales orders **SO-2026-3301…3308** (tax invoices INV-2026-8801…):
+  the first ones raised after go-live, in number order, two days apart as on the sheet.
+- The import licenses and the customers' liquor licenses. Their dates move with the reset day, so the same
+  ones are always about to expire or lapsed.
+
+**Adjusted where the spreadsheet contradicts the app's rules or itself**
+
+- **Import order lines.** The sheet had only a total per order; the lines were reconstructed to it at cost
+  price. The supplier charges that cost less duty and excise, in its own currency at the day's rate, so the
+  goods land at about their cost price. IMP-2026-0149's ABV of 85% (the sheet's deliberate bad data) is
+  flagged at intake and corrected the next day.
+- **Stages.** The sheet left orders in staging, awaiting approval or in delivery with dates long past; in
+  the history they run their course, and the open stages are shown by later orders.
+- **SO-2026-3307** was for DrinkHub, which has no liquor license on file, so the app would refuse it. It is
+  Riverside Chao Phraya Bar's order instead (same goods, price and outcome). DrinkHub still has no license.
+- **24hr Minimart's license** expired a year before the sheet's sale to the shop; it lapsed recently instead,
+  so the sale stands and new orders are blocked until it's renewed.
+- **Import licenses.** Both on the sheet had expired, so the company couldn't have imported; it imports
+  under a Type 1 license in force (LIC-IMP-0013), and the Type 5 license is renewed in the history.
+- **Stock and balances** come from the six months of trade, not the sheet's snapshot. Khrua Khun Yai
+  disputes its bills from before go-live and pays late, so it is over its credit limit and on credit hold,
+  as on the sheet.
+
+**Illustrative**: products SKU-1013…1024, suppliers SUP-008…011, customers CUS-0008…0025 and their
+licenses, tax IDs (fictional, with a valid check digit), addresses, payees, salaries, exchange rates and
+every person's name. Email addresses are on the `.example` domain.
 
 ---
 
 ## Known limitations
 
+- **This is a prototype, not a system to run a real business on yet.** The points below need a Thai
+  accountant or lawyer, and the missing tax work needs building.
 - **Tax rates.** Import taxes follow the real structure, but rates change by ministerial regulation and FTA
-  origins pay less duty. The defaults were checked in October 2026 against published sources (wine's 2024 cut,
-  the 2017 tariff for spirits and beer, the Interior Ministry tax and the fund levies). The 60% duty on
-  spirits and beer couldn't be confirmed from an official source. A government plan to fold the fund levies
+  origins pay less duty. The defaults were checked in October and November 2026 against published sources
+  (wine's 2024 cut, the 2017 tariff for spirits and beer, the Interior Ministry tax and the fund levies). The
+  60% duty on spirits appears only in an unofficial tariff listing, and no source was found for 60% on beer,
+  so check both with Customs. Duty can also be a specific rate when that comes to more than the percentage;
+  the app only has percentages. A government plan to fold the fund levies
   into ordinary excise was still a draft. Check the current Customs and Excise rates, and have an accountant
   check the documents, before any real use.
 - **Accounting scope.** There is no year-end close (profit stays in "current year" on the balance sheet
   rather than rolling into retained earnings), no reverse-charge VAT (ภ.พ.36) on services bought from
   abroad, no post-dated cheque register, and no multi-branch or multi-company books.
+- **Demo rules that aren't law.** The 500-unit cap on a Type 5 import license is invented for the demo: Type 5
+  licenses exist, but no such cap was found. The 60-day credit hold and the approval limits are company
+  policy, so a real company would set its own.
+- **Licensing is simplified.** The app checks that a license is valid and covers the order. It doesn't tell
+  wholesale from retail sale licenses, or handle label approval, per-shipment import permits or stamp
+  requests, and it doesn't record the excise stamps actually used. Have a specialist confirm the real process.
+- **Selling online.** A 2020 Prime Minister's Office notice bans selling alcohol electronically to consumers.
+  It doesn't appear to cover wholesale to a licensed trade customer, but "online store" customers in the demo
+  would need a lawyer's view, including whether the notice still applies after the 2025 amendment to the Act.
+- **Goods report.** VAT registrants must keep a goods and raw materials report alongside the output and input
+  tax reports. The stock ledger has the data, but not that report's format.
+- **Personal data (PDPA).** The system holds customer contacts and staff accounts, but has no privacy notice,
+  processing record, retention rules or data subject request handling.
+- **Also untested for real use:** restoring from a backup, and load with many users at once.
+- **VAT payments aren't recorded.** The VAT return works out each month's tax payable or carried forward,
+  but paying it to the Revenue Department can't be entered (journals can't touch the VAT accounts), so VAT
+  owed keeps building up on the balance sheet. In the demo data it covers six months.
 - **No e-filing.** No Thai e-Tax Invoice (XML) or e-Withholding files; documents are printed or emailed as
   PDF, and withholding returns are produced as certificates and spreadsheet attachments.
-- **Not covered:** payroll and a fixed-asset register (salaries and depreciation are entered as expenses or
+- **Not covered:** corporate income tax (ภ.ง.ด.50/51), ภ.ง.ด.54 on payments abroad, ภ.ง.ด.1, payroll and a fixed-asset register (salaries and depreciation are entered as expenses or
   journals), a direct bank feed (statements are imported from CSV), and the API, Excel and email intake of
   import orders, which are simulated.
 - **Scanning** reads QR codes in every browser; other barcodes (EAN, Code 128) only where the browser has

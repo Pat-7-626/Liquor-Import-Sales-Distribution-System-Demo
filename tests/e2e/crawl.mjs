@@ -4,7 +4,7 @@ const ROUTES = [
   "", "approvals", "reports", "audit-trail",
   "overview/sales", "sales-orders", "sales-orders/new", "sales-orders/SO-2026-3301", "receipts", "ar-aging", "customers", "customers/CUS-0001", "price-lists",
   "overview/purchasing", "import-orders", "import-orders/new", "import-orders/IMP-2026-0142", "import-orders/IMP-2026-0144", "goods-receipts", "suppliers", "licenses",
-  "overview/inventory", "inventory", "stock-movements", "stock-alerts", "lot-trace?lot=LOT-A2607-01", "products", "warehouses", "reorder-policies",
+  "overview/inventory", "inventory", "stock-movements", "stock-alerts", "lot-trace", "products", "warehouses", "reorder-policies",
   "overview/tax", "tax-rates", "company", "users", "calendar", "payables", "exchange-rates", "accounting", "accounting/journal", "accounting/trial-balance", "accounting/profit-loss", "accounting/balance-sheet", "tax/vat-return",
   "quotations", "purchase-requests", "expenses", "tax/withholding", "accounting/manual-journals", "accounting/closing", "accounting/bank", "stock-counts", "opening-balances",
 ];
@@ -26,6 +26,10 @@ for (const width of [1440, 390]) {
     localStorage.clear();
     await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "somchai", password: "demo1234" }) });
   });
+  // Lot Trace opens on a lot that's in stock today (lot numbers follow the dates they were received).
+  const lot = await page.evaluate(async () => (await (await fetch("/api/state")).json()).inventory.find((i) => i.quantityRemaining > 0).lotBatch);
+  const i = ROUTES.findIndex((r) => r.startsWith("lot-trace"));
+  ROUTES[i] = `lot-trace?lot=${encodeURIComponent(lot)}`;
   for (const lang of ["en", "th"]) {
     for (const role of ROLES) {
       await page.evaluate(async ([l, r]) => {

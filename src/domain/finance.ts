@@ -66,6 +66,23 @@ export function withholdingByMonth(expenses: Expense[], journals: ManualJournal[
   return [...months.values()].sort((a, b) => b.month.localeCompare(a.month));
 }
 
+/**
+ * VAT credit coming into a month: what earlier months overpaid and haven't used yet. Each month's excess
+ * input tax carries forward until later output tax uses it up (ภ.พ.30). Assumes no refund was claimed.
+ */
+export function vatCreditBroughtForward(entries: JournalEntry[], month: string): number {
+  const nets = new Map<string, number>();
+  for (const e of entries) {
+    const m = e.date.slice(0, 7);
+    if (m >= month) continue;
+    const net = e.lines.reduce((s, l) => s + (l.account === "2210" ? l.credit - l.debit : l.account === "1410" ? -l.debit : 0), 0);
+    nets.set(m, (nets.get(m) ?? 0) + net);
+  }
+  let credit = 0;
+  for (const m of [...nets.keys()].sort()) credit = Math.max(0, credit - nets.get(m)!);
+  return r2(credit);
+}
+
 export type QuotationState = "open" | "expired" | "accepted" | "declined";
 
 /** An open quotation past its valid-until date has expired. */

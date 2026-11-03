@@ -105,6 +105,7 @@ export default function NewImportOrder() {
   const [supplierId, setSupplierId] = useState(prefillSupplier?.supplierId ?? "");
   const supplier = suppliers.find((sp) => sp.supplierId === supplierId);
   const [incoterms, setIncoterms] = useState(prefillSupplier?.defaultIncoterms ?? "CIF");
+  const [freightInsurance, setFreightInsurance] = useState(0);
   const [orderDate] = useState(todayIso());
   /** Baht figure → the order's currency at today's rate (2 decimals). Unknown currency: left in baht. */
   function toCurrency(thb: number, currency: string) {
@@ -223,6 +224,7 @@ export default function NewImportOrder() {
       logistics,
       importLicenseNo: importLicenseNo || null,
       purchaseRequestNo: request?.requestNo ?? null,
+      freightInsuranceThb: incoterms === "CIF" ? 0 : freightInsurance,
     });
     const order = result.ok ? result.order! : null;
     if (!await runAction(result, `${t("newImportOrder.createdToast")}: ${order?.orderNo ?? ""}`)) return;
@@ -351,6 +353,20 @@ export default function NewImportOrder() {
                   ))}
                 </select>
               </label>
+              {incoterms !== "CIF" && (
+                <label className="block">
+                  <FieldLabel>{t("erp.freightInsurance")}</FieldLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    value={freightInsurance}
+                    onChange={(e) => setFreightInsurance(Math.max(0, Number(e.target.value) || 0))}
+                    className={inputClass}
+                    data-testid="freight-insurance"
+                  />
+                  <span className="mt-1 block text-xs text-gray-500">{t("erp.freightInsuranceHint")}</span>
+                </label>
+              )}
               <label className="block">
                 <FieldLabel>{t("importOrders.col.etaDate")}</FieldLabel>
                 <input

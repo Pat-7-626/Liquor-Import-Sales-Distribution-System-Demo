@@ -40,6 +40,7 @@ import type {
   TaxSettings,
   Warehouse,
   WarehouseCode,
+  ImportTaxBreakdown,
 } from "../data/types";
 import {
   isReversedSale,
@@ -74,6 +75,7 @@ import {
 } from "../lib/business";
 import type { Store } from "./store";
 import { makeId } from "./store";
+import { now } from "../lib/clock";
 import { bothText, hasText, textIn, toText } from "../lib/text";
 import { ACCOUNTS, EXPENSE_ACCOUNTS, SYSTEM_ACCOUNTS, bankAmount, buildJournal } from "./ledger";
 import { WHT_RATES, firstOfMonth, lastOfMonth, suggestMatches, withholdingByMonth } from "./finance";
@@ -140,7 +142,12 @@ export interface NewImportOrderInput {
   importLicenseNo: string | null;
   /** The approved purchase request this order fulfils. */
   purchaseRequestNo?: string | null;
+  /** FOB orders: freight and insurance to Thailand (baht), which Customs adds to the price to get the customs value. */
+  freightInsuranceThb?: number;
 }
+
+/** What the customs receipt says was charged; anything left out keeps the estimate. */
+export type CustomsAssessment = Partial<Pick<ImportTaxBreakdown, "importDuty" | "exciseTax" | "localTax" | "funds" | "vat">>;
 
 export interface ReceiveGoodsInput {
   orderNo: string;
@@ -208,7 +215,7 @@ function bind(s: Store, ctx: Ctx) {
     (u: Updater<Store[K]>) => {
       const prev = s[key];
       setter(key)(u);
-      const at = new Date().toISOString();
+      const at = now().toISOString();
       const next = s[key] as Store[K][number][];
       s[key] = next.map((o) => {
         const id = "orderNo" in o ? o.orderNo : "";
@@ -261,7 +268,7 @@ function bind(s: Store, ctx: Ctx) {
 function pushAudit(s: Store, ctx: Ctx, entry: Omit<AuditEntry, "id" | "timestamp" | "actor"> & { actor?: Bilingual }) {
   const { setAuditLog, actorRef } = bind(s, ctx);
 
-const full: AuditEntry = { ...entry, actor: entry.actor ?? actorRef.current, id: makeId(), timestamp: new Date().toISOString() };
+const full: AuditEntry = { ...entry, actor: entry.actor ?? actorRef.current, id: makeId(), timestamp: now().toISOString() };
 setAuditLog((prev) => [full, ...prev]);
 }
 
@@ -269,7 +276,7 @@ function recordMovement(s: Store, ctx: Ctx, m: Omit<StockMovement, "id" | "times
   const { setStockMovements, actorRef } = bind(s, ctx);
 
 if (m.quantity === 0) return;
-const full: StockMovement = { ...m, id: makeId(), timestamp: new Date().toISOString(), actor: actorRef.current };
+const full: StockMovement = { ...m, id: makeId(), timestamp: now().toISOString(), actor: actorRef.current };
 setStockMovements((prev) => [full, ...prev]);
 }
 
@@ -509,6 +516,7 @@ export function createSalesOrder(s: Store, ctx: Ctx, input: NewSalesOrderInput):
     lines: lines.map((l) => ({ ...l, costPrice: l.unitCost ?? costOf(s, l.sku) })),
     // Credit hold: a customer far behind on paying can still order, but a supervisor decides.
     overdueDays: oldestOverdueDays(customer, s.salesOrders, s.arDocuments),
+    vatPercent: s.taxSettings.vatPercent,
   });
   const needsApproval = reasons.length > 0;
   const approvalReason = joinReasons(reasons);
@@ -671,6 +679,7 @@ export function editSalesOrder(s: Store, ctx: Ctx, orderNo: string, terms: Sales
     customer,
     lines: lines.map((l) => ({ ...l, costPrice: l.unitCost ?? costOf(s, l.sku) })),
     alreadyBooked: booked ? order.netValue : 0,
+    vatPercent: s.taxSettings.vatPercent,
   });
   // A booked order can't be edited past the approval controls by the same person who could not
   // have booked it that way — only a supervisor's edit can carry those terms (and it's logged as such).
@@ -864,7 +873,7 @@ export function createImportOrder(s: Store, ctx: Ctx, input: NewImportOrderInput
     note: joinIssues(issues),
     lineItems: input.lineItems,
     logistics: { ...input.logistics, currency },
-    tax: computeImportTax(input.lineItems, products, taxSettings, exchangeRate),
+    tax: computeImportTax(input.lineItems, products, taxSettings, exchangeRate, input.incoterms === "CIF" ? 0 : (input.freightInsuranceThb ?? 0)),
     createdBy: actorRef.current,
   };
 
@@ -933,7 +942,7 @@ export function correctImportOrderLines(s: Store, ctx: Ctx, orderNo: string, lin
             lineItems,
             skuCount: lineItems.length,
             totalValue: goodsValueThb(lineItems, order.exchangeRate ?? 1),
-            tax: computeImportTax(lineItems, products, taxSettings, order.exchangeRate ?? 1),
+            tax: computeImportTax(lineItems, products, taxSettings, order.exchangeRate ?? 1, order.tax?.freightInsuranceThb ?? 0),
             status: hasIssues ? "issueDetected" : "staging",
             note: joinIssues(issues),
             // Changed lines invalidate any earlier sign-off.
@@ -1024,7 +1033,7 @@ export function rejectImportOrder(s: Store, ctx: Ctx, orderNo: string, reason: s
   return OK;
 }
 
-export function recordCustomsClearance(s: Store, ctx: Ctx, orderNo: string, declarationNo: string): ActionResult {
+export function recordCustomsClearance(s: Store, ctx: Ctx, orderNo: string, declarationNo: string, assessed?: CustomsAssessment): ActionResult {
   const { importOrders, setImportOrders, pushAudit, allowed } = bind(s, ctx);
 
   if (!allowed("recordCustomsClearance")) return DENIED;
@@ -1035,7 +1044,18 @@ export function recordCustomsClearance(s: Store, ctx: Ctx, orderNo: string, decl
   if (!no) return fail("กรุณาระบุเลขใบขนสินค้า", "Customs declaration number is required");
   if (importOrders.some((o) => o.orderNo !== orderNo && o.customsDeclarationNo === no))
     return fail("เลขใบขนสินค้านี้ถูกใช้กับออเดอร์อื่นแล้ว", "That declaration number is already used on another order");
-  setImportOrders((prev) => prev.map((o) => (o.orderNo === orderNo ? { ...o, status: "customsCleared", customsDeclarationNo: no } : o)));
+  const figures = Object.values(assessed ?? {}).filter((n) => n !== undefined);
+  if (figures.some((n) => !(n >= 0))) return fail("ยอดภาษีต้องไม่ติดลบ", "Tax amounts can't be negative");
+  let tax = order.tax;
+  if (tax && figures.length > 0) {
+    const a = { ...tax, ...Object.fromEntries(Object.entries(assessed!).filter(([, n]) => n !== undefined)) };
+    tax = {
+      ...a,
+      totalTax: a.importDuty + a.exciseTax + (a.localTax ?? 0) + (a.funds ?? 0) + a.vat,
+      assessedAtCustoms: true,
+    };
+  }
+  setImportOrders((prev) => prev.map((o) => (o.orderNo === orderNo ? { ...o, status: "customsCleared", customsDeclarationNo: no, tax } : o)));
   pushAudit({
     entityType: "importOrder",
     entityId: orderNo,
@@ -1107,7 +1127,7 @@ export function receiveGoods(s: Store, ctx: Ctx, input: ReceiveGoodsInput): Acti
       .map(
         (l): StockMovement => ({
           id: makeId(),
-          timestamp: new Date().toISOString(),
+          timestamp: now().toISOString(),
           type: "receipt",
           sku: l.sku,
           lotBatch: l.lotBatch,
@@ -1147,7 +1167,7 @@ export function attachDocument(s: Store, ctx: Ctx, orderNo: string, doc: Omit<At
   const { setImportOrders, pushAudit, allowed } = bind(s, ctx);
 
   if (!allowed("manageImportDocuments")) return DENIED;
-  const fullDoc: AttachedDocument = { ...doc, id: makeId(), uploadedAt: new Date().toISOString() };
+  const fullDoc: AttachedDocument = { ...doc, id: makeId(), uploadedAt: now().toISOString() };
   setImportOrders((prev) => prev.map((o) => (o.orderNo === orderNo ? { ...o, documents: [...(o.documents ?? []), fullDoc] } : o)));
   pushAudit({
     entityType: "importOrder",

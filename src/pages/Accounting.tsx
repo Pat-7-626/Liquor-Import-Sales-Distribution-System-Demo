@@ -11,6 +11,7 @@ import { inputClass } from "../components/FormKit";
 import { formatCurrency, formatDate } from "../lib/format";
 import { exportToExcel } from "../lib/export";
 import { addDays, todayIso } from "../lib/business";
+import { vatCreditBroughtForward } from "../domain/finance";
 import { SERIES, formatCompact, monthLabel } from "../lib/analytics";
 import { useLedger } from "../lib/useLedger";
 import { ACCOUNTS, balanceSheet, profitAndLoss, trialBalance, type JournalEntry } from "../domain/ledger";
@@ -473,7 +474,8 @@ export function VatReturn() {
   // Expenses carry their own base; import VAT is on the customs value, so its base is derived from the tax.
   const purchaseBase = expenses.filter((x) => x.vat > 0 && x.date >= from && x.date <= to).reduce((s, x) => s + x.amount, 0) +
     (taxSettings.vatPercent ? (inputVat - expenses.filter((x) => x.date >= from && x.date <= to).reduce((s, x) => s + x.vat, 0)) / (taxSettings.vatPercent / 100) : 0);
-  const net = outputVat - inputVat;
+  const broughtForward = vatCreditBroughtForward(entries, month);
+  const net = outputVat - inputVat - broughtForward;
   const customer = (id: string) => customers.find((c) => c.customerId === id);
 
   // Output tax report (รายงานภาษีขาย): every tax document issued in the month.
@@ -542,6 +544,7 @@ export function VatReturn() {
           { label: t("vat.outputVat"), value: outputVat, strong: true, testid: "vat-output" },
           { label: t("vat.purchaseBase"), value: purchaseBase },
           { label: t("vat.inputVat"), value: inputVat, strong: true, testid: "vat-input" },
+          { label: t("vat.broughtForward"), value: broughtForward, testid: "vat-brought-forward" },
           { label: net >= 0 ? t("vat.payable") : t("vat.credit"), value: Math.abs(net), strong: true, testid: "vat-net" },
         ]}
       />

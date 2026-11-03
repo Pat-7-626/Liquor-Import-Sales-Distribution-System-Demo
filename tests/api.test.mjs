@@ -52,6 +52,27 @@ async function fullState(sess) {
 }
 const ledgerOk = (st) => st.inventory.every((i) => st.stockMovements.filter((m) => m.lotBatch === i.lotBatch).reduce((a, m) => a + m.quantity, 0) === i.quantityRemaining);
 
+// The demo data is six months of trading up to yesterday, so the tests find what they need in it — a lot with
+// stock to sell, a customer who owes something, the last closed month — instead of assuming particular numbers.
+const heldUnits = (st) => {
+  const m = new Map();
+  for (const o of st.salesOrders) if (o.approvalStatus === "pendingApproval") for (const l of o.lines) m.set(l.lotBatch, (m.get(l.lotBatch) ?? 0) + l.quantity);
+  return m;
+};
+/** A lot nothing is waiting on, with at least `min` units — of `sku` if it has one, else of any product. */
+const lotWith = (st, min, sku = "SKU-1001", notSku = null) => {
+  const held = heldUnits(st);
+  const ok = (i) => i.quantityRemaining >= min && !held.has(i.lotBatch) && i.sku !== notSku;
+  const byAge = (a, b) => a.receivedDate.localeCompare(b.receivedDate) || a.lotBatch.localeCompare(b.lotBatch);
+  return st.inventory.filter((i) => ok(i) && i.sku === sku).sort(byAge)[0] ?? st.inventory.filter(ok).sort((a, b) => b.quantityRemaining - a.quantityRemaining)[0];
+};
+const priceOf = (st, sku) => st.products.find((p) => p.sku === sku).suggestedPrice;
+const monthEnd = (iso) => {
+  const d = new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)), 0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const localToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
 // ── auth ──
 check("unauthenticated state is refused", (await fetch(`${BASE}/api/state`)).status === 401);
 check("the sign-in user list is offered (demo mode)", (await (await fetch(`${BASE}/api/users`)).json()).length > 0);
@@ -69,26 +90,48 @@ check("supervisor signs in", sup.status === 200 && sup.cookie.startsWith("lisd_s
 // Fresh data for a repeatable run.
 await sup.call("POST", "/api/admin/reset");
 let st = (await fullState(sup));
-check("seeded: 12 products, 10 import orders' worth of data", st.products.length === 12 && st.importOrders.length === 8 && st.salesOrders.length === 8, `${st.products.length}/${st.importOrders.length}/${st.salesOrders.length}`);
+check("seeded: six months of trade", st.products.length === 24 && st.importOrders.length >= 25 && st.salesOrders.length >= 100 && st.customers.length === 25, `${st.products.length}/${st.importOrders.length}/${st.salesOrders.length}/${st.customers.length}`);
+check("the spreadsheet's orders are the first after go-live", ["SO-2026-3301", "SO-2026-3308"].every((n) => st.salesOrders.some((o) => o.orderNo === n)) && ["IMP-2026-0142", "IMP-2026-0149"].every((n) => st.importOrders.some((o) => o.orderNo === n)));
+check("seeded history leaves work in progress", st.salesOrders.some((o) => o.approvalStatus === "pendingApproval") && st.salesOrders.some((o) => o.deliveryStatus === "pendingShipment" && !o.approvalStatus) && st.importOrders.some((o) => ["staging", "pendingApproval", "issueDetected"].includes(o.status)));
 check("seeded product stock = sum of lots", st.products.every((p) => p.stockAvailable === lotSum(st, p.sku)));
 check("seeded stock ledger reconciles", ledgerOk(await fullState(sup)));
 check("dates come back as ISO strings", /^\d{4}-\d{2}-\d{2}$/.test(st.salesOrders[0].orderDate) && typeof st.products[0].costPrice === "number");
-check("derived credit status computed on load", st.customers.find((c) => c.customerId === "CUS-0006").creditStatus === "overLimit");
-check("seeded orders have lines that sum to the order value", st.salesOrders.every((o) => o.lines.length > 0 && Math.abs(o.lines.reduce((a, l) => a + l.netValue, 0) - o.netValue) < 0.01));
+check(
+  "derived credit status computed on load",
+  st.customers.every((c) => {
+    const left = c.creditLimit - c.outstandingBalance;
+    const want = !c.licenseNo ? "noLicense" : left < 0 ? "overLimit" : c.creditLimit > 0 && left / c.creditLimit <= 0.1 ? "nearLimit" : "normal";
+    return c.creditStatus === want && c.creditRemaining === left;
+  }) && st.customers.find((c) => c.customerId === "CUS-0007").creditStatus === "noLicense",
+);
+// Units sent back after delivery come off the order's value at what was paid for them.
+check(
+  "seeded orders have lines that sum to the order value (less units returned)",
+  st.salesOrders.every((o) => o.lines.length > 0 && Math.abs(o.lines.reduce((a, l) => a + l.netValue * (1 - (l.returnedQuantity ?? 0) / l.quantity), 0) - o.netValue) < 0.05),
+);
 check("seeded customers carry tax ID, branch, address, terms", st.customers.every((c) => /^\d{13}$/.test(c.taxId) && /^\d{5}$/.test(c.branch) && c.address.th && c.creditTermDays > 0));
 check("seeded company profile present", /^\d{13}$/.test(st.company.taxId) && st.company.name.th.length > 0);
-check("every seeded order has a status history ending at its current stage", st.salesOrders.every((o) => o.statusHistory?.length && o.statusHistory.at(-1).status === (o.approvalStatus ?? o.deliveryStatus)) && st.importOrders.every((o) => o.statusHistory?.length && o.statusHistory.at(-1).status === o.status));
+check(
+  "every seeded order has a status history ending at its current stage",
+  st.salesOrders.every((o) => o.statusHistory?.length && o.statusHistory.at(-1).status === (o.approvalStatus ?? o.deliveryStatus)) &&
+    st.importOrders.every((o) => o.statusHistory?.length && o.statusHistory.at(-1).status === (o.status === "pendingApproval" && o.firstApprover ? "firstApproved" : o.status)),
+);
 check("opening balances explain every outstanding balance", st.arDocuments.some((d) => d.type === "openingBalance" && d.dueDate) && arReconciles(st));
 
 // ── a sale, end to end ──
-const so = await (await session("salesOfficer")).cmd("createSalesOrder", one("CUS-0005", "SKU-1001", "LOT-A2607-01", 10, 2241));
-check("sales officer books an order", so.status === 200 && so.json.result.ok && so.json.result.order.orderNo === "SO-2026-3309", JSON.stringify(so.json?.result).slice(0, 120));
+const saleLot = lotWith(st, 20);
+const salePrice = priceOf(st, saleLot.sku);
+const stockBefore = st.products.find((p) => p.sku === saleLot.sku).stockAvailable;
+const lastNo = Math.max(...st.salesOrders.map((o) => Number(o.orderNo.slice(-4))));
+const so = await (await session("salesOfficer")).cmd("createSalesOrder", one("CUS-0005", saleLot.sku, saleLot.lotBatch, 10, salePrice));
+const soNo = so.json?.result?.order?.orderNo;
+check("sales officer books an order, numbered after the last", so.status === 200 && so.json.result.ok && Number(soNo?.slice(-4)) === lastNo + 1, JSON.stringify(so.json?.result).slice(0, 120));
 st = (await fullState(sup));
-check("lot and product stock both moved", st.inventory.find((i) => i.lotBatch === "LOT-A2607-01").quantityRemaining === 350 && st.products.find((p) => p.sku === "SKU-1001").stockAvailable === 350);
+check("lot and product stock both moved", st.inventory.find((i) => i.lotBatch === saleLot.lotBatch).quantityRemaining === saleLot.quantityRemaining - 10 && st.products.find((p) => p.sku === saleLot.sku).stockAvailable === stockBefore - 10);
 check("audit attributed to the signed-in user", st.auditLog[0].actor.en.startsWith("Chayanan"));
-check("order stamped with VAT rate", st.salesOrders.find((o) => o.orderNo === "SO-2026-3309").vatPercent === 7);
+check("order stamped with VAT rate", st.salesOrders.find((o) => o.orderNo === soNo).vatPercent === 7);
 {
-  const o = st.salesOrders.find((x) => x.orderNo === "SO-2026-3309");
+  const o = st.salesOrders.find((x) => x.orderNo === soNo);
   const terms = st.customers.find((c) => c.customerId === "CUS-0005").creditTermDays;
   check("booked order gets invoice date and due date on the customer's terms", o.invoiceDate === o.orderDate && o.dueDate === addDays(o.invoiceDate, terms), `${o.invoiceDate} → ${o.dueDate}`);
   check("receivables still reconcile after a sale", arReconciles(st));
@@ -96,21 +139,29 @@ check("order stamped with VAT rate", st.salesOrders.find((o) => o.orderNo === "S
 }
 {
   const sales = await session("salesOfficer");
-  const past = await sales.cmd("createSalesOrder", { ...one("CUS-0005", "SKU-1001", "LOT-A2607-01", 1, 2241), plannedDeliveryDate: "2020-01-01" });
+  const past = await sales.cmd("createSalesOrder", { ...one("CUS-0005", saleLot.sku, saleLot.lotBatch, 1, salePrice), plannedDeliveryDate: "2020-01-01" });
   check("planned delivery before the order date refused", !past.json.result.ok, past.json.result.error?.en);
-  const far = await sales.cmd("createSalesOrder", { ...one("CUS-0005", "SKU-1001", "LOT-A2607-01", 1, 2241), plannedDeliveryDate: addDays(new Date().toISOString().slice(0, 10), 120) });
+  const far = await sales.cmd("createSalesOrder", { ...one("CUS-0005", saleLot.sku, saleLot.lotBatch, 1, salePrice), plannedDeliveryDate: addDays(new Date().toISOString().slice(0, 10), 120) });
   check("planned delivery more than 90 days out refused", !far.json.result.ok);
   const dist = await session("distOfficer");
   const target = addDays(new Date().toISOString().slice(0, 10), 5);
-  const re = await dist.cmd("scheduleDelivery", "SO-2026-3309", target);
-  check("dispatch reschedules a delivery", re.json.result.ok && re.json.state.salesOrders.find((x) => x.orderNo === "SO-2026-3309").plannedDeliveryDate === target);
-  check("sales officer can't reschedule deliveries", !(await sales.cmd("scheduleDelivery", "SO-2026-3309", target)).json.result.ok);
+  const re = await dist.cmd("scheduleDelivery", soNo, target);
+  check("dispatch reschedules a delivery", re.json.result.ok && re.json.state.salesOrders.find((x) => x.orderNo === soNo).plannedDeliveryDate === target);
+  check("sales officer can't reschedule deliveries", !(await sales.cmd("scheduleDelivery", soNo, target)).json.result.ok);
   check("a delivered order can't be rescheduled", !(await dist.cmd("scheduleDelivery", "SO-2026-3301", target)).json.result.ok);
 }
 
 // ── permissions, validation, masking ──
 const wh = await session("whOfficer");
-const denied = await wh.cmd("createSalesOrder", one("CUS-0005", "SKU-1001", "LOT-A2607-01", 1, 2241));
+{
+  // Prices include VAT and cost doesn't: ฿100 of cost needs ฿107 on the invoice just to break even.
+  const sales = await session("salesOfficer");
+  const cost = saleLot.unitCost;
+  const reason = async (price) => (await sales.cmd("createSalesOrder", one("CUS-0005", saleLot.sku, saleLot.lotBatch, 1, price))).json.result.order?.approvalReason?.en ?? "";
+  check("a price above cost only because of its VAT counts as below cost", /below cost/.test(await reason(Math.round(cost * 1.03))));
+  check("…a price that covers cost without VAT doesn't", !/below cost/.test(await reason(Math.ceil(cost * 1.08))));
+}
+const denied = await wh.cmd("createSalesOrder", one("CUS-0005", saleLot.sku, saleLot.lotBatch, 1, salePrice));
 check("warehouse officer can't create sales orders (server-enforced)", denied.status === 422 && /permitted/.test(denied.json.result.error.en));
 const bad = await sup.cmd("createSalesOrder", { customerId: "CUS-0005", lines: [{ sku: "SKU-1001", quantity: "ten" }] });
 check("malformed input rejected before the rules run", bad.status === 422 && /Invalid input/.test(bad.json.result.error.en));
@@ -124,14 +175,19 @@ check("validation notes scrubbed of prices", !JSON.stringify(whState.importOrder
 
 // ── concurrency: 6 parallel orders for 5 units each against a 12-unit lot ──
 const sales = await session("salesOfficer");
+const raceLot = lotWith(st, 12, "SKU-1011", saleLot.sku);
+check(
+  "a lot counted down to 12 for the race",
+  (await sup.cmd("adjustInventory", raceLot.lotBatch, { quantityRemaining: 12, receivedDate: raceLot.receivedDate, warehouse: raceLot.warehouse }, "API test: recount")).json.result.ok,
+);
 const race = await Promise.all(
   Array.from({ length: 6 }, () =>
-    sales.cmd("createSalesOrder", one("CUS-0005", "SKU-1011", "LOT-A2601-01", 5, 4500)),
+    sales.cmd("createSalesOrder", one("CUS-0005", raceLot.sku, raceLot.lotBatch, 5, priceOf(st, raceLot.sku))),
   ),
 );
 const won = race.filter((r) => r.json?.result?.ok).length;
 st = (await fullState(sup));
-check("parallel orders can't oversell a lot", won === 2 && st.inventory.find((i) => i.lotBatch === "LOT-A2601-01").quantityRemaining === 2, `${won} succeeded`);
+check("parallel orders can't oversell a lot", won === 2 && st.inventory.find((i) => i.lotBatch === raceLot.lotBatch).quantityRemaining === 2, `${won} succeeded`);
 const invoices = st.salesOrders.map((o) => o.taxInvoiceNo).filter((n) => n !== "—");
 check("invoice numbers unique under concurrency", new Set(invoices).size === invoices.length);
 
@@ -139,50 +195,52 @@ check("invoice numbers unique under concurrency", new Set(invoices).size === inv
 {
   await sup.call("POST", "/api/admin/reset");
   st = (await fullState(sup));
-  const lotA = st.inventory.find((i) => i.lotBatch === "LOT-A2607-01");
-  const lotB = st.inventory.find((i) => i.sku !== lotA.sku && i.quantityRemaining >= 20);
+  const lotA = lotWith(st, 20);
+  const lotB = lotWith(st, 20, "SKU-1003", lotA.sku);
+  const pA = priceOf(st, lotA.sku);
+  const pB = priceOf(st, lotB.sku);
   const before = st.customers.find((c) => c.customerId === "CUS-0005").outstandingBalance;
   const r = await sales.cmd("createSalesOrder", {
     customerId: "CUS-0005",
     lines: [
-      { sku: lotA.sku, lotBatch: lotA.lotBatch, quantity: 4, unitPrice: 2241, discountPercent: 0 },
-      { sku: lotB.sku, lotBatch: lotB.lotBatch, quantity: 6, unitPrice: 1500, discountPercent: 2 },
-      { sku: lotA.sku, lotBatch: lotA.lotBatch, quantity: 2, unitPrice: 2241, discountPercent: 0 },
+      { sku: lotA.sku, lotBatch: lotA.lotBatch, quantity: 4, unitPrice: pA, discountPercent: 0 },
+      { sku: lotB.sku, lotBatch: lotB.lotBatch, quantity: 6, unitPrice: pB, discountPercent: 2 },
+      { sku: lotA.sku, lotBatch: lotA.lotBatch, quantity: 2, unitPrice: pA, discountPercent: 0 },
     ],
   });
   const o = r.json.result.order;
   st = r.json.state;
-  check("three-line order booked", r.json.result.ok && o?.lines.length === 3, JSON.stringify(r.json.result).slice(0, 140));
-  check("order value = sum of line values", Math.abs(o.netValue - (4 * 2241 + 6 * 1500 * 0.98 + 2 * 2241)) < 0.01, String(o.netValue));
+  check("three-line order booked", r.json.result.ok && o?.lines.length === 3 && !o.approvalStatus, JSON.stringify(r.json.result).slice(0, 140));
+  check("order value = sum of line values", Math.abs(o.netValue - (4 * pA + 6 * pB * 0.98 + 2 * pA)) < 0.01, String(o.netValue));
   check("each lot drawn down by its lines", st.inventory.find((i) => i.lotBatch === lotA.lotBatch).quantityRemaining === lotA.quantityRemaining - 6 && st.inventory.find((i) => i.lotBatch === lotB.lotBatch).quantityRemaining === lotB.quantityRemaining - 6);
   check("balance moved by the whole order", Math.abs(st.customers.find((c) => c.customerId === "CUS-0005").outstandingBalance - before - o.netValue) < 0.01);
   check("stock and ledger reconcile after multi-line sale", st.products.every((p) => p.stockAvailable === lotSum(st, p.sku)) && ledgerOk(await fullState(sup)));
 
-  const lotC = st.inventory.find((i) => i.lotBatch === "LOT-A2601-01");
+  const lotC = st.inventory.find((i) => i.lotBatch === lotA.lotBatch);
   const over = await sales.cmd("createSalesOrder", {
     customerId: "CUS-0005",
     lines: [
-      { sku: lotC.sku, lotBatch: lotC.lotBatch, quantity: lotC.quantityRemaining, unitPrice: 4500, discountPercent: 0 },
-      { sku: lotC.sku, lotBatch: lotC.lotBatch, quantity: 1, unitPrice: 4500, discountPercent: 0 },
+      { sku: lotC.sku, lotBatch: lotC.lotBatch, quantity: lotC.quantityRemaining, unitPrice: pA, discountPercent: 0 },
+      { sku: lotC.sku, lotBatch: lotC.lotBatch, quantity: 1, unitPrice: pA, discountPercent: 0 },
     ],
   });
   check("two lines can't together oversell one lot", !over.json.result.ok, over.json.result.error?.en);
-  const mismatch = await sales.cmd("createSalesOrder", one("CUS-0005", "SKU-1002", lotA.lotBatch, 1, 5000));
+  const mismatch = await sales.cmd("createSalesOrder", one("CUS-0005", lotB.sku, lotA.lotBatch, 1, 5000));
   check("a line's lot must belong to its product", !mismatch.json.result.ok, mismatch.json.result.error?.en);
   check("an order needs at least one line", (await sales.cmd("createSalesOrder", { customerId: "CUS-0005", lines: [] })).status === 422);
 
   // Edit an invoiced order: lower one line's quantity → credit note with reason and original value.
   const edit = await sup.cmd("editSalesOrder", o.orderNo, [
-    { quantity: 4, unitPrice: 2241, discountPercent: 0 },
-    { quantity: 3, unitPrice: 1500, discountPercent: 2 },
-    { quantity: 2, unitPrice: 2241, discountPercent: 0 },
+    { quantity: 4, unitPrice: pA, discountPercent: 0 },
+    { quantity: 3, unitPrice: pB, discountPercent: 2 },
+    { quantity: 2, unitPrice: pA, discountPercent: 0 },
   ]);
   st = edit.json.state;
   const cn = st.arDocuments.find((d) => d.type === "creditNote" && d.reference === o.orderNo);
-  check("editing an invoiced order issues a credit note for the difference", edit.json.result.ok && cn && Math.abs(cn.amount - 3 * 1500 * 0.98) < 0.01, JSON.stringify(cn ?? edit.json.result).slice(0, 140));
+  check("editing an invoiced order issues a credit note for the difference", edit.json.result.ok && cn && Math.abs(cn.amount - 3 * pB * 0.98) < 0.01, JSON.stringify(cn ?? edit.json.result).slice(0, 140));
   check("credit note records its reason and the original invoice value", cn?.reason?.en && Math.abs(cn.originalValue - o.netValue) < 0.01);
   check("edit returned stock to the lot", st.inventory.find((i) => i.lotBatch === lotB.lotBatch).quantityRemaining === lotB.quantityRemaining - 3 && ledgerOk(await fullState(sup)));
-  check("edit with the wrong number of lines refused", !(await sup.cmd("editSalesOrder", o.orderNo, [{ quantity: 1, unitPrice: 2241, discountPercent: 0 }])).json.result.ok);
+  check("edit with the wrong number of lines refused", !(await sup.cmd("editSalesOrder", o.orderNo, [{ quantity: 1, unitPrice: pA, discountPercent: 0 }])).json.result.ok);
 
   // Return the whole order: one credit note for its value, stock back on every line, receivables reconcile.
   const valueBefore = st.salesOrders.find((x) => x.orderNo === o.orderNo).netValue;
@@ -203,7 +261,8 @@ check("invoice numbers unique under concurrency", new Set(invoices).size === inv
   );
 
   // A payment keeps the books in line too.
-  const pay = await sup.cmd("recordPayment", "CUS-0002", 1000, "transfer", "API-PAY");
+  const payer = st.customers.find((c) => c.outstandingBalance >= 1000);
+  const pay = await sup.cmd("recordPayment", payer.customerId, 1000, "transfer", "API-PAY");
   check("payment recorded and receivables reconcile", pay.json.result.ok && arReconciles(pay.json.state));
 }
 
@@ -343,7 +402,7 @@ check("supervisor approves", (await sup.cmd("approveImportOrder", ioNo)).json.re
 check("doc officer records customs", (await doc.cmd("recordCustomsClearance", ioNo, "A-API-1")).json.result.ok);
 const rec = await wh.cmd("receiveGoods", {
   orderNo: ioNo,
-  receivedDate: "2026-01-01",
+  receivedDate: today,
   warehouse: "whC",
   lines: [{ sku: "SKU-1007", orderedQty: 100, receivedQty: 100, lotBatch: "LOT-API-1", exciseStampDate: "2026-10-08" }],
   additionalCostThb: 5000,
@@ -358,6 +417,54 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   check("received lot carries its landed cost", Math.abs(lot.unitCost - expected) < 0.02, `${lot.unitCost} vs ${expected.toFixed(2)}`);
 }
 
+// ── customs value, what Customs actually charged, the received date ──
+{
+  const fobArgs = (extra) => ({
+    supplierId: "SUP-004", country: "sweden", incoterms: "FOB", orderDate: today, etaDate: "2099-01-01",
+    intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: "SKU-1007", abv: 40, qty: 100, unitPrice: eurPrice }],
+    logistics: { manufacturerRegNo: "SE-VOD-0093", blAwbNumber: "T2", origin: "Stockholm", destination: "Bangkok", currency: "EUR", paymentTerms: "T/T" }, importLicenseNo: null,
+    ...extra,
+  });
+  const fob = await off.cmd("createImportOrder", fobArgs({ freightInsuranceThb: 30000 }));
+  const no = fob.json.result.order.orderNo;
+  const t = fob.json.result.order.tax;
+  const goods = 100 * eurPrice * eurRate;
+  const duty = (goods + 30000) * dutyRate;
+  const taxes = 100 * excisePerBottle;
+  check("FOB order: duty is on the customs value, goods + freight + insurance", Math.abs(t.importDuty - duty) <= 1 && Math.abs(t.customsValueThb - (goods + 30000)) <= 1, JSON.stringify(t));
+  check("…and import VAT too", Math.abs(t.vat - (goods + 30000 + duty + taxes) * 0.07) <= 1, `${t.vat}`);
+  const cif = await off.cmd("createImportOrder", fobArgs({ incoterms: "CIF", freightInsuranceThb: 30000 }));
+  check("a CIF price already includes freight, so none is added", cif.json.result.order.tax.freightInsuranceThb === 0 && Math.abs(cif.json.result.order.tax.customsValueThb - goods) <= 1);
+  check("negative freight is refused", (await off.cmd("createImportOrder", fobArgs({ freightInsuranceThb: -1 }))).status === 422);
+
+  const masked = (await fullState(wh)).importOrders.find((o) => o.orderNo === no);
+  check("roles without price access don't get the freight or customs value", masked.tax.freightInsuranceThb === 0 && masked.tax.customsValueThb === 0);
+
+  check("supervisor approves the FOB order", (await sup.cmd("approveImportOrder", no)).json.result.ok);
+  check("a negative customs figure is refused", (await doc.cmd("recordCustomsClearance", no, "A-API-2", { importDuty: -5 })).status === 422);
+  const excise = t.exciseTax + t.localTax + t.funds;
+  const charged = { importDuty: Math.round(duty) + 2000, vat: t.vat + 500 };
+  const cleared = await doc.cmd("recordCustomsClearance", no, "A-API-2", charged);
+  check("customs clearance records what was actually charged", cleared.json.result.ok);
+  const a = (await fullState(sup)).importOrders.find((o) => o.orderNo === no).tax;
+  check("…replacing the estimate, and keeping any figure left blank", a.assessedAtCustoms === true && a.importDuty === charged.importDuty && a.vat === charged.vat && a.exciseTax === t.exciseTax);
+  check("…and the total follows", a.totalTax === charged.importDuty + excise + charged.vat, `${a.totalTax}`);
+
+  const receipt = (receivedDate) => ({
+    orderNo: no, receivedDate, warehouse: "whC", additionalCostThb: 40000,
+    lines: [{ sku: "SKU-1007", orderedQty: 100, receivedQty: 100, lotBatch: "LOT-API-2", exciseStampDate: today }],
+  });
+  const received = await wh.cmd("receiveGoods", receipt(addDays(today, 30)));
+  check("a received date can't be chosen: the record says today", received.json.result.ok && (await fullState(sup)).importOrders.find((o) => o.orderNo === no).receiving.receivedDate === today);
+
+  // Landed cost: goods + what Customs charged (without VAT) + the freight actually paid, once.
+  const after = await fullState(sup);
+  const lot = after.inventory.find((i) => i.lotBatch === "LOT-API-2");
+  const expected = (goods + charged.importDuty + excise + 40000) / 100;
+  check("landed cost uses Customs' figures and doesn't count the freight twice", Math.abs(lot.unitCost - expected) < 0.02, `${lot.unitCost} vs ${expected.toFixed(2)}`);
+  check("the books still reconcile", ledgerOk(after));
+}
+
 // ── payables and the books ──
 {
   const stockQty = (await fullState(sup));
@@ -367,7 +474,8 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   const apInv = inv.json.state.apDocuments.find((d) => d.importOrderNo === ioNo && d.type === "invoice");
   check("supplier invoice recorded for the received goods, due on the supplier's terms", inv.json.result.ok && apInv.currency === "EUR" && Math.abs(apInv.amount - 100 * eurPrice) < 0.01 && apInv.dueDate > apInv.date, JSON.stringify(apInv).slice(0, 120));
   check("only one invoice per shipment", !(await sup.cmd("recordSupplierInvoice", ioNo, "DUP", today)).json.result.ok);
-  check("can't invoice goods not yet received", !(await sup.cmd("recordSupplierInvoice", "IMP-2026-0144", "X1", today)).json.result.ok);
+  const inTransit = stockQty.importOrders.find((o) => o.status === "approved");
+  check("can't invoice goods not yet received", !(await sup.cmd("recordSupplierInvoice", inTransit.orderNo, "X1", today)).json.result.ok);
   const over = await sup.cmd("recordSupplierPayment", apInv.docNo, apInv.amount + 1, eurRate, "transfer", "TT-1");
   check("can't pay more than is owed", !over.json.result.ok);
   const half = Math.round((apInv.amount / 2) * 100) / 100;
@@ -384,7 +492,15 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   check("receivables in the books = what customers owe", Math.abs(bal("1200") - st2.customers.reduce((s, c) => s + c.outstandingBalance, 0)) < 0.05);
   const apOpen = st2.apDocuments.filter((d) => d.type === "invoice").reduce((s, d) => s + (d.amount - st2.apDocuments.filter((p) => p.appliesTo === d.docNo).reduce((x, p) => x + p.amount, 0)) * d.rate, 0);
   check("payables in the books = unpaid supplier invoices at their booked rate", Math.abs(bal("2110") - apOpen) < 0.05, `${bal("2110")} vs ${apOpen.toFixed(2)}`);
-  check("goods received and invoiced leave nothing in GRNI", Math.abs(bal("2120")) < 0.05, String(bal("2120")));
+  // Goods received but not yet billed by the supplier: what's in GRNI is exactly those shipments' goods value.
+  const unbilled = st2.importOrders
+    .filter((o) => o.receiving && !st2.apDocuments.some((d) => d.type === "invoice" && d.importOrderNo === o.orderNo))
+    .reduce((s, o) => s + o.receiving.lines.reduce((x, l) => {
+      const ls = o.lineItems.filter((li) => li.sku === l.sku);
+      const qty = ls.reduce((a, li) => a + li.qty, 0);
+      return x + (qty ? l.receivedQty * (ls.reduce((a, li) => a + li.qty * li.unitPrice, 0) / qty) * (o.exchangeRate ?? 1) : 0);
+    }, 0), 0);
+  check("goods received but not yet billed are what GRNI holds", Math.abs(bal("2120") - unbilled) < 0.5, `${bal("2120")} vs ${unbilled.toFixed(2)}`);
   check("paying at a higher rate than booked is an exchange loss", bal("5900") > 0);
   const assets = tb.accounts.filter((a) => a.code < "2").reduce((s, a) => s + a.balance, 0);
   const liab = tb.accounts.filter((a) => a.code >= "2" && a.code < "3").reduce((s, a) => s + a.balance, 0);
@@ -412,7 +528,13 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
           .filter((o) => o.receiving && inM(o.receiving.receivedDate))
           .reduce((x, o) => {
             const ordered = o.lineItems.reduce((y, l) => y + l.qty * l.unitPrice, 0);
-            const got = o.receiving.lines.reduce((y, l) => y + l.receivedQty * (o.lineItems.find((li) => li.sku === l.sku)?.unitPrice ?? 0), 0);
+            // An order can carry a product on two lines: what arrived is valued at its average price.
+            const avg = (sku) => {
+              const ls = o.lineItems.filter((li) => li.sku === sku);
+              const q = ls.reduce((y, li) => y + li.qty, 0);
+              return q ? ls.reduce((y, li) => y + li.qty * li.unitPrice, 0) / q : 0;
+            };
+            const got = o.receiving.lines.reduce((y, l) => y + l.receivedQty * avg(l.sku), 0);
             return x + (ordered > 0 ? Math.round((o.tax?.vat ?? 0) * (got / ordered) * 100) / 100 : 0);
           }, 0);
       const books = (code, side) => journal.filter((e) => e.date.startsWith(m)).reduce((x, e) => x + e.lines.filter((l) => l.account === code).reduce((y, l) => y + l[side], 0), 0);
@@ -467,14 +589,15 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
 {
   await sup.call("POST", "/api/admin/reset");
   const st0 = (await fullState(sup));
-  const lot = st0.inventory.find((i) => i.lotBatch === "LOT-A2601-01");
+  const lot = lotWith(st0, 8, "SKU-1011");
+  const price = priceOf(st0, lot.sku);
   const sales = await session("salesOfficer");
   // 25% off is over the standard discount → this order waits for a supervisor, holding its units.
-  const held = await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, lot.quantityRemaining - 2, 4500, 25));
+  const held = await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, lot.quantityRemaining - 2, price, 25));
   check("over-discount order waits for approval", held.json.result.order?.approvalStatus === "pendingApproval");
-  const next = await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, 5, 4500));
+  const next = await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, 5, price));
   check("another order can't take units held for it", !next.json.result.ok && /held by orders awaiting approval/.test(next.json.result.error.en), next.json.result.error?.en);
-  check("…but can take what's still free", (await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, 2, 4500))).json.result.ok);
+  check("…but can take what's still free", (await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, 2, price))).json.result.ok);
   const appr = await (await session("piyada")).cmd("approveSalesOrder", held.json.result.order.orderNo);
   check("the held order is approved against its own hold", appr.json.result.ok, appr.json.result.error?.en);
 }
@@ -484,11 +607,12 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   await sup.call("POST", "/api/admin/reset");
   const sales = await session("salesOfficer");
   const st0 = (await fullState(sup));
-  const lot = st0.inventory.find((i) => i.lotBatch === "LOT-A2607-01");
-  const o = (await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, 10, 2241))).json.result.order;
+  const lot = lotWith(st0, 10);
+  const price = priceOf(st0, lot.sku);
+  const o = (await sales.cmd("createSalesOrder", one("CUS-0005", lot.sku, lot.lotBatch, 10, price))).json.result.order;
   check("sale line records its lot's landed cost", o.lines[0].unitCost === lot.unitCost);
   check("booked order keeps a copy of its tax invoice", o.invoice?.netValue === o.netValue && o.invoice.lines.length === 1);
-  await sup.cmd("editSalesOrder", o.orderNo, [{ quantity: 8, unitPrice: 2241, discountPercent: 0 }]);
+  await sup.cmd("editSalesOrder", o.orderNo, [{ quantity: 8, unitPrice: price, discountPercent: 0 }]);
   const edited = (await fullState(sup)).salesOrders.find((x) => x.orderNo === o.orderNo);
   check("editing after invoicing leaves the issued invoice unchanged", edited.invoice.netValue === o.netValue && edited.netValue < o.netValue);
 
@@ -505,7 +629,7 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   const st0 = (await fullState(sup));
   const delivered = st0.salesOrders.filter((o) => o.deliveryStatus === "delivered" && !o.approvalStatus);
   const late = delivered.filter((o) => o.statusHistory.at(-1).at.slice(0, 10) > o.plannedDeliveryDate);
-  check("demo data has deliveries on time and late, with dates to measure", delivered.length >= 3 && late.length === 1);
+  check("demo data has deliveries on time and late, with dates to measure", delivered.length >= 50 && late.length >= 1 && late.length < delivered.length / 4, `${late.length} late of ${delivered.length}`);
 }
 
 // ── sign-in lockout ──
@@ -539,10 +663,12 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   check("audit search with wildcard characters is literal", (await sup.call("GET", "/api/audit?q=%25%25%25")).json.total === 0);
   const whAudit = (await wh.call("GET", "/api/audit?limit=5000")).json;
   check("audit text that quotes money is masked for restricted roles", whAudit.rows.filter((e) => e.sensitive).every((e) => /restricted/.test(e.summary.en)));
-  const lot = (await sup.call("GET", "/api/stock-movements?lot=LOT-A2607-01&limit=500")).json;
-  check("stock ledger filters by lot", lot.rows.length > 0 && lot.rows.every((m) => m.lotBatch === "LOT-A2607-01") && lot.total === lot.rows.length);
+  const someLot = plain.inventory.find((i) => i.quantityRemaining > 0).lotBatch;
+  const lot = (await sup.call("GET", `/api/stock-movements?lot=${someLot}&limit=500`)).json;
+  check("stock ledger filters by lot", lot.rows.length > 0 && lot.rows.every((m) => m.lotBatch === someLot) && lot.total === lot.rows.length);
   const sales = (await sup.call("GET", "/api/stock-movements?type=sale&limit=3")).json;
-  check("stock ledger pages and totals what matches", sales.rows.length <= 3 && sales.rows.every((m) => m.type === "sale") && sales.unitsOut > 0 && sales.unitsIn === 0);
+  // Sales take stock out; an order lowered before it ships puts some back, also as a sale movement.
+  check("stock ledger pages and totals what matches", sales.rows.length <= 3 && sales.rows.every((m) => m.type === "sale") && sales.unitsOut > sales.unitsIn);
   const monthly = (await sup.call("GET", "/api/stock-movements/monthly")).json;
   check("monthly stock flow comes back summarised", Array.isArray(monthly) && monthly.every((m) => /^\d{4}-\d{2}$/.test(m.month) && m.unitsIn >= 0 && m.unitsOut >= 0));
   check("bad filters are refused", (await sup.call("GET", "/api/stock-movements?limit=999999")).status === 400);
@@ -561,9 +687,16 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
     return { tb, bal: (c) => tb.accounts.find((a) => a.code === c).balance };
   };
   let s0 = (await fullState(mgr));
-  check("seeded: three months of expenses, remittances, a bank statement", s0.expenses.length === 12 && s0.manualJournals.length === 4 && s0.bankLines.length > 5);
-  check("seeded statement: auto-matched except a bank charge and an unexplained transfer", s0.bankLines.filter((l) => !l.matchedEntryId).length === 2, String(s0.bankLines.filter((l) => !l.matchedEntryId).length));
-  check("opening bank balance comes from the company profile", s0.company.openingBank === 4000000 && s0.company.openingDate === "2026-04-30");
+  const months = new Set(s0.expenses.map((x) => x.date.slice(0, 7)));
+  check("seeded: months of expenses, remittances and bank statements", months.size >= 5 && s0.manualJournals.filter((j) => j.kind === "whtRemittance").length >= 4 && s0.bankLines.length > 100);
+  const loose = s0.bankLines.filter((l) => !l.matchedEntryId);
+  check(
+    "seeded statement: matched except the latest bank fees and a transfer nobody has identified",
+    loose.some((l) => l.amount < 0 && /CHARGE/.test(l.description)) && loose.some((l) => l.description.startsWith("TRANSFER IN RIVERSIDE")),
+    loose.map((l) => l.description).join(", "),
+  );
+  check("opening bank balance comes from the company profile", s0.company.openingBank === 4000000 && addDays(s0.company.openingDate, 1).endsWith("-01"));
+  check("months before last are closed", Boolean(s0.company.closedThrough) && s0.company.closedThrough >= monthEnd(addDays(`${today.slice(0, 7)}-01`, -40)));
 
   // The books with expenses and manual entries still tie out.
   let { tb, bal } = await tbOf();
@@ -571,18 +704,13 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   const withheld = s0.expenses.reduce((s, x) => s + x.whtAmount, 0);
   const remitted = s0.manualJournals.filter((j) => j.kind === "whtRemittance").reduce((s, j) => s + j.lines[0].debit, 0);
   check("withholding payable in the books = withheld − remitted", Math.abs(bal("2410") - (withheld - remitted)) < 0.01, `${bal("2410")} vs ${withheld - remitted}`);
-  check("rent is booked to its expense account", Math.abs(bal("6200") - 3 * 85000) < 0.01);
+  check("rent is booked to its expense account", Math.abs(bal("6200") - s0.expenses.filter((x) => x.account === "6200").reduce((s, x) => s + x.amount, 0)) < 0.01);
   const entries = await journal();
-  check("expense entries carry VAT and withholding", entries.filter((e) => e.source === "expense").length === 12 && entries.some((e) => e.source === "expense" && e.lines.some((l) => l.account === "2410")));
+  check("expense entries carry VAT and withholding", entries.filter((e) => e.source === "expense").length === s0.expenses.length && entries.some((e) => e.source === "expense" && e.lines.some((l) => l.account === "2410")));
 
-  // Opening balance from settings.
-  const bank0 = bal("1110");
-  check("only the company-profile role sets opening balances", !(await tax.cmd("setOpeningBalances", "2026-04-30", 4100000)).json.result.ok);
-  check("opening bank balance can be changed", (await mgr.cmd("setOpeningBalances", "2026-04-30", 4100000)).json.result.ok);
-  ({ bal } = await tbOf());
-  check("…and the bank account moves with it", Math.abs(bal("1110") - bank0 - 100000) < 0.01);
-  check("negative opening balance refused", !(await mgr.cmd("setOpeningBalances", "2026-04-30", -1)).json.result.ok);
-  await mgr.cmd("setOpeningBalances", "2026-04-30", 4000000);
+  // Opening balances: set when the books start, fixed once a month is closed (changing them is tested below).
+  check("only the company-profile role sets opening balances", !(await tax.cmd("setOpeningBalances", s0.company.openingDate, 4100000)).json.result.ok);
+  check("opening balances can't change once months are closed", !(await mgr.cmd("setOpeningBalances", s0.company.openingDate, 4100000)).json.result.ok);
 
   // Expenses.
   const ex = await tax.cmd("recordExpense", {
@@ -610,10 +738,13 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
 
   // Remitting last month's withholding.
   const lastMonth = addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
-  const owedLast = (await fullState(mgr)).expenses.filter((x) => x.date.startsWith(lastMonth)).reduce((s, x) => s + x.whtAmount, 0);
+  const sNow = await fullState(mgr);
+  const owedLast =
+    sNow.expenses.filter((x) => x.date.startsWith(lastMonth)).reduce((s, x) => s + x.whtAmount, 0) -
+    sNow.manualJournals.filter((j) => j.kind === "whtRemittance" && j.period === lastMonth).reduce((s, j) => s + j.lines[0].debit, 0);
   const rem = await tax.cmd("remitWithholding", lastMonth, "RD-API-1");
-  const remJv = rem.json.state?.manualJournals.find((j) => j.kind === "whtRemittance" && j.period === lastMonth);
-  check("last month's withholding remitted", owedLast === 0 ? !rem.json.result.ok : rem.json.result.ok && Math.abs(remJv.lines[0].debit - owedLast) < 0.01, `${owedLast} ${JSON.stringify(rem.json.result).slice(0, 80)}`);
+  const remJv = rem.json.state?.manualJournals.find((j) => j.kind === "whtRemittance" && j.period === lastMonth && /RD-API-1/.test(j.memo.en));
+  check("last month's withholding remitted (unless it already was)", owedLast < 0.005 ? !rem.json.result.ok : rem.json.result.ok && Math.abs(remJv.lines[0].debit - owedLast) < 0.01, `${owedLast} ${JSON.stringify(rem.json.result).slice(0, 80)}`);
   check("…only once", !(await tax.cmd("remitWithholding", lastMonth, "RD-API-2")).json.result.ok);
   check("this month's withholding can't be remitted before the month ends", !(await tax.cmd("remitWithholding", today.slice(0, 7), "RD-API-3")).json.result.ok);
 
@@ -633,20 +764,28 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   ({ tb, bal } = await tbOf());
   check("capital in and reversed leaves owner's capital at zero", Math.abs(bal("3200")) < 0.01 && tb.unbalancedEntries.length === 0);
 
-  // Month-end close.
-  check("supervisor can't close the books (finance role only)", !(await sup.cmd("closePeriod", "2026-08-31")).json.result.ok);
-  check("a close must be on a month end", !(await mgr.cmd("closePeriod", "2026-08-15")).json.result.ok);
-  check("the current month can't be closed", !(await mgr.cmd("closePeriod", addDays(addDays(`${today.slice(0, 7)}-01`, 40).slice(0, 7) + "-01", -1))).json.result.ok);
-  check("manager closes the books through August", (await mgr.cmd("closePeriod", "2026-08-31")).json.result.ok);
-  const intoClosed = await tax.cmd("recordExpense", { date: "2026-08-20", payee: "Late bill", payeeTaxId: "", payeeType: "company", account: "6900", description: "x", amount: 100, vat: 0, whtRate: 0, method: "cash", reference: "" });
-  check("nothing can be dated into a closed month", !intoClosed.json.result.ok && /closed through/.test(intoClosed.json.result.error.en));
-  check("…journals included", !(await mgr.cmd("postJournal", { date: "2026-08-31", memo: "x", lines: [{ account: "6900", debit: 10, credit: 0 }, { account: "1110", debit: 0, credit: 10 }] })).json.result.ok);
-  check("…while the open month still takes entries", (await mgr.cmd("postJournal", { date: "2026-09-01", memo: "September accrual", lines: [{ account: "6300", debit: 1200, credit: 0 }, { account: "2900", debit: 0, credit: 1200 }] })).json.result.ok);
-  check("opening balances are fixed once a month is closed", !(await mgr.cmd("setOpeningBalances", "2026-04-30", 1)).json.result.ok);
+  // Month-end close. Last month is closed by the 10th; earlier ones already are.
+  const lastMonthEnd = addDays(`${today.slice(0, 7)}-01`, -1);
+  const monthBefore = addDays(`${lastMonthEnd.slice(0, 7)}-01`, -1);
+  const periods0 = (await fullState(mgr)).auditLog.filter((e) => e.entityType === "period").length;
+  check("supervisor can't close the books (finance role only)", !(await sup.cmd("closePeriod", lastMonthEnd)).json.result.ok);
+  check("a close must be on a month end", !(await mgr.cmd("closePeriod", addDays(lastMonthEnd, -10))).json.result.ok);
+  check("the current month can't be closed", !(await mgr.cmd("closePeriod", monthEnd(today))).json.result.ok);
   check("reopening needs a reason", !(await mgr.cmd("reopenPeriod", "  ")).json.result.ok);
+  if ((await fullState(mgr)).company.closedThrough === lastMonthEnd) {
+    const back = await mgr.cmd("reopenPeriod", "API test: reopen last month");
+    check("reopening steps back one month", back.json.result.ok && back.json.state.company.closedThrough === monthBefore, back.json.state?.company.closedThrough);
+  }
+  check("manager closes the books through last month", (await mgr.cmd("closePeriod", lastMonthEnd)).json.result.ok);
+  const intoClosed = await tax.cmd("recordExpense", { date: addDays(lastMonthEnd, -10), payee: "Late bill", payeeTaxId: "", payeeType: "company", account: "6900", description: "x", amount: 100, vat: 0, whtRate: 0, method: "cash", reference: "" });
+  check("nothing can be dated into a closed month", !intoClosed.json.result.ok && /closed through/.test(intoClosed.json.result.error.en));
+  check("…journals included", !(await mgr.cmd("postJournal", { date: lastMonthEnd, memo: "x", lines: [{ account: "6900", debit: 10, credit: 0 }, { account: "1110", debit: 0, credit: 10 }] })).json.result.ok);
+  check("…while the open month still takes entries", (await mgr.cmd("postJournal", { date: today, memo: "Accrual", lines: [{ account: "6300", debit: 1200, credit: 0 }, { account: "2900", debit: 0, credit: 1200 }] })).json.result.ok);
+  check("opening balances are fixed once a month is closed", !(await mgr.cmd("setOpeningBalances", s0.company.openingDate, 1)).json.result.ok);
   const reo = await mgr.cmd("reopenPeriod", "Late supplier bill");
-  check("reopening steps back one month", reo.json.result.ok && reo.json.state.company.closedThrough === "2026-07-31");
-  check("closing and reopening are on the audit trail", (await fullState(mgr)).auditLog.filter((e) => e.entityType === "period").length === 2);
+  check("reopening steps back one month", reo.json.result.ok && reo.json.state.company.closedThrough === monthBefore, reo.json.state?.company.closedThrough);
+  check("closing and reopening are on the audit trail", (await fullState(mgr)).auditLog.filter((e) => e.entityType === "period").length >= periods0 + 2);
+  await mgr.cmd("closePeriod", lastMonthEnd);
 
   // Bank reconciliation.
   let s1 = (await fullState(mgr));
@@ -659,10 +798,10 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   check("a statement re-imported skips lines already there", imp.json.result.ok && imp.json.result.added === 1 && imp.json.result.skipped === 1, JSON.stringify(imp.json.result));
   check("new lines are matched automatically to the same amount in the books", imp.json.result.matched === 1);
   s1 = (await fullState(mgr));
-  const charge = s1.bankLines.find((l) => l.description === "BANK CHARGE" && !l.matchedEntryId);
-  const fee = await mgr.cmd("postJournal", { date: charge.date, memo: "Bank charge", lines: [{ account: "6900", debit: 350, credit: 0 }, { account: "1110", debit: 0, credit: 350 }], bankLineId: charge.id });
+  const charge = s1.bankLines.find((l) => /CHARGE/.test(l.description) && !l.matchedEntryId);
+  const fee = await mgr.cmd("postJournal", { date: today, memo: "Bank charge", lines: [{ account: "6900", debit: -charge.amount, credit: 0 }, { account: "1110", debit: 0, credit: -charge.amount }], bankLineId: charge.id });
   check("a statement line can be explained with a journal, matched at once", fee.json.result.ok && fee.json.state.bankLines.find((l) => l.id === charge.id).matchedEntryId === fee.json.result.entryNo);
-  const stray = s1.bankLines.find((l) => l.description.startsWith("TRANSFER IN RIVERSIDE"));
+  const stray = s1.bankLines.find((l) => l.description.startsWith("TRANSFER IN RIVERSIDE") && !l.matchedEntryId);
   // The reversal (−50,000) is in the books and unmatched; the stray line is +20,000.
   const revNo = s1.manualJournals.find((j) => j.reverses === capNo).entryNo;
   const wrong = await mgr.cmd("matchBankLine", stray.id, revNo);
@@ -698,58 +837,72 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
   await sup.call("POST", "/api/admin/reset");
   const so = await session("salesOfficer");
   const off = await session("orderOfficer");
-  let s0 = (await sup.call("GET", "/api/state")).json;
-  check("seeded quotations and purchase requests", s0.quotations.length === 3 && s0.purchaseRequests.length === 2);
+  let s0 = (await fullState(sup));
+  check("seeded quotations and purchase requests", s0.quotations.length >= 10 && s0.purchaseRequests.length >= 3 && new Set(s0.quotations.map((x) => x.status)).size === 3);
 
-  const q = await so.cmd("createQuotation", { customerId: "CUS-0003", validUntil: addDays(today, 14), notes: "API", lines: [{ sku: "SKU-1007", quantity: 30, unitPrice: 790, discountPercent: 0 }] });
+  // A product with plenty of free stock, quoted at its list price.
+  const qLot = lotWith(s0, 40, "SKU-1007");
+  const qSku = qLot.sku;
+  const qPrice = priceOf(s0, qSku);
+  const q = await so.cmd("createQuotation", { customerId: "CUS-0003", validUntil: addDays(today, 14), notes: "API", lines: [{ sku: qSku, quantity: 30, unitPrice: qPrice, discountPercent: 0 }] });
   const qNo = q.json.result.quoteNo;
-  check("sales officer issues a quotation", q.json.result.ok && /^QT-/.test(qNo) && q.json.state.quotations.find((x) => x.quoteNo === qNo).netValue === 23700);
-  check("warehouse staff can't issue quotations", !(await wh.cmd("createQuotation", { customerId: "CUS-0003", validUntil: today, notes: "", lines: [{ sku: "SKU-1007", quantity: 1, unitPrice: 790, discountPercent: 0 }] })).json.result.ok);
-  check("valid-until can't be in the past", !(await so.cmd("createQuotation", { customerId: "CUS-0003", validUntil: addDays(today, -1), notes: "", lines: [{ sku: "SKU-1007", quantity: 1, unitPrice: 790, discountPercent: 0 }] })).json.result.ok);
-  check("a quotation doesn't take stock", (await sup.call("GET", "/api/state")).json.products.find((p) => p.sku === "SKU-1007").stockAvailable === s0.products.find((p) => p.sku === "SKU-1007").stockAvailable);
+  check("sales officer issues a quotation", q.json.result.ok && /^QT-/.test(qNo) && q.json.state.quotations.find((x) => x.quoteNo === qNo).netValue === 30 * qPrice);
+  check("warehouse staff can't issue quotations", !(await wh.cmd("createQuotation", { customerId: "CUS-0003", validUntil: today, notes: "", lines: [{ sku: qSku, quantity: 1, unitPrice: qPrice, discountPercent: 0 }] })).json.result.ok);
+  check("valid-until can't be in the past", !(await so.cmd("createQuotation", { customerId: "CUS-0003", validUntil: addDays(today, -1), notes: "", lines: [{ sku: qSku, quantity: 1, unitPrice: qPrice, discountPercent: 0 }] })).json.result.ok);
+  check("a quotation doesn't take stock", (await sup.call("GET", "/api/state")).json.products.find((p) => p.sku === qSku).stockAvailable === s0.products.find((p) => p.sku === qSku).stockAvailable);
   const conv = await so.cmd("convertQuotation", qNo, addDays(today, 2));
   const order = conv.json.result.order;
-  check("an accepted quotation becomes a sales order at the quoted price", conv.json.result.ok && order.lines.reduce((s, l) => s + l.quantity, 0) === 30 && order.lines.every((l) => l.unitPrice === 790), JSON.stringify(conv.json.result).slice(0, 140));
-  const lots = s0.inventory.filter((i) => i.sku === "SKU-1007" && i.quantityRemaining > 0).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate));
+  check("an accepted quotation becomes a sales order at the quoted price", conv.json.result.ok && order.lines.reduce((s, l) => s + l.quantity, 0) === 30 && order.lines.every((l) => l.unitPrice === qPrice), JSON.stringify(conv.json.result).slice(0, 140));
+  const heldNow = heldUnits(s0);
+  const lots = s0.inventory.filter((i) => i.sku === qSku && i.quantityRemaining - (heldNow.get(i.lotBatch) ?? 0) > 0).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate) || a.lotBatch.localeCompare(b.lotBatch));
   check("…taking the oldest lot first", order.lines[0].lotBatch === lots[0].lotBatch);
   const qAfter = conv.json.state.quotations.find((x) => x.quoteNo === qNo);
   check("…and the quotation records it", qAfter.status === "accepted" && qAfter.salesOrderNo === order.orderNo);
   check("a quotation converts only once", !(await so.cmd("convertQuotation", qNo)).json.result.ok);
-  const expired = await so.cmd("convertQuotation", "QT-2026-0002");
-  check("an expired quotation can't be converted", !expired.json.result.ok && /expired/.test(expired.json.result.error.en));
-  const big = await so.cmd("createQuotation", { customerId: "CUS-0003", validUntil: addDays(today, 7), notes: "", lines: [{ sku: "SKU-1011", quantity: 500, unitPrice: 4390, discountPercent: 0 }] });
+  const lapsed = s0.quotations.find((x) => x.status === "open" && x.validUntil < today);
+  if (lapsed) {
+    const expired = await so.cmd("convertQuotation", lapsed.quoteNo);
+    check("an expired quotation can't be converted", !expired.json.result.ok && /expired/.test(expired.json.result.error.en));
+  }
+  const big = await so.cmd("createQuotation", { customerId: "CUS-0003", validUntil: addDays(today, 7), notes: "", lines: [{ sku: "SKU-1011", quantity: 5000, unitPrice: 4390, discountPercent: 0 }] });
   const short = await so.cmd("convertQuotation", big.json.result.quoteNo);
   check("converting fails clearly when stock is short", !short.json.result.ok && /short/.test(short.json.result.error.en));
-  check("a customer can decline", (await so.cmd("declineQuotation", "QT-2026-0003", "Went elsewhere")).json.result.ok);
+  check("a customer can decline", (await so.cmd("declineQuotation", big.json.result.quoteNo, "Went elsewhere")).json.result.ok);
   check("restricted roles get quotation prices masked", (await wh.call("GET", "/api/state")).json.quotations.every((x) => x.netValue === 0 && x.lines.every((l) => l.unitPrice === 0)));
 
-  // Purchase requests.
-  const pr = await wh.cmd("createPurchaseRequest", { sku: "SKU-1007", quantity: 100, reason: "Running low", preferredSupplierId: "SUP-004" });
+  // Purchase requests, for products nobody has asked for yet.
+  const openPr = (sku) => s0.purchaseRequests.some((r) => r.sku === sku && (r.status === "pending" || r.status === "approved"));
+  const prSku = ["SKU-1007", "SKU-1021"].find((x) => !openPr(x));
+  const ownSku = s0.products.map((x) => x.sku).find((x) => x !== prSku && !openPr(x));
+  const prProduct = s0.products.find((x) => x.sku === prSku);
+  const prExcise = ((prProduct.suggestedPrice / 1.07) * 0.2 + (prProduct.packageSize / 1000) * (prProduct.abv / 100) * 255) * 1.175;
+  const prEur = Math.round(((prProduct.costPrice - prExcise) / 1.6 / eurRate) * 100) / 100;
+  const pr = await wh.cmd("createPurchaseRequest", { sku: prSku, quantity: 100, reason: "Running low", preferredSupplierId: "SUP-004" });
   const prNo = pr.json.result.requestNo;
   check("warehouse staff ask for stock", pr.json.result.ok && /^PR-/.test(prNo));
-  check("one open request per product", !(await off.cmd("createPurchaseRequest", { sku: "SKU-1007", quantity: 5, reason: "x", preferredSupplierId: null })).json.result.ok);
+  check("one open request per product", !(await off.cmd("createPurchaseRequest", { sku: prSku, quantity: 5, reason: "x", preferredSupplierId: null })).json.result.ok);
   check("requesters can't approve", !(await wh.cmd("decidePurchaseRequest", prNo, true, "")).json.result.ok);
-  const mine = await sup.cmd("createPurchaseRequest", { sku: "SKU-1002", quantity: 12, reason: "Supervisor's own", preferredSupplierId: null });
+  const mine = await sup.cmd("createPurchaseRequest", { sku: ownSku, quantity: 12, reason: "Supervisor's own", preferredSupplierId: null });
   check("nobody approves their own request", !(await sup.cmd("decidePurchaseRequest", mine.json.result.requestNo, true, "")).json.result.ok);
   check("rejecting needs a reason", !(await sup.cmd("decidePurchaseRequest", prNo, false, "")).json.result.ok);
   check("supervisor approves the request", (await sup.cmd("decidePurchaseRequest", prNo, true, "OK")).json.result.ok);
   check("a decided request can't be decided again", !(await sup.cmd("decidePurchaseRequest", prNo, false, "changed mind")).json.result.ok);
   const fromPr = await off.cmd("createImportOrder", {
     supplierId: "SUP-004", country: "sweden", incoterms: "FOB", orderDate: today, etaDate: "2099-01-01",
-    intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: "SKU-1007", abv: 40, qty: 100, unitPrice: eurPrice }],
+    intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: prSku, abv: prProduct.abv, qty: 100, unitPrice: prEur }],
     logistics: { manufacturerRegNo: "", blAwbNumber: "", origin: "", destination: "", currency: "EUR", paymentTerms: "" }, importLicenseNo: null, purchaseRequestNo: prNo,
   });
   const prAfter = fromPr.json.state?.purchaseRequests.find((r) => r.requestNo === prNo);
   check("purchasing orders it — the request is marked ordered with the order number", fromPr.json.result.ok && prAfter.status === "ordered" && prAfter.importOrderNo === fromPr.json.result.order.orderNo);
   const again = await off.cmd("createImportOrder", {
     supplierId: "SUP-004", country: "sweden", incoterms: "FOB", orderDate: today, etaDate: "2099-01-01",
-    intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: "SKU-1007", abv: 40, qty: 100, unitPrice: eurPrice }],
+    intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: prSku, abv: prProduct.abv, qty: 100, unitPrice: prEur }],
     logistics: { manufacturerRegNo: "", blAwbNumber: "", origin: "", destination: "", currency: "EUR", paymentTerms: "" }, importLicenseNo: null, purchaseRequestNo: prNo,
   });
   check("an ordered request can't be ordered twice", !again.json.result.ok);
   const pending = await off.cmd("createImportOrder", {
     supplierId: "SUP-001", country: "scotland", incoterms: "CIF", orderDate: today, etaDate: "2099-01-01",
-    intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: "SKU-1002", abv: 43, qty: 12, unitPrice: 20 }],
+    intakeMethod: { th: "x", en: "API test" }, lineItems: [{ sku: ownSku, abv: 40, qty: 12, unitPrice: 20 }],
     logistics: { manufacturerRegNo: "", blAwbNumber: "", origin: "", destination: "", currency: "GBP", paymentTerms: "" }, importLicenseNo: null, purchaseRequestNo: mine.json.result.requestNo,
   });
   check("a request not yet approved can't be ordered", !pending.json.result.ok && /approved/.test(pending.json.result.error.en));
@@ -759,19 +912,19 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
 {
   await sup.call("POST", "/api/admin/reset");
   const so = await session("salesOfficer");
-  const s0 = (await sup.call("GET", "/api/state")).json;
-  const lotOf = (sku) => s0.inventory.filter((i) => i.sku === sku && i.quantityRemaining > 0).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate))[0];
+  const s0 = (await fullState(sup));
 
   // Credit hold: CUS-0006 has a bill more than 60 days overdue (its license is renewed first, so that isn't why).
   check("license renewed for the credit-hold test", (await doc.cmd("updateLicense", "LIC-SELL-2206", { expiryDate: addDays(today, 365) })).json.result.ok);
-  const v = lotOf("SKU-1007");
-  const held = await so.cmd("createSalesOrder", one("CUS-0006", "SKU-1007", v.lotBatch, 1, 790, 0));
+  const v = lotWith(s0, 5, "SKU-1007");
+  const vPrice = priceOf(s0, v.sku);
+  const held = await so.cmd("createSalesOrder", one("CUS-0006", v.sku, v.lotBatch, 1, vPrice, 0));
   check("a customer far behind on paying goes to approval (credit hold)", held.json.result.ok && held.json.result.order.approvalStatus === "pendingApproval" && /overdue/.test(held.json.result.order.approvalReason.en), JSON.stringify(held.json.result.order?.approvalReason));
-  const fine = await so.cmd("createSalesOrder", one("CUS-0003", "SKU-1007", v.lotBatch, 1, 790, 0));
+  const fine = await so.cmd("createSalesOrder", one("CUS-0003", v.sku, v.lotBatch, 1, vPrice, 0));
   check("…while customers within 60 days book as usual", fine.json.result.ok && !fine.json.result.order.approvalStatus, JSON.stringify(fine.json.result.order?.approvalReason));
 
   // Reminders.
-  check("seeded with a reminder already sent", s0.arReminders.length === 1);
+  check("seeded with reminders already sent, at rising levels", s0.arReminders.length > 5 && s0.arReminders.some((x) => x.level > 1));
   const rem = await so.cmd("recordReminder", "CUS-0006", 2, "Second letter");
   const r = rem.json.state?.arReminders.find((x) => x.customerId === "CUS-0006" && x.level === 2);
   check("sales staff record a payment reminder with what was overdue", rem.json.result.ok && r.overdueAmount > 0);
@@ -876,8 +1029,20 @@ check("stock invariants hold after the workflow", st.products.every((p) => p.sto
 {
   await sup.call("POST", "/api/admin/reset");
   const mgr = await session("manager");
+  // The demo's months are closed; opening balances can only be added before any is, so reopen them all.
+  for (let i = 0; i < 24 && (await mgr.call("GET", "/api/state")).json.company.closedThrough; i++) await mgr.cmd("reopenPeriod", "API test: opening balances");
   const s0 = await fullState(mgr);
-  const today = addDays(new Date().toISOString().slice(0, 10), 0);
+  check("every month reopened for the opening-balance tests", !s0.company.closedThrough);
+  const today = localToday();
+  {
+    const tb0 = (await mgr.call("GET", "/api/accounting/trial-balance")).json;
+    const bank0 = tb0.accounts.find((a) => a.code === "1110").balance;
+    check("opening bank balance can be changed before a month is closed", (await mgr.cmd("setOpeningBalances", s0.company.openingDate, 4100000)).json.result.ok);
+    const bank1 = (await mgr.call("GET", "/api/accounting/trial-balance")).json.accounts.find((a) => a.code === "1110").balance;
+    check("…and the bank account moves with it", Math.abs(bank1 - bank0 - 100000) < 0.01);
+    check("negative opening balance refused", !(await mgr.cmd("setOpeningBalances", s0.company.openingDate, -1)).json.result.ok);
+    await mgr.cmd("setOpeningBalances", s0.company.openingDate, 4000000);
+  }
   const cust = s0.customers.find((c) => c.customerId === "CUS-0001");
   const product = s0.products[0];
   const warehouse = s0.warehouses.find((w) => w.active);

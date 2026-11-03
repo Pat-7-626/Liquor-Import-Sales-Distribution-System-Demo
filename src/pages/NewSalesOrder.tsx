@@ -13,6 +13,7 @@ import {
   computeChannelPrice,
   computeSalesNetValue,
   salesApprovalReasons,
+  exVat,
   oldestOverdueDays,
   OVERDUE_HOLD_DAYS,
   joinReasons,
@@ -167,13 +168,13 @@ export default function NewSalesOrder() {
   const onHold = overdueDays > OVERDUE_HOLD_DAYS;
   const approvalReasons =
     customer && filled.length > 0
-      ? salesApprovalReasons({ customer, lines: filled.map((l) => ({ ...l, costPrice: l.product!.costPrice })), overdueDays })
+      ? salesApprovalReasons({ customer, lines: filled.map((l) => ({ ...l, costPrice: l.product!.costPrice })), overdueDays, vatPercent })
       : [];
   const needsApproval = approvalReasons.length > 0;
   const approvalReason = joinReasons(approvalReasons);
   const discountExceeds = customer ? filled.some((l) => l.discountPercent > customer.standardDiscount) : false;
   const creditExceeds = customer ? customer.outstandingBalance + total > customer.creditLimit : false;
-  const belowCost = filled.some((l) => l.quantity > 0 && l.netValue / l.quantity < l.product!.costPrice);
+  const belowCost = filled.some((l) => l.quantity > 0 && exVat(l.netValue / l.quantity, vatPercent) < l.product!.costPrice);
   const stockOk = filled.length > 0 && !priced.some((l) => lineErrors(l).stock);
 
   const canConfirm = Boolean(customer) && licenseOk && !incomplete && !anyLineError && filled.length > 0 && plannedOk && !submitting;
@@ -324,7 +325,7 @@ export default function NewSalesOrder() {
                               {t("erp.fixedPrice")} ฿{formatCurrency(fixed, lang)}
                             </p>
                           )}
-                          {l.product && l.quantity > 0 && l.netValue / l.quantity < l.product.costPrice && (
+                          {l.product && l.quantity > 0 && exVat(l.netValue / l.quantity, vatPercent) < l.product.costPrice && (
                             <p className="mt-1 text-xs text-amber-700">
                               {t("erp.belowCostNote")} (฿{formatCurrency(l.product.costPrice, lang)})
                             </p>
